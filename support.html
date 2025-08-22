@@ -1,86 +1,37 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Aviation Weather Monitor — Sadiom</title>
-  <meta name="description" content="Sadiom METAR/TAF monitor with ceiling/visibility highlighting." />
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CieloTracker Support — Sadiom</title>
+  <meta name="description" content="CieloTracker support, FAQs, privacy policy, and contact information."/>
   <style>
-    /* Match the clean style used on /privacy */
-    :root { --ink:#0b6; --fg:#0b0b0b; --muted:#555; --bg:#fff; --card:#f7f7f7; --ok:#0b8; --warn:#c30; }
+    :root { --ink:#0b6; --fg:#0b0b0b; --muted:#555; --bg:#fff; --card:#f7f7f7; }
     *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; background:var(--bg); color:var(--fg);
-      font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
-      display:flex; flex-direction:column; min-height:100vh;
-    }
+    body{margin:0; background:var(--bg); color:var(--fg);
+      font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;}
     a{color:var(--ink); text-decoration:underline}
-    header{
-      background:#0b2239; color:#fff; padding:16px 20px;
-    }
-    header h1{margin:0 0 4px; font-size:20px}
+    header{background:#0b2239; color:#fff; padding:16px 20px}
+    header h1{margin:0 0 4px; font-size:22px}
     header p{margin:0; opacity:.85; font-size:14px}
-    nav.top{
-      max-width:1100px; margin:0 auto; padding:10px 12px;
-      display:flex; gap:14px;
-    }
-    nav.top a{color:#cfe8ff; text-decoration:none; font-size:14px}
-    nav.top a:hover{text-decoration:underline}
-
-    main{flex:1; max-width:1100px; width:100%; margin:18px auto; padding:0 12px 32px}
-    .panel{
-      background:var(--card); border:1px solid #e8e8e8; border-radius:12px;
-      padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.04);
-    }
-    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
-    label{display:flex; align-items:center; gap:6px}
-    input[type="text"], input[type="number"]{
-      padding:8px 10px; border:1px solid #ddd; border-radius:8px; min-width:160px; font-size:14px; background:#fff;
-    }
-    button{
-      padding:9px 14px; border:0; border-radius:10px; background:var(--ink); color:#fff; font-weight:600; cursor:pointer;
-    }
-    button:disabled{opacity:.6; cursor:default}
-    .hint{color:var(--muted); font-size:12px; margin-top:6px}
-
-    table{width:100%; border-collapse:collapse; margin-top:12px; background:#fff; border:1px solid #eee; border-radius:12px; overflow:hidden}
-    th,td{padding:10px 12px; border-bottom:1px solid #f1f1f1; text-align:left; vertical-align:top}
-    th{background:#f9fafb; font-weight:700; font-size:13px}
-    tr:last-child td{border-bottom:0}
-    .tag{font:12px/1.2 monospace; background:#f1f1f1; padding:.18rem .4rem; border-radius:.35rem}
-    .warn{background:#fff3f3; color:#900; font-weight:700}
+    nav{max-width:880px; margin:0 auto; padding:10px 12px; display:flex; gap:14px}
+    nav a{color:#cfe8ff; text-decoration:none; font-size:14px}
+    nav a:hover{text-decoration:underline}
+    main{max-width:880px; padding:20px; margin:0 auto}
+    h2{margin-top:28px; color:var(--ink)}
+    ul{padding-left:1.2rem}
+    li{margin-bottom:10px}
     .muted{color:var(--muted)}
-
-    .ads{text-align:center; margin: 10px 0 0}
-    .error{
-      background:#ffe9e9; color:#7a0000; border:1px solid #f3bcbc;
-      padding:10px; border-radius:8px; margin-top:10px; display:none; white-space:pre-wrap;
-    }
-    .spinner{display:none; margin-left:8px; width:16px; height:16px; border:2px solid #ddd; border-top-color:var(--ink); border-radius:50%; animation:spin .8s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    @media (max-width:640px){ th:nth-child(2), td:nth-child(2){ word-break:break-word } }
-
-    /* Footer menu */
-    footer{
-      margin-top:auto; border-top:1px solid #eee; background:#fafafa;
-    }
-    .footwrap{
-      max-width:1100px; margin:0 auto; padding:14px 12px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:14px; color:var(--muted)
-    }
-    .footwrap a{color:var(--ink); text-decoration:none}
-    .footwrap a:hover{text-decoration:underline}
+    .privacy,.disclaimer{font-size:0.95em; color:var(--muted)}
+    hr{border:0; border-top:1px solid #e6e6e6; margin:24px 0}
+    footer{font-size:.9em; color:var(--muted); margin-top:36px; text-align:center}
   </style>
-
-  <!-- Optional AdSense (replace IDs or remove if not using) -->
-  <!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXX" crossorigin="anonymous"></script> -->
 </head>
 <body>
   <header>
-    <h1>CieloTracker — Aviation Weather Monitor</h1>
+    <h1>CieloTracker Support</h1>
     <p>by <strong>Sadiom</strong></p>
-    <nav class="top">
+    <nav>
       <a href="/">Home</a>
       <a href="/support.html">iOS Support</a>
       <a href="/privacy/">Privacy</a>
@@ -88,166 +39,108 @@
   </header>
 
   <main>
-    <div class="panel" role="region" aria-label="METAR/TAF monitor">
-      <div class="row">
-        <label>ICAOs
-          <input id="ids" type="text" value="KDEN,KATL" placeholder="e.g., KDEN,KATL,KLAX" />
-        </label>
-        <label>Ceiling &lt;ft&gt;
-          <input id="ceil" type="number" value="700" min="0" step="100" />
-        </label>
-        <label>Visibility &lt;SM&gt;
-          <input id="vis" type="number" value="2" min="0" step="0.25" />
-        </label>
-        <button id="go">Load</button>
-        <div class="spinner" id="spin" aria-label="Loading"></div>
-      </div>
+    <p>
+      Welcome to CieloTracker Support by Sadiom. CieloTracker provides aviation weather monitoring
+      (METARs and TAFs) with alerting tailored for dispatchers and pilots.
+    </p>
 
-      <div class="row" style="margin-top:6px">
-        <button id="save">Save defaults</button>
-        <span class="hint">Saved values persist locally on this device only.</span>
-      </div>
+    <h2>Frequently Asked Questions</h2>
+    <ul>
+      <li><strong>What is CieloTracker?</strong><br/>
+        CieloTracker monitors METARs and TAFs and highlights conditions that meet your alert thresholds.
+        It is for informational use only; always verify with official sources such as
+        <a href="https://1800wxbrief.com" target="_blank" rel="noopener">1800WXBRIEF</a>.
+      </li>
+      <li><strong>Where does the weather data come from?</strong><br/>
+        Data is retrieved from NOAA’s Aviation Weather Center and compatible aviation weather APIs.
+      </li>
+      <li><strong>How often is weather updated?</strong><br/>
+        The app checks for new reports on issuance; background checks depend on iOS scheduling.
+        Notifications require an active internet connection and permission.
+      </li>
+      <li><strong>How do I set up alerts?</strong><br/>
+        Enter ICAO identifiers in the app. Under <em>Settings → Thresholds</em>, set your own
+        <strong>Ceiling (feet)</strong> and <strong>Visibility (miles)</strong>.
+        For example, entering <code>2000 ft</code> is evaluated as <code>020</code> (hundreds of feet)
+        against BKN/OVC layers. Alerts trigger when reported or forecast conditions fall below your thresholds.
+      </li>
+      <li><strong>Why isn’t data loading?</strong><br/>
+        Check connectivity and try a manual refresh. If issues persist, email
+        <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
+      </li>
+    </ul>
 
-      <!-- Ad slot (optional) -->
-      <div class="ads">
-        <!--
-        <ins class="adsbygoogle"
-             style="display:block"
-             data-ad-client="ca-pub-XXXX"
-             data-ad-slot="1234567890"
-             data-ad-format="auto"
-             data-full-width-responsive="true"></ins>
-        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-        -->
-      </div>
+    <h2>Aviation Disclaimer</h2>
+    <p class="disclaimer">
+      CieloTracker is intended for informational use only. Always consult official FAA/ICAO sources before making
+      operational decisions. Sadiom assumes no responsibility for use of this app in flight planning or operations.
+    </p>
 
-      <div id="err" class="error"></div>
+    <h2>Privacy Policy</h2>
+    <p class="privacy"><em>Last Updated: August 2025</em></p>
+    <p class="privacy">
+      Sadiom respects your privacy and follows Apple’s guidelines and applicable laws (e.g., GDPR/CCPA).
+      CieloTracker does not create user accounts and does not directly collect contact information in-app.
+      Your alert thresholds and preferences are stored locally on your device.
+    </p>
 
-      <table id="tbl" aria-live="polite">
-        <thead>
-          <tr>
-            <th>ICAO</th>
-            <th>METAR</th>
-            <th>Ceiling</th>
-            <th>Visibility</th>
-            <th>TAF (worst)</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <h3>Advertising &amp; Tracking (AdMob)</h3>
+    <p class="privacy">
+      To keep CieloTracker free, the app uses <strong>Google AdMob</strong> to display ads. With your permission via
+      Apple’s App Tracking Transparency (ATT), AdMob and its partners may collect identifiers (such as the device
+      advertising identifier, “IDFA”) and <em>product-interaction data</em> (e.g., ad impressions/clicks) to provide
+      <strong>personalized ads</strong> and measure performance. If you deny ATT, ads may still appear but are
+      <strong>non-personalized</strong> and IDFA is not used.
+    </p>
+    <p class="privacy">
+      Related policies:
+      <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a> ·
+      <a href="https://privacy.apple.com/" target="_blank" rel="noopener">Apple Privacy</a>
+    </p>
 
-      <p class="muted" style="margin:10px 2px 0">
-        Data: AviationWeather.gov (NWS). For situational awareness only—verify before flight.
-      </p>
-    </div>
+    <h3>Data We Process</h3>
+    <ul>
+      <li><strong>Device Identifier (IDFA)</strong> — only if you grant ATT; used by AdMob for third-party advertising and analytics.</li>
+      <li><strong>Product Interaction</strong> — ad engagement/measurement via AdMob.</li>
+      <li><strong>Weather Requests</strong> — ICAO codes you enter are sent to weather providers to fetch METAR/TAF data; no personal data is included.</li>
+      <li><strong>Support Email</strong> — if you email us, we receive your address and message solely to respond.</li>
+    </ul>
+
+    <h3>Your Choices</h3>
+    <ul>
+      <li>Manage tracking anytime in <em>iOS Settings → Privacy &amp; Security → Tracking</em>.</li>
+      <li>Reset the advertising identifier in iOS settings and opt out of personalized ads where available.</li>
+      <li>Consent dialogs for regional requirements are handled with Google’s User Messaging Platform (UMP).</li>
+    </ul>
+
+    <h3>Sharing &amp; Retention</h3>
+    <ul>
+      <li>Limited data is shared with Google AdMob and its partners to serve and measure ads. We do not sell personal data.</li>
+      <li>We do not store weather request history on our servers. Support emails are retained only as long as needed to respond.</li>
+    </ul>
+
+    <h3>Children</h3>
+    <p class="privacy">CieloTracker is intended for professional and general aviation users and is not directed to children under 13.</p>
+
+    <h3>Ad Verification</h3>
+    <p class="privacy">
+      To enable advertising through Google AdMob, we host an <code>app-ads.txt</code> file to verify app ownership.
+      The primary location is <a href="https://sadiom.com/app-ads.txt">/app-ads.txt</a>.
+    </p>
+
+    <h3>Contact</h3>
+    <p>Email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>. Typical response time: 24–48 hours.</p>
+
+    <h2>CieloCheck Lite Privacy Policy</h2>
+    <p class="privacy">
+      CieloCheck Lite processes all data on-device and does not collect personal information.
+      For inquiries, contact <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
+    </p>
+
+    <footer>
+      <hr/>
+      © 2025 Sadiom
+    </footer>
   </main>
-
-  <footer>
-    <div class="footwrap">
-      <div>© 2025 Sadiom</div>
-      <div>
-        <a href="/privacy/">Privacy</a> &nbsp;|&nbsp;
-        <a href="/support.html">iOS Support</a> &nbsp;|&nbsp;
-        <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>
-      </div>
-    </div>
-  </footer>
-
-  <script>
-    // ======= CONFIGURED BACKEND =========
-    const API_URL = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/weather";
-    // ====================================
-
-    const $ = s => document.querySelector(s);
-    const tb = $('#tbl tbody');
-    const err = $('#err');
-    const spin = $('#spin');
-
-    // Prefill from localStorage or URL params (unchanged logic)
-    (function initFields(){
-      const sp = new URLSearchParams(location.search);
-      const ids = sp.get('ids') || localStorage.getItem('wx_ids') || $('#ids').value;
-      const ceil = sp.get('ceil') || localStorage.getItem('wx_ceil') || $('#ceil').value;
-      const vis  = sp.get('vis')  || localStorage.getItem('wx_vis')  || $('#vis').value;
-      $('#ids').value = ids; $('#ceil').value = ceil; $('#vis').value = vis;
-    })();
-
-    $('#save').addEventListener('click', () => {
-      localStorage.setItem('wx_ids', $('#ids').value.trim());
-      localStorage.setItem('wx_ceil', $('#ceil').value);
-      localStorage.setItem('wx_vis', $('#vis').value);
-      alert('Defaults saved for this browser.');
-    });
-
-    $('#go').addEventListener('click', load);
-    window.addEventListener('DOMContentLoaded', load);
-
-    async function load(){
-      const ids = $('#ids').value.trim();
-      const ceil = $('#ceil').value;
-      const vis  = $('#vis').value;
-      if (!ids) return showError("Enter at least one ICAO.");
-
-      tb.innerHTML = "";
-      showError("");
-      setBusy(true);
-
-      try {
-        const url = `${API_URL}?ids=${encodeURIComponent(ids)}&ceil=${encodeURIComponent(ceil)}&vis=${encodeURIComponent(vis)}`;
-        const r = await fetch(url, { method: 'GET' });
-        if (!r.ok) throw new Error(`API ${r.status} ${r.statusText}`);
-        const data = await r.json();
-        render(data);
-      } catch (e) {
-        // Preserve your existing behavior, but clearer error text
-        showError(e && e.message ? e.message : String(e));
-      } finally {
-        setBusy(false);
-      }
-    }
-
-    function render(data){
-      const rows = (data && data.results) ? data.results : [];
-      if (!rows.length) {
-        tb.innerHTML = `<tr><td colspan="5" class="muted">No results.</td></tr>`;
-        return;
-      }
-      for (const row of rows) {
-        const tr = document.createElement('tr');
-        const metCeil = row.metar && row.metar.ceiling_ft != null ? `${row.metar.ceiling_ft} ft` : '—';
-        const metVis  = row.metar && row.metar.visibility_sm != null ? `${Number(row.metar.visibility_sm).toFixed(2)} SM` : '—';
-        const tafCeil = row.taf && row.taf.worst_ceiling_ft != null ? row.taf.worst_ceiling_ft : '—';
-        const tafVis  = row.taf && row.taf.worst_visibility_sm != null ? Number(row.taf.worst_visibility_sm).toFixed(2) : '—';
-        const tafCell = `${tafCeil} ft / ${tafVis} SM`;
-
-        tr.innerHTML = `
-          <td><span class="tag">${row.icao}</span></td>
-          <td>${row.metar && row.metar.raw ? escapeHtml(row.metar.raw) : '<span class="muted">No METAR</span>'}</td>
-          <td class="${row.flags && row.flags.metar_ceiling_below ? 'warn' : ''}">${metCeil}</td>
-          <td class="${row.flags && row.flags.metar_visibility_below ? 'warn' : ''}">${metVis}</td>
-          <td class="${row.flags && (row.flags.taf_ceiling_below || row.flags.taf_visibility_below) ? 'warn' : ''}">${tafCell}</td>
-        `;
-        tb.appendChild(tr);
-      }
-    }
-
-    function showError(message){
-      if (!message) { err.style.display='none'; err.textContent=''; return; }
-      err.style.display='block';
-      err.textContent = message;
-    }
-
-    function setBusy(b){
-      $('#go').disabled = b;
-      spin.style.display = b ? 'inline-block' : 'none';
-    }
-
-    // Minimal HTML escaping for METAR strings
-    function escapeHtml(s){
-      return String(s).replace(/[&<>"']/g, m => (
-        { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]
-      ));
-    }
-  </script>
 </body>
 </html>
