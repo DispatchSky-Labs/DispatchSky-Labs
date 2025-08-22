@@ -8,10 +8,10 @@
   <style>
     :root { --ok:#0b8; --warn:#c30; --muted:#777; --bg:#fafafa; --card:#fff; }
     * { box-sizing: border-box; }
-    body { margin:0; font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; background:var(--bg); color:#111; }
+    body { margin:0; font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; background:var(--bg); color:#111; display:flex; flex-direction:column; min-height:100vh; }
     header { background:#0b2239; color:#fff; padding:14px 18px; }
     header h1 { margin:0; font-size:18px; }
-    main { max-width:1100px; margin:16px auto; padding:0 12px 40px; }
+    main { flex:1; max-width:1100px; margin:16px auto; padding:0 12px 40px; }
     .panel { background:var(--card); border:1px solid #e8e8e8; border-radius:12px; padding:14px; box-shadow:0 1px 4px rgba(0,0,0,.04); }
     .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     label { display:flex; align-items:center; gap:6px; }
@@ -32,14 +32,17 @@
     .ok { color:var(--ok); }
     .muted { color:var(--muted); }
     .ads { text-align:center; margin: 10px 0 0; }
-    .footer { margin-top:18px; color:var(--muted); font-size:12px; }
+    .footer { margin-top:18px; color:var(--muted); font-size:12px; text-align:center; }
     .error { background:#ffe9e9; color:#7a0000; border:1px solid #f3bcbc; padding:10px; border-radius:8px; margin-top:10px; display:none; }
     .spinner { display:none; margin-left:8px; width:16px; height:16px; border:2px solid #ddd; border-top-color:#0b8; border-radius:50%; animation:spin 0.8s linear infinite; }
     @keyframes spin { to{ transform:rotate(360deg) } }
     @media (max-width:640px){ th:nth-child(2), td:nth-child(2){ word-break:break-word; } }
+    .nav-links { margin-top:24px; font-size:14px; }
+    .nav-links a { margin:0 12px; color:#0b8; text-decoration:none; }
+    .nav-links a:hover { text-decoration:underline; }
   </style>
 
-  <!-- AdSense (optional). Replace IDs or remove this block if not using yet. -->
+  <!-- AdSense -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXX" crossorigin="anonymous"></script>
 </head>
 <body>
@@ -90,29 +93,27 @@
       </table>
       <div class="footer">
         Data: AviationWeather.gov (NWS). For situational awareness only—verify before flight.
+        <div class="nav-links">
+          <a href="/privacy/">Privacy</a> | 
+          <a href="/support.html">iOS Support</a>
+        </div>
       </div>
     </div>
   </main>
 
   <script>
-    // ======= CONFIGURED BACKEND =========
     const API_URL = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/weather";
-    // ====================================
-
     const $ = s => document.querySelector(s);
     const tb = $('#tbl tbody');
     const err = $('#err');
     const spin = $('#spin');
 
-    // Prefill from localStorage or URL params
     (function initFields(){
       const sp = new URLSearchParams(location.search);
       const ids = sp.get('ids') || localStorage.getItem('wx_ids') || $('#ids').value;
       const ceil = sp.get('ceil') || localStorage.getItem('wx_ceil') || $('#ceil').value;
-      const vis = sp.get('vis') || localStorage.getItem('wx_vis') || $('#vis').value;
-      $('#ids').value = ids;
-      $('#ceil').value = ceil;
-      $('#vis').value = vis;
+      const vis = sp.get('vis')  || localStorage.getItem('wx_vis')  || $('#vis').value;
+      $('#ids').value = ids; $('#ceil').value = ceil; $('#vis').value = vis;
     })();
 
     $('#save').addEventListener('click', () => {
@@ -132,7 +133,7 @@
       if (!ids) return showError("Enter at least one ICAO.");
 
       tb.innerHTML = "";
-      showError(""); // clear
+      showError(""); 
       setBusy(true);
 
       try {
@@ -184,7 +185,6 @@
       spin.style.display = b ? 'inline-block' : 'none';
     }
 
-    // Minimal HTML escaping for METAR strings
     function escapeHtml(s){
       return String(s).replace(/[&<>"']/g, m => (
         { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]
