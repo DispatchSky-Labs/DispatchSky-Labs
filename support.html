@@ -4,128 +4,163 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>CieloTracker Support</title>
+  <meta name="description" content="CieloTracker support, FAQs, privacy policy, and contact information."/>
   <style>
+    :root {
+      --brand:#0056d6;
+      --text:#222222;
+      --muted:#444444;
+      --bg:#ffffff;
+      --rule:#e6e6e6;
+    }
+    html { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: inherit; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      margin: 20px;
-      background-color: #ffffff; /* readable light background */
-      color: #222222; /* dark text */
+      margin: 0;
+      background-color: var(--bg);
+      color: var(--text);
       line-height: 1.6;
-      max-width: 860px;
     }
-    h1, h2 { color: #0056d6; }
-    a { color: #0056d6; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    .container {
+      max-width: 860px;
+      padding: 20px;
+      margin: 0 auto;
+    }
+    h1, h2 { color: var(--brand); line-height: 1.25; }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover, a:focus { text-decoration: underline; }
     ul { padding-left: 1.2rem; }
     li { margin-bottom: 10px; }
-    .disclaimer, .privacy { font-size: 0.95em; color: #444; }
+    .muted { color: var(--muted); }
     .section { margin-top: 28px; }
+    .disclaimer, .privacy { font-size: 0.95em; color: var(--muted); }
+    hr { border: 0; border-top: 1px solid var(--rule); margin: 24px 0; }
+    footer { font-size: .9em; color: #666; margin-top: 36px; }
   </style>
 </head>
 <body>
-  <h1>CieloTracker Support</h1>
-  <p>
-    Welcome to CieloTracker Support by DispatchSky-Labs. CieloTracker provides real-time aviation weather monitoring
-    (METARs and TAFs) with alerting tailored for dispatchers and pilots.
-  </p>
-  <div class="section">
-    <h2>Frequently Asked Questions</h2>
-    <ul>
-      <li><strong>What is CieloTracker?</strong><br/>
-        CieloTracker monitors METARs and TAFs and highlights conditions that meet your alert thresholds. It is for
-        informational use only; always verify with official sources such as
-        <a href="https://1800wxbrief.com" target="_blank" rel="noopener">1800WXBRIEF</a>.
-      </li>
-      <li><strong>Where does the weather data come from?</strong><br/>
-        Data is retrieved from NOAA’s Aviation Weather Center and compatible aviation weather APIs.
-      </li>
-      <li><strong>How often is weather updated?</strong><br/>
-        The app checks for new reports on issuance; background checks depend on iOS scheduling. Notifications require an
-        active internet connection and permission.
-      </li>
-      <li><strong>How do I set up alerts?</strong><br/>
-        Enter ICAO identifiers in the app. Under <em>Settings → Thresholds</em>, set your own <strong>Ceiling (feet)</strong>
-        and <strong>Visibility (miles)</strong>. For example, entering <code>2000 ft</code> is evaluated as
-        <code>020</code> (hundreds of feet) against BKN/OVC layers. Alerts trigger when reported or forecast conditions fall
-        below your thresholds.
-      </li>
-      <li><strong>Why isn’t data loading?</strong><br/>
-        Check connectivity and try a manual refresh. If issues persist, email
+  <main class="container">
+    <h1>CieloTracker Support</h1>
+    <p>
+      Welcome to CieloTracker Support by DispatchSky-Labs. CieloTracker provides aviation weather monitoring
+      (METARs and TAFs) with alerting tailored for dispatchers and pilots.
+    </p>
+
+    <div class="section" aria-labelledby="faq-heading">
+      <h2 id="faq-heading">Frequently Asked Questions</h2>
+      <ul>
+        <li><strong>What is CieloTracker?</strong><br/>
+          CieloTracker monitors METARs and TAFs and highlights conditions that meet your alert thresholds. It is for
+          informational use only; always verify with official sources such as
+          <a href="https://1800wxbrief.com" target="_blank" rel="noopener">1800WXBRIEF</a>.
+        </li>
+        <li><strong>Where does the weather data come from?</strong><br/>
+          Data is retrieved from NOAA’s Aviation Weather Center and compatible aviation weather APIs.
+        </li>
+        <li><strong>How often is weather updated?</strong><br/>
+          The app checks for new reports on issuance; background checks depend on iOS scheduling. Notifications require an
+          active internet connection and permission.
+        </li>
+        <li><strong>How do I set up alerts?</strong><br/>
+          Enter ICAO identifiers in the app. Under <em>Settings → Thresholds</em>, set your own <strong>Ceiling (feet)</strong>
+          and <strong>Visibility (miles)</strong>. For example, entering <code>2000 ft</code> is evaluated as
+          <code>020</code> (hundreds of feet) against BKN/OVC layers. Alerts trigger when reported or forecast conditions fall
+          below your thresholds.
+        </li>
+        <li><strong>Why isn’t data loading?</strong><br/>
+          Check connectivity and try a manual refresh. If issues persist, email
+          <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
+        </li>
+      </ul>
+    </div>
+
+    <div class="section" aria-labelledby="disclaimer-heading">
+      <h2 id="disclaimer-heading">Aviation Disclaimer</h2>
+      <p class="disclaimer">
+        CieloTracker is intended for informational use only. Always consult official FAA/ICAO sources before making
+        operational decisions. The developer assumes no responsibility for use of this app in flight planning or operations.
+      </p>
+    </div>
+
+    <div class="section" aria-labelledby="privacy-heading">
+      <h2 id="privacy-heading">Privacy Policy</h2>
+      <p class="privacy"><em>Last Updated: August 2025</em></p>
+      <p class="privacy">
+        DispatchSky-Labs respects your privacy and follows Apple’s guidelines and applicable laws (e.g., GDPR/CCPA).
+        CieloTracker does not create user accounts and does not directly collect contact information in-app.
+        Your alert thresholds and preferences are stored locally on your device.
+      </p>
+
+      <h3>Advertising &amp; Tracking (AdMob)</h3>
+      <p class="privacy">
+        To keep CieloTracker free, the app uses <strong>Google AdMob</strong> to display ads. With your permission via
+        Apple’s App Tracking Transparency (ATT), AdMob and its partners may collect identifiers (such as the device
+        advertising identifier, “IDFA”) and <em>product-interaction data</em> (e.g., ad impressions/clicks) to provide
+        <strong>personalized ads</strong> and measure performance. If you deny ATT, ads may still appear but are
+        <strong>non-personalized</strong> and IDFA is not used.
+      </p>
+      <p class="privacy">
+        Related policies:
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a> ·
+        <a href="https://privacy.apple.com/" target="_blank" rel="noopener">Apple Privacy</a>
+      </p>
+
+      <h3>Data We Process</h3>
+      <ul>
+        <li><strong>Device Identifier (IDFA)</strong> — only if you grant ATT; used by AdMob for third-party advertising and analytics.</li>
+        <li><strong>Product Interaction</strong> — ad engagement/measurement via AdMob.</li>
+        <li><strong>Weather Requests</strong> — ICAO codes you enter are sent to weather providers to fetch METAR/TAF data; these requests do not include personal data.</li>
+        <li><strong>Support Email</strong> — if you email us, we receive your address and message solely to respond.</li>
+      </ul>
+
+      <h3>Your Choices</h3>
+      <ul>
+        <li>Manage tracking anytime in <em>iOS Settings → Privacy &amp; Security → Tracking</em>.</li>
+        <li>Reset the advertising identifier in iOS settings and opt out of personalized ads where available.</li>
+        <li>Consent dialogs for regional requirements are handled with Google’s User Messaging Platform (UMP).</li>
+      </ul>
+
+      <h3>Sharing &amp; Retention</h3>
+      <ul>
+        <li>Limited data is shared with Google AdMob and its partners to serve and measure ads. We do not sell personal data.</li>
+        <li>We do not store weather request history on our servers. Support emails are retained only as long as needed to respond.</li>
+      </ul>
+
+      <h3>Children</h3>
+      <p class="privacy">CieloTracker is intended for professional and general aviation users and is not directed to children under 13.</p>
+
+      <h3>Ad Verification</h3>
+      <p class="privacy">
+        To enable advertising through Google AdMob, we host an <code>app-ads.txt</code> file to verify app ownership.
+        You can view it at
+        <a href="https://sadiom.com/app-ads.txt" target="_blank" rel="noopener">https://sadiom.com/app-ads.txt</a>.
+        This file follows the IAB Tech Lab specification to help prevent ad fraud.
+      </p>
+
+      <h3>Contact</h3>
+      <p class="privacy">
+        For privacy questions or requests, email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
+      </p>
+    </div>
+
+    <div class="section" aria-labelledby="cielocheck-heading">
+      <h2 id="cielocheck-heading">CieloCheck Lite Privacy Policy</h2>
+      <p class="privacy">
+        CieloCheck Lite processes all data on-device and does not collect personal information. For inquiries, contact
         <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
-      </li>
-    </ul>
-  </div>
-  <div class="section">
-    <h2>Aviation Disclaimer</h2>
-    <p class="disclaimer">
-      CieloTracker is intended for informational use only. Always consult official FAA/ICAO sources before making
-      operational decisions. The developer assumes no responsibility for use of this app in flight planning or operations.
-    </p>
-  </div>
-  <div class="section">
-    <h2 id="privacy-policy">Privacy Policy</h2>
-    <p class="privacy"><em>Last Updated: August 2025</em></p>
-    <p class="privacy">
-      DispatchSky-Labs respects your privacy and follows Apple’s guidelines and applicable laws (e.g., GDPR/CCPA).
-      CieloTracker does not create user accounts and does not directly collect contact information in-app.
-      Your alert thresholds and preferences are stored locally on your device.
-    </p>
-    <h3>Advertising & Tracking (AdMob)</h3>
-    <p class="privacy">
-      To keep CieloTracker free, the app uses <strong>Google AdMob</strong> to display ads. With your permission via
-      Apple’s App Tracking Transparency (ATT), AdMob and its partners may collect identifiers (such as the device
-      advertising identifier, “IDFA”) and <em>product-interaction data</em> (e.g., ad impressions/clicks) to provide
-      <strong>personalized ads</strong> and measure performance. If you deny ATT, ads may still appear but are
-      <strong>non-personalized</strong> and IDFA is not used.
-    </p>
-    <p class="privacy">
-      Related policies: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a>
-      · <a href="https://privacy.apple.com/" target="_blank" rel="noopener">Apple Privacy</a>
-    </p>
-    <h3>Data We Process</h3>
-    <ul>
-      <li><strong>Device Identifier (IDFA)</strong> — only if you grant ATT. Used by AdMob for third-party advertising and analytics.</li>
-      <li><strong>Product Interaction</strong> — ad engagement/measurement via AdMob.</li>
-      <li><strong>Weather Requests</strong> — ICAO codes you enter are sent to weather providers to fetch METAR/TAF data; these requests do not include personal data.</li>
-      <li><strong>Support Email</strong> — if you email us, we receive your address and message solely to respond.</li>
-    </ul>
-    <h3>Your Choices</h3>
-    <ul>
-      <li>Manage tracking anytime in <em>iOS Settings → Privacy &amp; Security → Tracking</em>.</li>
-      <li>Reset the advertising identifier in iOS settings and opt out of personalized ads where available.</li>
-      <li>Consent dialogs for regional requirements are handled with Google’s User Messaging Platform (UMP).</li>
-    </ul>
-    <h3>Sharing & Retention</h3>
-    <ul>
-      <li>Limited data is shared with Google AdMob and its partners to serve and measure ads. We do not sell personal data.</li>
-      <li>We do not store weather request history on our servers. Support emails are retained only as long as needed to respond.</li>
-    </ul>
-    <h3>Children</h3>
-    <p class="privacy">CieloTracker is intended for professional and general aviation users and is not directed to children under 13.</p>
-    <h3>Ad Verification</h3>
-    <p class="privacy">
-      To enable advertising through Google AdMob, we have created an <code>app-ads.txt</code> file to verify app ownership.
-      You can view it at <a href="https://yourwebsite.com/app-ads.txt" target="_blank" rel="noopener">app-ads.txt</a>.
-      This file is required by AdMob and follows the IAB Tech Lab specification to prevent ad fraud.
-    </p>
-    <h3>Contact</h3>
-    <p class="privacy">
-      For privacy questions or requests, email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
-    </p>
-  </div>
-  <div class="section">
-    <h2 id="cielocheck-lite-privacy-policy">CieloCheck Lite Privacy Policy</h2>
-    <p class="privacy">
-      CieloCheck Lite processes all data on-device and does not collect personal information. For inquiries, contact
-      <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
-    </p>
-  </div>
-  <div class="section">
-    <h2>Contact</h2>
-    <p>Email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>. Typical response time: 24–48 hours.</p>
-  </div>
-  <footer class="section" style="font-size:.9em;color:#666;">
-    © 2025 DispatchSky-Labs.
-  </footer>
+      </p>
+    </div>
+
+    <div class="section" aria-labelledby="contact-heading">
+      <h2 id="contact-heading">Contact</h2>
+      <p>Email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>. Typical response time: 24–48 hours.</p>
+    </div>
+
+    <footer class="section" role="contentinfo">
+      <hr/>
+      © 2025 DispatchSky-Labs.
+    </footer>
+  </main>
 </body>
 </html>
