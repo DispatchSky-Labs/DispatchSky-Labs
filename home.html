@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Aviation Weather Monitor</title>
+  <meta name="description" content="METAR/TAF monitor with ceiling/visibility highlighting." />
+  <style>
+    :root { --ok:#0b8; --warn:#c30; --muted:#777; --bg:#fafafa; --card:#fff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; background:var(--bg); color:#111; }
+    header { background:#0b2239; color:#fff; padding:14px 18px; }
+    header h1 { margin:0; font-size:18px; }
+    main { max-width:1100px; margin:16px auto; padding:0 12px 40px; }
+    .panel { background:var(--card); border:1px solid #e8e8e8; border-radius:12px; padding:14px; box-shadow:0 1px 4px rgba(0,0,0,.04); }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    label { display:flex; align-items:center; gap:6px; }
+    input[type="text"], input[type="number"] {
+      padding:8px 10px; border:1px solid #ddd; border-radius:8px; min-width:160px; font-size:14px; background:#fff;
+    }
+    button {
+      padding:9px 14px; border:0; border-radius:10px; background:#0b8; color:#fff; font-weight:600; cursor:pointer;
+    }
+    button:disabled { opacity:.6; cursor:default; }
+    .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; background:#fff; border:1px solid #eee; border-radius:12px; overflow:hidden; }
+    th, td { padding:10px 12px; border-bottom:1px solid #f1f1f1; text-align:left; vertical-align:top; }
+    th { background:#f9fafb; font-weight:700; font-size:13px; }
+    tr:last-child td { border-bottom:0; }
+    .tag { font:12px/1.2 monospace; background:#f1f1f1; padding:.18rem .4rem; border-radius:.35rem; }
+    .warn { background:#fff3f3; color:#900; font-weight:700; }
+    .ok { color:var(--ok); }
+    .muted { color:var(--muted); }
+    .ads { text-align:center; margin: 10px 0 0; }
+    .footer { margin-top:18px; color:var(--muted); font-size:12px; }
+    .error { background:#ffe9e9; color:#7a0000; border:1px solid #f3bcbc; padding:10px; border-radius:8px; margin-top:10px; display:none; }
+    .spinner { display:none; margin-left:8px; width:16px; height:16px; border:2px solid #ddd; border-top-color:#0b8; border-radius:50%; animation:spin 0.8s linear infinite; }
+    @keyframes spin { to{ transform:rotate(360deg) } }
+    @media (max-width:640px){ th:nth-child(2), td:nth-child(2){ word-break:break-word; } }
+  </style>
+
+  <!-- AdSense (optional). Replace IDs or remove this block if not using yet. -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXX" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header>
+    <h1>METAR/TAF Monitor</h1>
+  </header>
+
+  <main>
+    <div class="panel">
+      <div class="row">
+        <label>ICAOs
+          <input id="ids" type="text" value="KDEN,KATL" placeholder="e.g., KDEN,KATL,KLAX" />
+        </label>
+        <label>Ceiling &lt;ft&gt;
+          <input id="ceil" type="number" value="700" min="0" step="100" />
+        </label>
+        <label>Visibility &lt;SM&gt;
+          <input id="vis" type="number" value="2" min="0" step="0.25" />
+        </label>
+        <button id="go">Load</button>
+        <div class="spinner" id="spin" aria-label="Loading"></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="save">Save defaults</button>
+        <span class="hint">Saved values persist locally on this device only.</span>
+      </div>
+      <div class="ads">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="ca-pub-XXXX"
+             data-ad-slot="1234567890"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+      </div>
+      <div id="err" class="error"></div>
+      <table id="tbl" aria-live="polite">
+        <thead>
+          <tr>
+            <th>ICAO</th>
+            <th>METAR</th>
+            <th>Ceiling</th>
+            <th>Visibility</th>
+            <th>TAF (worst)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="footer">
+        Data: AviationWeather.gov (NWS). For situational awareness only—verify before flight.
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ======= CONFIGURED BACKEND =========
+    const API_URL = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/weather";
+    // ====================================
+
+    const $ = s => document.querySelector(s);
+    const tb = $('#tbl tbody');
+    const err = $('#err');
+    const spin = $('#spin');
+
+    // Prefill from localStorage or URL params
+    (function initFields(){
+      const sp = new URLSearchParams(location.search);
+      const ids = sp.get('ids') || localStorage.getItem('wx_ids') || $('#ids').value;
+      const ceil = sp.get('ceil') || localStorage.getItem('wx_ceil') || $('#ceil').value;
+      const vis = sp.get('vis') || localStorage.getItem('wx_vis') || $('#vis').value;
+      $('#ids').value = ids;
+      $('#ceil').value = ceil;
+      $('#vis').value = vis;
+    })();
+
+    $('#save').addEventListener('click', () => {
+      localStorage.setItem('wx_ids', $('#ids').value.trim());
+      localStorage.setItem('wx_ceil', $('#ceil').value);
+      localStorage.setItem('wx_vis', $('#vis').value);
+      alert('Defaults saved for this browser.');
+    });
+
+    $('#go').addEventListener('click', load);
+    window.addEventListener('DOMContentLoaded', load);
+
+    async function load(){
+      const ids = $('#ids').value.trim();
+      const ceil = $('#ceil').value;
+      const vis  = $('#vis').value;
+      if (!ids) return showError("Enter at least one ICAO.");
+
+      tb.innerHTML = "";
+      showError(""); // clear
+      setBusy(true);
+
+      try {
+        const url = `${API_URL}?ids=${encodeURIComponent(ids)}&ceil=${encodeURIComponent(ceil)}&vis=${encodeURIComponent(vis)}`;
+        const r = await fetch(url, { method: 'GET' });
+        if (!r.ok) throw new Error(`API ${r.status} ${r.statusText}`);
+        const data = await r.json();
+        render(data);
+      } catch (e) {
+        showError(e.message || String(e));
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function render(data){
+      const rows = (data && data.results) ? data.results : [];
+      if (!rows.length) {
+        tb.innerHTML = `<tr><td colspan="5" class="muted">No results.</td></tr>`;
+        return;
+      }
+      for (const row of rows) {
+        const tr = document.createElement('tr');
+        const metCeil = row.metar && row.metar.ceiling_ft != null ? `${row.metar.ceiling_ft} ft` : '—';
+        const metVis  = row.metar && row.metar.visibility_sm != null ? `${Number(row.metar.visibility_sm).toFixed(2)} SM` : '—';
+        const tafCeil = row.taf && row.taf.worst_ceiling_ft != null ? row.taf.worst_ceiling_ft : '—';
+        const tafVis  = row.taf && row.taf.worst_visibility_sm != null ? Number(row.taf.worst_visibility_sm).toFixed(2) : '—';
+        const tafCell = `${tafCeil} ft / ${tafVis} SM`;
+
+        tr.innerHTML = `
+          <td><span class="tag">${row.icao}</span></td>
+          <td>${row.metar && row.metar.raw ? escapeHtml(row.metar.raw) : '<span class="muted">No METAR</span>'}</td>
+          <td class="${row.flags && row.flags.metar_ceiling_below ? 'warn' : ''}">${metCeil}</td>
+          <td class="${row.flags && row.flags.metar_visibility_below ? 'warn' : ''}">${metVis}</td>
+          <td class="${row.flags && (row.flags.taf_ceiling_below || row.flags.taf_visibility_below) ? 'warn' : ''}">${tafCell}</td>
+        `;
+        tb.appendChild(tr);
+      }
+    }
+
+    function showError(message){
+      if (!message) { err.style.display='none'; err.textContent=''; return; }
+      err.style.display='block';
+      err.textContent = message;
+    }
+
+    function setBusy(b){
+      $('#go').disabled = b;
+      spin.style.display = b ? 'inline-block' : 'none';
+    }
+
+    // Minimal HTML escaping for METAR strings
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, m => (
+        { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]
+      ));
+    }
+  </script>
+</body>
+</html>
