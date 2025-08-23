@@ -25,7 +25,10 @@
     a{color:var(--ink)}
     header{background:#0b2239; color:#fff; padding:16px 20px}
     header h1{margin:0 0 4px; font-size:20px}
-    header p{margin:0; opacity:.85; font-size:14px}
+    header p{margin:0; opacity:.9; font-size:14px}
+    .hdr-line{display:flex; align-items:flex-end; justify-content:space-between; gap:12px}
+    .utc{font-variant-numeric:tabular-nums; opacity:.9; font-size:14px}
+
     nav.top{max-width:1200px; margin:0 auto; padding:8px 12px; display:flex; gap:14px}
     nav.top a{color:#cfe8ff; text-decoration:none; font-size:14px}
     nav.top a:hover{text-decoration:underline}
@@ -44,21 +47,14 @@
     }
     .switch{display:inline-flex; align-items:center; gap:6px; cursor:pointer}
     .switch input{accent-color:var(--ink); width:18px; height:18px}
-    .btn{
-      padding:8px 12px; border:1px solid var(--rule); border-radius:10px; background:transparent; color:var(--fg); cursor:pointer; font-weight:600;
-    }
-    .btn:hover{border-color:var(--ink)}
-    .btn.danger{border-color:var(--warn); color:var(--warn)}
     .error{
       display:none; margin-top:12px; padding:10px; border-radius:8px;
       color:#7a0000; background:#ffe9e9; border:1px solid #f3bcbc; white-space:pre-wrap;
     }
     .theme-dark .error{color:#300; background:#3b0000; border-color:#5b2222}
 
-    .board{
-      margin-top:14px; background:var(--card); border:1px solid var(--rule); border-radius:12px; overflow:hidden;
-    }
-    .board-header{padding:10px 12px; border-bottom:1px solid var(--rule); display:flex; justify-content:space-between; align-items:center}
+    .board{margin-top:14px; background:var(--card); border:1px solid var(--rule); border-radius:12px; overflow:hidden}
+    .board-header{padding:10px 12px; border-bottom:1px solid var(--rule); display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap}
     .board-body{padding:0; background:var(--panel)}
 
     /* AWC-like vertical blocks */
@@ -69,9 +65,7 @@
     .wx-pre{
       margin:0 0 10px; padding:0;
       font:15px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-      white-space:pre-wrap; /* preserve lines, wrap long ones */
-      word-break:break-word;
-      color:var(--fg);
+      white-space:pre-wrap; word-break:break-word; color:var(--fg);
     }
     .wx-pre:last-child{margin-bottom:0}
 
@@ -90,8 +84,13 @@
 </head>
 <body>
   <header>
-    <h1>CieloTracker — METAR/TAF Monitor</h1>
-    <p>by <strong>Sadiom</strong></p>
+    <div class="hdr-line">
+      <div>
+        <h1 style="margin-bottom:6px">CieloTracker — METAR/TAF Monitor</h1>
+        <p>by <strong>Sadiom</strong> — For information purposes only.</p>
+      </div>
+      <div class="utc" id="utcClock" aria-label="Current UTC time">UTC —</div>
+    </div>
     <nav class="top">
       <a href="/home.html">Home</a>
       <a href="/support.html">iOS Support</a>
@@ -102,15 +101,14 @@
   <main>
     <div class="toolbar" role="region" aria-label="Controls">
       <div class="group">
-        <label title="Comma-separated ICAO list">
-          ICAOs
-          <input id="ids" type="text" placeholder="e.g., KDEN,KATL,KLAX" value="KDEN,KATL" />
+        <label title="Space or comma-separated IDs">
+          <strong>IDs</strong>
+          <input id="ids" type="text" placeholder="e.g., KDEN KATL KLAX" value="KDEN KATL" />
         </label>
       </div>
 
       <div class="group">
-        <label>
-          Theme
+        <label>Theme
           <select id="theme">
             <option value="light" selected>Light</option>
             <option value="dark">Dark</option>
@@ -130,7 +128,7 @@
       <div class="group">
         <label class="switch"><input id="showMetar" type="checkbox" checked /> METAR</label>
         <label class="switch"><input id="showTaf" type="checkbox" checked /> TAF</label>
-        <label class="switch" title="Sort ICAOs alphabetically"><input id="alpha" type="checkbox" /> Alphabetize</label>
+        <label class="switch" title="Sort alphabetically"><input id="alpha" type="checkbox" /> Alphabetize</label>
       </div>
 
       <div class="group">
@@ -138,8 +136,6 @@
           <input id="filter" type="checkbox" />
           Filter: Trigger airports
         </label>
-
-        <button id="clearAll" class="btn danger" title="Clear ICAO list">Clear All</button>
         <div class="spinner" id="spin" aria-label="Loading"></div>
       </div>
     </div>
@@ -171,6 +167,7 @@
     const RENDER_URL = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/render";
     const DATA_URL   = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/weather";
 
+    // El refs
     const $ = (s, r=document) => r.querySelector(s);
     const idsEl = $('#ids');
     const ceilEl = $('#ceil');
@@ -186,6 +183,19 @@
     const board = $('#board-body');
     const summary = $('#summary');
     const ts = $('#timestamp');
+    const utcClock = $('#utcClock');
+
+    // UTC clock (top-right) — updates every second
+    function fmtUTC(d=new Date()){
+      const hh = String(d.getUTCHours()).padStart(2,'0');
+      const mm = String(d.getUTCMinutes()).padStart(2,'0');
+      const ss = String(d.getUTCSeconds()).padStart(2,'0');
+      return `${hh}:${mm}:${ss}Z`;
+    }
+    function tickClock(){
+      utcClock.textContent = `UTC — ${fmtUTC()}`;
+    }
+    tickClock(); setInterval(tickClock, 1000);
 
     // Theme handling
     function applyTheme(mode){
@@ -198,9 +208,18 @@
       themeEl.value = saved; applyTheme(saved);
     })();
 
+    // Normalize IDs: allow spaces or commas; collapse to comma-list
+    function normalizedIds(raw){
+      return raw.replace(/[;\n]/g,' ')
+                .replace(/\s+/g,' ')          // collapse whitespace
+                .trim()
+                .replace(/(?:\s|,)+/g, ',')   // spaces/commas -> comma
+                .replace(/^,|,$/g,'');        // trim commas
+    }
+
     // Prefs
     function savePrefs(){
-      localStorage.setItem('ct_ids', idsEl.value.trim());
+      localStorage.setItem('ct_ids', idsEl.value);
       localStorage.setItem('ct_ceil', ceilEl.value);
       localStorage.setItem('ct_vis', visEl.value);
       localStorage.setItem('ct_m', showMetarEl.checked ? '1':'0');
@@ -210,7 +229,7 @@
     }
     function loadPrefs(){
       const sp = new URLSearchParams(location.search);
-      idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN,KATL";
+      idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN KATL";
       ceilEl.value = sp.get('ceil') || localStorage.getItem('ct_ceil') || "700";
       visEl.value = sp.get('vis') || localStorage.getItem('ct_vis') || "2";
       showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
@@ -220,29 +239,42 @@
     }
     loadPrefs();
 
-    // Clear All
-    $('#clearAll').addEventListener('click', () => {
-      idsEl.value = '';
+    // Debounce helper
+    function debounce(fn, ms=600){
+      let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
+    }
+
+    // Gentle throttle: avoid hammering AWC — coalesce to ≥10s between runs
+    let lastRun = 0, inflight = false;
+    async function throttledFetchAndRender(){
+      const now = Date.now();
+      if (now - lastRun < 10_000) return; // 10s courtesy
+      lastRun = now;
+      if (inflight) return;
+      inflight = true;
+      try { await fetchAndRender(); }
+      finally { inflight = false; }
+    }
+
+    // Auto-save/refresh on change (debounced)
+    const onControlsChanged = debounce(()=>{
       savePrefs();
-      fetchAndRender();
+      throttledFetchAndRender();
+    }, 600);
+    document.addEventListener('input', (e)=>{
+      if (e.target.matches('#ids,#ceil,#vis')) onControlsChanged();
+    });
+    document.addEventListener('change', (e)=>{
+      if (e.target.matches('#showMetar,#showTaf,#alpha,#filter,#theme')) onControlsChanged();
     });
 
-    // Auto-save / refresh on change
-    ['input','change'].forEach(ev => {
-      document.addEventListener(ev, (e) => {
-        if (e.target.matches('#ids,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter,#theme')) {
-          savePrefs();
-          fetchAndRender();
-        }
-      });
-    });
-
-    // Auto refresh
-    setInterval(fetchAndRender, 60 * 1000);
+    // Auto refresh every 60s
+    setInterval(throttledFetchAndRender, 60_000);
 
     async function fetchAndRender(){
+      const ids = normalizedIds(idsEl.value);
       const params = new URLSearchParams({
-        ids: idsEl.value.trim(),
+        ids,
         ceil: ceilEl.value,
         vis: visEl.value,
         metar: showMetarEl.checked ? '1':'0',
@@ -263,8 +295,14 @@
           html = clientSideFallbackRender(data);
         }
         board.innerHTML = html;
-        ts.textContent = 'Updated: ' + new Date().toLocaleTimeString();
-        const count = (idsEl.value.trim() ? idsEl.value.trim().split(/\s*,\s*/).filter(Boolean).length : 0);
+
+        // UTC updated time
+        const d = new Date();
+        const hh = String(d.getUTCHours()).padStart(2,'0');
+        const mm = String(d.getUTCMinutes()).padStart(2,'0');
+        ts.textContent = `Updated: ${hh}:${mm}Z`;
+
+        const count = ids ? ids.split(',').filter(Boolean).length : 0;
         summary.innerHTML = `${count} airport(s) &nbsp;•&nbsp; Theme: ${themeEl.value} &nbsp;•&nbsp; Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
       } catch (e) {
         err.style.display = 'block';
@@ -279,7 +317,7 @@
         const res = await fetch(`${RENDER_URL}?${params}`, { method: 'GET' });
         if (res.status === 404) return '';
         if (!res.ok) throw new Error(`Render API ${res.status} ${res.statusText}`);
-        return await res.text(); // already HTML from backend
+        return await res.text(); // backend HTML
       } catch (e) {
         if (e.message && /Render API/.test(e.message)) throw e;
         return '';
@@ -292,7 +330,7 @@
       return await res.json();
     }
 
-    // ------------- Client fallback: AWC-like vertical blocks -------------
+    // Fallback vertical renderer with highlighting + robust TAF field detection
     function clientSideFallbackRender(payload){
       const rows = (payload && payload.results) ? payload.results : [];
       if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
@@ -301,32 +339,22 @@
       let list = rows.slice();
       if (alphaEl.checked) list.sort((a,b)=> (a.icao||'').localeCompare(b.icao||''));
 
-      // Trigger logic (fallback only; backend will do the real thing)
-      const ceilLimit = Number(ceilEl.value||700);
-      const visLimit = Number(visEl.value||2);
-
+      // Trigger logic (fallback only)
       const isTrigger = (r)=>{
-        const raw = `${r.metar?.raw||''}\n${r.taf?.raw||''}`;
-        // ceilings: BKN/OVC less than ceilLimit -> look for 007 and below when ceilLimit=700
-        // Simple pattern for hundreds: BKN/OVC + 3 digits; treat 000–006 as <700
+        const raw = `${r.metar?.raw||r.metar?.text||''}\n${readTafRaw(r)||''}`;
         const cigHit = /\b(?:BKN|OVC)0{0,2}0?[0-6]\b/.test(raw);
-        // visibility hits: <2SM including “1 1/2SM”, “M1/2SM”, “3/4SM”
-        const visHit = /\b(?:M?\d\s?\d?\/\d?|\d)(?:SM)\b/i.test(raw) &&
-                       /(?:\bM?1\/2SM\b|\b3\/4SM\b|\b1 1\/2SM\b|\b1SM\b)/i.test(raw)
-                       || (Number(r.metar?.visibility_sm) > 0 && r.metar.visibility_sm < visLimit);
+        const visHit = /\b(M1\/2SM|1\/2SM|3\/4SM|1 1\/2SM|1SM)\b/i.test(raw) ||
+                       (Number(r.metar?.visibility_sm) > 0 && r.metar.visibility_sm < Number(visEl.value||2));
         const flagHit = r.flags?.metar_ceiling_below || r.flags?.taf_ceiling_below ||
                         r.flags?.metar_visibility_below || r.flags?.taf_visibility_below;
         return cigHit || visHit || flagHit;
       };
-
       if (filterEl.checked) list = list.filter(isTrigger);
 
       const showM = showMetarEl.checked, showT = showTafEl.checked;
 
       const hilite = (text)=>{
-        // highlight BKN/OVC < 007
         text = text.replace(/\b(BKN|OVC)(0{0,2}0?[0-6])\b/g, '<span class="trigger">$1$2</span>');
-        // highlight <2SM flavors
         text = text.replace(/\b(M1\/2SM|1\/2SM|3\/4SM|1 1\/2SM|1SM)\b/gi, '<span class="trigger">$1</span>');
         return text;
       };
@@ -334,8 +362,8 @@
       let out = '';
       for (const r of list){
         const icao = r.icao || '';
-        const metarRaw = r.metar?.raw || '';
-        const tafRaw   = r.taf?.raw || '';
+        const metarRaw = r.metar?.raw || r.metar?.text || '';
+        const tafRaw   = readTafRaw(r); // handles several shapes
 
         out += `<article class="wx">
           <div class="wx-icao"><code>${escapeHtml(icao)}</code></div>
@@ -347,6 +375,12 @@
       return out || `<div class="muted" style="padding:12px">No results.</div>`;
     }
 
+    // Try a few common TAF shapes
+    function readTafRaw(r){
+      if (!r || !r.taf) return '';
+      return r.taf.raw || r.taf.text || r.taf_raw || r.tafRaw || (typeof r.taf === 'string' ? r.taf : '');
+    }
+
     function escapeHtml(s){
       return String(s).replace(/[&<>"']/g, m => (
         { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]
@@ -354,7 +388,7 @@
     }
 
     // Initial load
-    fetchAndRender();
+    throttledFetchAndRender();
   </script>
 
   <!-- AdSense -->
