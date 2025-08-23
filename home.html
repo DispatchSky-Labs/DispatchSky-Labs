@@ -85,7 +85,6 @@
   </header>
 
   <main>
-    <!-- Controls (mirrors the public AWC page layout, but with your custom behavior) -->
     <div class="toolbar" role="region" aria-label="Controls">
       <div class="group">
         <label title="Comma-separated ICAO list">
@@ -95,7 +94,6 @@
       </div>
 
       <div class="group">
-        <!-- (1) Theme dropdown (replaces 'Most recent' period) -->
         <label>
           Theme
           <select id="theme">
@@ -106,13 +104,11 @@
       </div>
 
       <div class="group">
-        <!-- (6) 'Load' becomes Ceiling input (ft) -->
         <label>
           Ceiling (ft)
           <input id="ceil" type="number" value="700" min="0" step="100" />
         </label>
 
-        <!-- (7) 'Impacts' becomes Visibility input (SM) -->
         <label>
           Visibility (SM)
           <input id="vis" type="number" value="2" min="0" step="0.25" />
@@ -120,42 +116,34 @@
       </div>
 
       <div class="group">
-        <!-- (3) Keep METAR/TAF toggles -->
         <label class="switch"><input id="showMetar" type="checkbox" checked /> METAR</label>
         <label class="switch"><input id="showTaf" type="checkbox" checked /> TAF</label>
 
-        <!-- (4) Keep Alphabetize -->
         <label class="switch" title="Sort ICAOs alphabetically">
           <input id="alpha" type="checkbox" /> Alphabetize
         </label>
       </div>
 
       <div class="group">
-        <!-- (7b) Repurpose 'Map' to Filter toggle -->
         <label class="switch" title="Show only trigger airports">
           <input id="filter" type="checkbox" />
           Filter: Trigger airports
         </label>
 
-        <!-- (8) Repurpose 'Raw Data' to Clear All -->
         <button id="clearAll" class="btn danger" title="Clear ICAO list">Clear All</button>
 
-        <!-- Spinner -->
         <div class="spinner" id="spin" aria-label="Loading"></div>
       </div>
     </div>
 
     <div id="err" class="error" role="alert"></div>
 
-    <!-- Results board (server-rendered HTML will be injected here) -->
     <section class="board" aria-live="polite">
       <div class="board-header">
         <div id="summary" class="muted">Waiting for data…</div>
         <div id="timestamp" class="muted"></div>
       </div>
-      <div id="board-body" class="board-body">
-        <!-- Backend will return ready-to-insert HTML table(s) here. -->
-      </div>
+      <div id="board-body" class="board-body"></div>
     </section>
   </main>
 
@@ -173,9 +161,7 @@
   <!-- ================== App Script ================== -->
   <script>
     // Backend endpoints
-    // New server-side rendering endpoint (recommended):
     const RENDER_URL = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/render";
-    // Fallback to existing JSON endpoint if /api/render isn't available yet:
     const DATA_URL   = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/weather";
 
     const $ = (s, r=document) => r.querySelector(s);
@@ -194,7 +180,7 @@
     const summary = $('#summary');
     const ts = $('#timestamp');
 
-    // Theme handling (1)
+    // Theme handling
     function applyTheme(mode){
       document.body.classList.toggle('theme-dark', mode === 'dark');
       localStorage.setItem('ct_theme', mode);
@@ -227,14 +213,14 @@
     }
     loadPrefs();
 
-    // Clear All (8)
+    // Clear All
     $('#clearAll').addEventListener('click', () => {
       idsEl.value = '';
       savePrefs();
       fetchAndRender();
     });
 
-    // Whenever controls change, refresh in place (debounced)
+    // React to control changes
     ['input','change'].forEach(ev => {
       document.addEventListener(ev, (e) => {
         if (e.target.matches('#ids,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')) {
@@ -256,26 +242,18 @@
         taf: showTafEl.checked ? '1':'0',
         alpha: alphaEl.checked ? '1':'0',
         filter: filterEl.checked ? 'trigger':'all',
-        // The backend should implement YOUR logic:
-        // - Highlight BKN<007 / OVC<007 (based on ceil input)
-        // - Highlight vis < 2SM including fractional (1 1/2SM, M1/2SM, etc)
-        // - Mark such airports as "trigger" for filter
-        // - Return ready-to-insert HTML table(s)
-        // - Use <span class="trigger">...</span> for highlighted tokens
-        // - Accept & follow https://aviationweather.gov/data/api/#schema
       });
 
-      // Busy UI
       spin.style.display = 'inline-block';
       err.style.display = 'none';
       err.textContent = '';
       summary.textContent = 'Loading…';
 
       try {
-        // Preferred path: server returns pre-rendered HTML
+        // Preferred: server-rendered HTML
         let html = await tryRender(params);
         if (!html) {
-          // Fallback: server returns JSON; we render *minimal* shell here.
+          // Fallback: JSON → minimal client render
           const data = await fetchJSON(params);
           html = clientSideFallbackRender(data);
         }
@@ -294,9 +272,8 @@
     async function tryRender(params){
       try{
         const res = await fetch(`${RENDER_URL}?${params}`, { method: 'GET' });
-        if (res.status === 404) return ''; // endpoint not deployed
+        if (res.status === 404) return '';
         if (!res.ok) throw new Error(`Render API ${res.status} ${res.statusText}`);
-        // Expected: text/html (already highlighted and filtered by backend)
         return await res.text();
       } catch (e) {
         if (e.message && /Render API/.test(e.message)) throw e;
@@ -310,32 +287,27 @@
       return await res.json();
     }
 
-    // Minimal fallback renderer if /api/render isn't ready.
-    // NOTE: This is intentionally light; real logic should live in backend.
+    // Minimal client fallback rendering (logic should live in backend)
     function clientSideFallbackRender(payload){
       const rows = (payload && payload.results) ? payload.results : [];
       if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
 
-      // (4) Alphabetize (client fallback only if backend didn't)
       let list = rows.slice();
       if (alphaEl.checked) list.sort((a,b)=> (a.icao||'').localeCompare(b.icao||''));
 
-      // (7) Filter (client fallback only if backend didn't)
-      const ceil = Number(ceilEl.value||700);
       const vis = Number(visEl.value||2);
-      const isTrigger = (r)=>{
-        const raw = (r.metar && r.metar.raw) ? String(r.metar.raw) : '';
-        // quick client regex (backend should do robust version):
-        const trigCig = /\b(BKN|OVC)0?0?([0-6])\d\b/.test(raw) || /\b(BKN|OVC)00[0-6]\b/.test(raw);
-        // vis: <2SM including 1 1/2SM, M1/2SM
-        const trigVis = /\b(M?\d?\s?\d?\/?\d?)SM\b/i.test(raw) && /(?:^|\s)(?:1\/2|3\/4|1 1\/2|1SM|M1\/2)SM\b/i.test(raw) || (Number(r.metar?.visibility_sm) > 0 && r.metar.visibility_sm < vis);
-        const flagCig = r.flags?.metar_ceiling_below || r.flags?.taf_ceiling_below;
-        const flagVis = r.flags?.metar_visibility_below || r.flags?.taf_visibility_below;
-        return trigCig || trigVis || flagCig || flagVis;
-      };
-      if (filterEl.checked) list = list.filter(isTrigger);
+      if (filterEl.checked) {
+        list = list.filter(r => {
+          const raw = (r.metar && r.metar.raw) ? String(r.metar.raw) : '';
+          const trigCig = /\b(BKN|OVC)00[0-6]\b/.test(raw) || /\b(BKN|OVC)0?0?([0-6])\d\b/.test(raw);
+          const trigVis = /(?:^|\s)(?:1\/2|3\/4|1 1\/2|1SM|M1\/2)SM\b/i.test(raw) ||
+                          (Number(r.metar?.visibility_sm) > 0 && r.metar.visibility_sm < vis);
+          const flagCig = r.flags?.metar_ceiling_below || r.flags?.taf_ceiling_below;
+          const flagVis = r.flags?.metar_visibility_below || r.flags?.taf_visibility_below;
+          return trigCig || trigVis || flagCig || flagVis;
+        });
+      }
 
-      // (3) METAR/TAF toggles
       const showM = showMetarEl.checked, showT = showTafEl.checked;
 
       let html = `<table style="width:100%; border-collapse:collapse; background:var(--table)">
