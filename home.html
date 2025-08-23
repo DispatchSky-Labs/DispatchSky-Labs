@@ -9,11 +9,11 @@
   <style>
     :root{
       --fg:#0b0b0b; --bg:#ffffff; --card:#f7f7f7; --muted:#666; --ink:#0b6;
-      --warn:#b00020; --panel:#ffffff; --rule:#e9e9e9;
+      --warn:#b00020; --table:#ffffff; --rule:#e9e9e9;
     }
     .theme-dark{
       --fg:#eaeaea; --bg:#0b0b0b; --card:#11151a; --muted:#a1a1a1; --ink:#59c3ff;
-      --warn:#ff6b6b; --panel:#0f141a; --rule:#20252b;
+      --warn:#ff6b6b; --table:#0f141a; --rule:#20252b;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -25,11 +25,8 @@
     a{color:var(--ink)}
     header{background:#0b2239; color:#fff; padding:16px 20px}
     header h1{margin:0 0 4px; font-size:20px}
-    header p{margin:0; opacity:.9; font-size:14px}
-    .hdr-line{display:flex; align-items:flex-end; justify-content:space-between; gap:12px}
-    .utc{font-variant-numeric:tabular-nums; opacity:.9; font-size:14px}
-
-    nav.top{max-width:1200px; margin:0 auto; padding:8px 12px; display:flex; gap:14px}
+    header p{margin:0; opacity:.85; font-size:14px}
+    nav.top{max-width:1200px; margin:0 auto; padding:8px 0 0; display:flex; gap:14px}
     nav.top a{color:#cfe8ff; text-decoration:none; font-size:14px}
     nav.top a:hover{text-decoration:underline}
 
@@ -47,31 +44,23 @@
     }
     .switch{display:inline-flex; align-items:center; gap:6px; cursor:pointer}
     .switch input{accent-color:var(--ink); width:18px; height:18px}
+    .btn{
+      padding:8px 12px; border:1px solid var(--rule); border-radius:10px; background:transparent; color:var(--fg); cursor:pointer; font-weight:600;
+    }
+    .btn:hover{border-color:var(--ink)}
+    .btn.primary{border-color:var(--ink); color:var(--ink)}
+
     .error{
       display:none; margin-top:12px; padding:10px; border-radius:8px;
       color:#7a0000; background:#ffe9e9; border:1px solid #f3bcbc; white-space:pre-wrap;
     }
     .theme-dark .error{color:#300; background:#3b0000; border-color:#5b2222}
 
-    .board{margin-top:14px; background:var(--card); border:1px solid var(--rule); border-radius:12px; overflow:hidden}
-    .board-header{padding:10px 12px; border-bottom:1px solid var(--rule); display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap}
-    .board-body{padding:0; background:var(--panel)}
-
-    /* AWC-like vertical blocks */
-    .wx{padding:14px 16px; border-bottom:1px solid var(--rule)}
-    .wx:last-child{border-bottom:0}
-    .wx-icao{font-weight:800; letter-spacing:.5px; margin-bottom:6px}
-    .wx-icao code{font-size:15px}
-    .wx-pre{
-      margin:0 0 10px; padding:0;
-      font:15px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-      white-space:pre-wrap; word-break:break-word; color:var(--fg);
+    .board{
+      margin-top:14px; background:var(--card); border:1px solid var(--rule); border-radius:12px; overflow:hidden;
     }
-    .wx-pre:last-child{margin-bottom:0}
-
-    .muted{color:var(--muted)}
-    .trigger{font-weight:800; color:var(--warn)} /* highlight hits */
-
+    .board-header{padding:10px 12px; border-bottom:1px solid var(--rule); display:flex; justify-content:space-between; align-items:center}
+    .board-body{padding:0; background:var(--table)}
     .spinner{display:none; margin-left:8px; width:16px; height:16px; border:2px solid #ddd; border-top-color:var(--ink); border-radius:50%; animation:spin .8s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -80,35 +69,48 @@
     .footwrap{max-width:1200px; margin:0 auto; padding:14px 12px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:14px; color:var(--muted)}
     .footwrap a{text-decoration:none}
     .footwrap a:hover{text-decoration:underline}
+
+    /* classes the backend may include in its returned HTML */
+    .trigger{font-weight:800; color:var(--warn)}
+    .muted{color:var(--muted)}
+    pre.wx { margin:0; padding:10px 12px; border-bottom:1px solid var(--rule); font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; white-space:pre-wrap }
+    .row { display:flex; gap:18px; align-items:flex-start; padding:10px 12px; border-bottom:1px solid var(--rule) }
+    .col-icao { width:6ch; font-weight:700 }
+    .col-wx { flex:1 }
   </style>
 </head>
 <body>
   <header>
-    <div class="hdr-line">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
       <div>
-        <h1 style="margin-bottom:6px">CieloTracker — METAR/TAF Monitor</h1>
-        <p>by <strong>Sadiom</strong> — For information purposes only.</p>
+        <h1 style="margin:0 0 4px;">CieloTracker — METAR/TAF Monitor</h1>
+        <p style="margin:0;opacity:.85">
+          by <strong>Sadiom</strong> • <span class="muted">For information purposes only.</span>
+        </p>
+        <nav class="top">
+          <a href="/home.html">Home</a>
+          <a href="/support.html">iOS Support</a>
+          <a href="/privacy.html">Privacy</a>
+        </nav>
       </div>
-      <div class="utc" id="utcClock" aria-label="Current UTC time">UTC —</div>
+      <div style="text-align:right;min-width:110px;">
+        <div class="muted" id="utcNow" aria-label="Current UTC time">UTC —</div>
+      </div>
     </div>
-    <nav class="top">
-      <a href="/home.html">Home</a>
-      <a href="/support.html">iOS Support</a>
-      <a href="/privacy.html">Privacy</a>
-    </nav>
   </header>
 
   <main>
     <div class="toolbar" role="region" aria-label="Controls">
       <div class="group">
-        <label title="Space or comma-separated IDs">
-          <strong>IDs</strong>
+        <label title="IDs separated by spaces or commas">
+          IDs
           <input id="ids" type="text" placeholder="e.g., KDEN KATL KLAX" value="KDEN KATL" />
         </label>
       </div>
 
       <div class="group">
-        <label>Theme
+        <label>
+          Theme
           <select id="theme">
             <option value="light" selected>Light</option>
             <option value="dark">Dark</option>
@@ -117,10 +119,12 @@
       </div>
 
       <div class="group">
-        <label>Ceiling (ft)
+        <label>
+          Ceiling (ft)
           <input id="ceil" type="number" value="700" min="0" step="100" />
         </label>
-        <label>Visibility (SM)
+        <label>
+          Visibility (SM)
           <input id="vis" type="number" value="2" min="0" step="0.25" />
         </label>
       </div>
@@ -128,7 +132,9 @@
       <div class="group">
         <label class="switch"><input id="showMetar" type="checkbox" checked /> METAR</label>
         <label class="switch"><input id="showTaf" type="checkbox" checked /> TAF</label>
-        <label class="switch" title="Sort alphabetically"><input id="alpha" type="checkbox" /> Alphabetize</label>
+        <label class="switch" title="Sort IDs alphabetically">
+          <input id="alpha" type="checkbox" /> Alphabetize
+        </label>
       </div>
 
       <div class="group">
@@ -136,6 +142,10 @@
           <input id="filter" type="checkbox" />
           Filter: Trigger airports
         </label>
+
+        <!-- Load (manual) -->
+        <button id="loadBtn" class="btn primary" title="Fetch latest data">Load</button>
+
         <div class="spinner" id="spin" aria-label="Loading"></div>
       </div>
     </div>
@@ -147,7 +157,9 @@
         <div id="summary" class="muted">Waiting for data…</div>
         <div id="timestamp" class="muted"></div>
       </div>
-      <div id="board-body" class="board-body"></div>
+      <div id="board-body" class="board-body">
+        <!-- Backend will return ready-to-insert HTML here. -->
+      </div>
     </section>
   </main>
 
@@ -162,12 +174,12 @@
     </div>
   </footer>
 
+  <!-- ================== App Script ================== -->
   <script>
     // Backend endpoints
     const RENDER_URL = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/render";
     const DATA_URL   = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/weather";
 
-    // El refs
     const $ = (s, r=document) => r.querySelector(s);
     const idsEl = $('#ids');
     const ceilEl = $('#ceil');
@@ -183,43 +195,31 @@
     const board = $('#board-body');
     const summary = $('#summary');
     const ts = $('#timestamp');
-    const utcClock = $('#utcClock');
-
-    // UTC clock (top-right) — updates every second
-    function fmtUTC(d=new Date()){
-      const hh = String(d.getUTCHours()).padStart(2,'0');
-      const mm = String(d.getUTCMinutes()).padStart(2,'0');
-      const ss = String(d.getUTCSeconds()).padStart(2,'0');
-      return `${hh}:${mm}:${ss}Z`;
-    }
-    function tickClock(){
-      utcClock.textContent = `UTC — ${fmtUTC()}`;
-    }
-    tickClock(); setInterval(tickClock, 1000);
 
     // Theme handling
     function applyTheme(mode){
       document.body.classList.toggle('theme-dark', mode === 'dark');
       localStorage.setItem('ct_theme', mode);
     }
-    themeEl.addEventListener('change', e => applyTheme(e.target.value));
+    themeEl.addEventListener('change', e => { applyTheme(e.target.value); });
     (function initTheme(){
       const saved = localStorage.getItem('ct_theme') || 'light';
       themeEl.value = saved; applyTheme(saved);
     })();
 
-    // Normalize IDs: allow spaces or commas; collapse to comma-list
-    function normalizedIds(raw){
-      return raw.replace(/[;\n]/g,' ')
-                .replace(/\s+/g,' ')          // collapse whitespace
-                .trim()
-                .replace(/(?:\s|,)+/g, ',')   // spaces/commas -> comma
-                .replace(/^,|,$/g,'');        // trim commas
+    // UTC clock (no seconds)
+    function updateUtcClock() {
+      const d = new Date();
+      const hh = String(d.getUTCHours()).padStart(2,'0');
+      const mm = String(d.getUTCMinutes()).padStart(2,'0');
+      $('#utcNow').textContent = `UTC ${hh}:${mm}`;
     }
+    updateUtcClock();
+    setInterval(updateUtcClock, 30 * 1000);
 
-    // Prefs
+    // Preferences
     function savePrefs(){
-      localStorage.setItem('ct_ids', idsEl.value);
+      localStorage.setItem('ct_ids', idsEl.value.trim());
       localStorage.setItem('ct_ceil', ceilEl.value);
       localStorage.setItem('ct_vis', visEl.value);
       localStorage.setItem('ct_m', showMetarEl.checked ? '1':'0');
@@ -229,9 +229,9 @@
     }
     function loadPrefs(){
       const sp = new URLSearchParams(location.search);
-      idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN KATL";
-      ceilEl.value = sp.get('ceil') || localStorage.getItem('ct_ceil') || "700";
-      visEl.value = sp.get('vis') || localStorage.getItem('ct_vis') || "2";
+      idsEl.value       = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN KATL";
+      ceilEl.value      = sp.get('ceil') || localStorage.getItem('ct_ceil') || "700";
+      visEl.value       = sp.get('vis')  || localStorage.getItem('ct_vis')  || "2";
       showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
       showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0';
       alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1';
@@ -239,71 +239,75 @@
     }
     loadPrefs();
 
-    // Debounce helper
-    function debounce(fn, ms=600){
-      let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
+    // Normalize IDs: spaces/semicolons/extra commas -> single commas
+    function normalizedIds() {
+      return (idsEl.value || '')
+        .trim()
+        .replace(/[\s;]+/g, ',')
+        .replace(/,+/g, ',')
+        .replace(/^,|,$/g, '');
     }
 
-    // Gentle throttle: avoid hammering AWC — coalesce to ≥10s between runs
-    let lastRun = 0, inflight = false;
-    async function throttledFetchAndRender(){
-      const now = Date.now();
-      if (now - lastRun < 10_000) return; // 10s courtesy
-      lastRun = now;
-      if (inflight) return;
-      inflight = true;
-      try { await fetchAndRender(); }
-      finally { inflight = false; }
+    // Load button (manual fetch for IDs to avoid API hammering)
+    const loadBtn = $('#loadBtn');
+    loadBtn.addEventListener('click', () => { savePrefs(); fetchAndRender(); });
+
+    // Refresh when *non-ID* controls change
+    function controlsChanged(e){
+      if (e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')) {
+        savePrefs();
+        fetchAndRender();
+      }
     }
+    document.addEventListener('change', controlsChanged);
+    document.addEventListener('input', controlsChanged);
 
-    // Auto-save/refresh on change (debounced)
-    const onControlsChanged = debounce(()=>{
-      savePrefs();
-      throttledFetchAndRender();
-    }, 600);
-    document.addEventListener('input', (e)=>{
-      if (e.target.matches('#ids,#ceil,#vis')) onControlsChanged();
-    });
-    document.addEventListener('change', (e)=>{
-      if (e.target.matches('#showMetar,#showTaf,#alpha,#filter,#theme')) onControlsChanged();
-    });
+    // Courtesy refresh: only once per minute after a Load/refresh
+    let lastFetchAt = 0;
+    setInterval(() => {
+      if (Date.now() - lastFetchAt >= 60*1000) {
+        // soft refresh if user previously loaded
+        if (lastFetchAt !== 0) fetchAndRender(true);
+      }
+    }, 5000);
 
-    // Auto refresh every 60s
-    setInterval(throttledFetchAndRender, 60_000);
-
-    async function fetchAndRender(){
-      const ids = normalizedIds(idsEl.value);
+    async function fetchAndRender(quiet){
+      const ids = normalizedIds();
       const params = new URLSearchParams({
         ids,
         ceil: ceilEl.value,
-        vis: visEl.value,
+        vis:  visEl.value,
         metar: showMetarEl.checked ? '1':'0',
-        taf: showTafEl.checked ? '1':'0',
+        taf:   showTafEl.checked ? '1':'0',
         alpha: alphaEl.checked ? '1':'0',
         filter: filterEl.checked ? 'trigger':'all',
       });
 
-      spin.style.display = 'inline-block';
-      err.style.display = 'none';
-      err.textContent = '';
-      summary.textContent = 'Loading…';
+      if (!quiet) {
+        summary.textContent = 'Loading…';
+        spin.style.display = 'inline-block';
+        err.style.display='none';
+        err.textContent='';
+      }
 
       try {
         let html = await tryRender(params);
         if (!html) {
+          // Fallback JSON: render a simple vertical layout
           const data = await fetchJSON(params);
           html = clientSideFallbackRender(data);
         }
         board.innerHTML = html;
 
-        // UTC updated time
         const d = new Date();
         const hh = String(d.getUTCHours()).padStart(2,'0');
         const mm = String(d.getUTCMinutes()).padStart(2,'0');
-        ts.textContent = `Updated: ${hh}:${mm}Z`;
+        ts.textContent = `Updated: ${hh}:${mm} UTC`;
 
         const count = ids ? ids.split(',').filter(Boolean).length : 0;
-        summary.innerHTML = `${count} airport(s) &nbsp;•&nbsp; Theme: ${themeEl.value} &nbsp;•&nbsp; Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
+        summary.textContent = `${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
+
+        lastFetchAt = Date.now();
       } catch (e) {
         err.style.display = 'block';
         err.textContent = e && e.message ? e.message : String(e);
@@ -315,11 +319,10 @@
     async function tryRender(params){
       try{
         const res = await fetch(`${RENDER_URL}?${params}`, { method: 'GET' });
-        if (res.status === 404) return '';
+        if (res.status === 404) return ''; // endpoint not deployed
         if (!res.ok) throw new Error(`Render API ${res.status} ${res.statusText}`);
-        return await res.text(); // backend HTML
-      } catch (e) {
-        if (e.message && /Render API/.test(e.message)) throw e;
+        return await res.text(); // HTML from backend (including trigger highlighting)
+      } catch {
         return '';
       }
     }
@@ -330,55 +333,42 @@
       return await res.json();
     }
 
-    // Fallback vertical renderer with highlighting + robust TAF field detection
+    // Minimal vertical fallback rendering if /api/render isn't ready.
     function clientSideFallbackRender(payload){
       const rows = (payload && payload.results) ? payload.results : [];
       if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
 
-      // Sort
+      // Optional alphabetize
       let list = rows.slice();
       if (alphaEl.checked) list.sort((a,b)=> (a.icao||'').localeCompare(b.icao||''));
 
-      // Trigger logic (fallback only)
-      const isTrigger = (r)=>{
-        const raw = `${r.metar?.raw||r.metar?.text||''}\n${readTafRaw(r)||''}`;
-        const cigHit = /\b(?:BKN|OVC)0{0,2}0?[0-6]\b/.test(raw);
-        const visHit = /\b(M1\/2SM|1\/2SM|3\/4SM|1 1\/2SM|1SM)\b/i.test(raw) ||
-                       (Number(r.metar?.visibility_sm) > 0 && r.metar.visibility_sm < Number(visEl.value||2));
-        const flagHit = r.flags?.metar_ceiling_below || r.flags?.taf_ceiling_below ||
-                        r.flags?.metar_visibility_below || r.flags?.taf_visibility_below;
-        return cigHit || visHit || flagHit;
-      };
-      if (filterEl.checked) list = list.filter(isTrigger);
+      // Simple vertical layout similar to AWC text style
+      const showM = showMetarEl.checked;
+      const showT = showTafEl.checked;
 
-      const showM = showMetarEl.checked, showT = showTafEl.checked;
-
-      const hilite = (text)=>{
-        text = text.replace(/\b(BKN|OVC)(0{0,2}0?[0-6])\b/g, '<span class="trigger">$1$2</span>');
-        text = text.replace(/\b(M1\/2SM|1\/2SM|3\/4SM|1 1\/2SM|1SM)\b/gi, '<span class="trigger">$1</span>');
-        return text;
-      };
-
-      let out = '';
+      let html = '';
       for (const r of list){
-        const icao = r.icao || '';
-        const metarRaw = r.metar?.raw || r.metar?.text || '';
-        const tafRaw   = readTafRaw(r); // handles several shapes
+        const metarRaw = r.metar?.raw || '';
+        const tafRaw   = r.taf?.raw || '';
 
-        out += `<article class="wx">
-          <div class="wx-icao"><code>${escapeHtml(icao)}</code></div>
-          ${showM ? `<pre class="wx-pre">${hilite(escapeHtml(metarRaw))}</pre>` : ''}
-          ${showT ? (tafRaw ? `<pre class="wx-pre">${hilite(escapeHtml(tafRaw))}</pre>`
-                             : `<div class="muted">No TAF</div>`) : ''}
-        </article>`;
+        html += `<div class="row">
+          <div class="col-icao">${escapeHtml(r.icao || '')}</div>
+          <div class="col-wx">`;
+
+        if (showM) {
+          html += metarRaw
+            ? `<pre class="wx">${escapeHtml(metarRaw)}</pre>`
+            : `<div class="muted" style="padding:10px 12px;">No METAR</div>`;
+        }
+        if (showT) {
+          html += tafRaw
+            ? `<pre class="wx">${escapeHtml(tafRaw)}</pre>`
+            : `<div class="muted" style="padding:10px 12px;">No TAF</div>`;
+        }
+
+        html += `</div></div>`;
       }
-      return out || `<div class="muted" style="padding:12px">No results.</div>`;
-    }
-
-    // Try a few common TAF shapes
-    function readTafRaw(r){
-      if (!r || !r.taf) return '';
-      return r.taf.raw || r.taf.text || r.taf_raw || r.tafRaw || (typeof r.taf === 'string' ? r.taf : '');
+      return html;
     }
 
     function escapeHtml(s){
@@ -387,11 +377,11 @@
       ));
     }
 
-    // Initial load
-    throttledFetchAndRender();
+    // Do an initial fetch with defaults on first load:
+    fetchAndRender();
   </script>
 
-  <!-- AdSense -->
+  <!-- AdSense loader at bottom -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192" crossorigin="anonymous"></script>
 </body>
 </html>
