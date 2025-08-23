@@ -9,11 +9,11 @@
   <style>
     :root{
       --fg:#0b0b0b; --bg:#ffffff; --card:#f7f7f7; --muted:#666; --ink:#0b6;
-      --warn:#b00020; --table:#ffffff; --rule:#e9e9e9;
+      --warn:#b00020; --panel:#ffffff; --rule:#e9e9e9;
     }
     .theme-dark{
       --fg:#eaeaea; --bg:#0b0b0b; --card:#11151a; --muted:#a1a1a1; --ink:#59c3ff;
-      --warn:#ff6b6b; --table:#0f141a; --rule:#20252b;
+      --warn:#ff6b6b; --panel:#0f141a; --rule:#20252b;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -54,11 +54,30 @@
       color:#7a0000; background:#ffe9e9; border:1px solid #f3bcbc; white-space:pre-wrap;
     }
     .theme-dark .error{color:#300; background:#3b0000; border-color:#5b2222}
+
     .board{
       margin-top:14px; background:var(--card); border:1px solid var(--rule); border-radius:12px; overflow:hidden;
     }
     .board-header{padding:10px 12px; border-bottom:1px solid var(--rule); display:flex; justify-content:space-between; align-items:center}
-    .board-body{padding:0; background:var(--table)}
+    .board-body{padding:0; background:var(--panel)}
+
+    /* AWC-like vertical blocks */
+    .wx{padding:14px 16px; border-bottom:1px solid var(--rule)}
+    .wx:last-child{border-bottom:0}
+    .wx-icao{font-weight:800; letter-spacing:.5px; margin-bottom:6px}
+    .wx-icao code{font-size:15px}
+    .wx-pre{
+      margin:0 0 10px; padding:0;
+      font:15px/1.5 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      white-space:pre-wrap; /* preserve lines, wrap long ones */
+      word-break:break-word;
+      color:var(--fg);
+    }
+    .wx-pre:last-child{margin-bottom:0}
+
+    .muted{color:var(--muted)}
+    .trigger{font-weight:800; color:var(--warn)} /* highlight hits */
+
     .spinner{display:none; margin-left:8px; width:16px; height:16px; border:2px solid #ddd; border-top-color:var(--ink); border-radius:50%; animation:spin .8s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -67,10 +86,6 @@
     .footwrap{max-width:1200px; margin:0 auto; padding:14px 12px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:14px; color:var(--muted)}
     .footwrap a{text-decoration:none}
     .footwrap a:hover{text-decoration:underline}
-
-    /* classes the backend may include in its returned HTML */
-    .trigger{font-weight:800; color:var(--warn)}
-    .muted{color:var(--muted)}
   </style>
 </head>
 <body>
@@ -104,13 +119,10 @@
       </div>
 
       <div class="group">
-        <label>
-          Ceiling (ft)
+        <label>Ceiling (ft)
           <input id="ceil" type="number" value="700" min="0" step="100" />
         </label>
-
-        <label>
-          Visibility (SM)
+        <label>Visibility (SM)
           <input id="vis" type="number" value="2" min="0" step="0.25" />
         </label>
       </div>
@@ -118,10 +130,7 @@
       <div class="group">
         <label class="switch"><input id="showMetar" type="checkbox" checked /> METAR</label>
         <label class="switch"><input id="showTaf" type="checkbox" checked /> TAF</label>
-
-        <label class="switch" title="Sort ICAOs alphabetically">
-          <input id="alpha" type="checkbox" /> Alphabetize
-        </label>
+        <label class="switch" title="Sort ICAOs alphabetically"><input id="alpha" type="checkbox" /> Alphabetize</label>
       </div>
 
       <div class="group">
@@ -131,7 +140,6 @@
         </label>
 
         <button id="clearAll" class="btn danger" title="Clear ICAO list">Clear All</button>
-
         <div class="spinner" id="spin" aria-label="Loading"></div>
       </div>
     </div>
@@ -158,7 +166,6 @@
     </div>
   </footer>
 
-  <!-- ================== App Script ================== -->
   <script>
     // Backend endpoints
     const RENDER_URL = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/render";
@@ -191,7 +198,7 @@
       themeEl.value = saved; applyTheme(saved);
     })();
 
-    // Persist user prefs
+    // Prefs
     function savePrefs(){
       localStorage.setItem('ct_ids', idsEl.value.trim());
       localStorage.setItem('ct_ceil', ceilEl.value);
@@ -220,17 +227,17 @@
       fetchAndRender();
     });
 
-    // React to control changes
+    // Auto-save / refresh on change
     ['input','change'].forEach(ev => {
       document.addEventListener(ev, (e) => {
-        if (e.target.matches('#ids,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')) {
+        if (e.target.matches('#ids,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter,#theme')) {
           savePrefs();
           fetchAndRender();
         }
       });
     });
 
-    // Auto refresh every minute
+    // Auto refresh
     setInterval(fetchAndRender, 60 * 1000);
 
     async function fetchAndRender(){
@@ -250,17 +257,15 @@
       summary.textContent = 'Loading…';
 
       try {
-        // Preferred: server-rendered HTML
         let html = await tryRender(params);
         if (!html) {
-          // Fallback: JSON → minimal client render
           const data = await fetchJSON(params);
           html = clientSideFallbackRender(data);
         }
         board.innerHTML = html;
         ts.textContent = 'Updated: ' + new Date().toLocaleTimeString();
         const count = (idsEl.value.trim() ? idsEl.value.trim().split(/\s*,\s*/).filter(Boolean).length : 0);
-        summary.textContent = `${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
+        summary.innerHTML = `${count} airport(s) &nbsp;•&nbsp; Theme: ${themeEl.value} &nbsp;•&nbsp; Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
       } catch (e) {
         err.style.display = 'block';
         err.textContent = e && e.message ? e.message : String(e);
@@ -274,7 +279,7 @@
         const res = await fetch(`${RENDER_URL}?${params}`, { method: 'GET' });
         if (res.status === 404) return '';
         if (!res.ok) throw new Error(`Render API ${res.status} ${res.statusText}`);
-        return await res.text();
+        return await res.text(); // already HTML from backend
       } catch (e) {
         if (e.message && /Render API/.test(e.message)) throw e;
         return '';
@@ -287,50 +292,59 @@
       return await res.json();
     }
 
-    // Minimal client fallback rendering (logic should live in backend)
+    // ------------- Client fallback: AWC-like vertical blocks -------------
     function clientSideFallbackRender(payload){
       const rows = (payload && payload.results) ? payload.results : [];
       if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
 
+      // Sort
       let list = rows.slice();
       if (alphaEl.checked) list.sort((a,b)=> (a.icao||'').localeCompare(b.icao||''));
 
-      const vis = Number(visEl.value||2);
-      if (filterEl.checked) {
-        list = list.filter(r => {
-          const raw = (r.metar && r.metar.raw) ? String(r.metar.raw) : '';
-          const trigCig = /\b(BKN|OVC)00[0-6]\b/.test(raw) || /\b(BKN|OVC)0?0?([0-6])\d\b/.test(raw);
-          const trigVis = /(?:^|\s)(?:1\/2|3\/4|1 1\/2|1SM|M1\/2)SM\b/i.test(raw) ||
-                          (Number(r.metar?.visibility_sm) > 0 && r.metar.visibility_sm < vis);
-          const flagCig = r.flags?.metar_ceiling_below || r.flags?.taf_ceiling_below;
-          const flagVis = r.flags?.metar_visibility_below || r.flags?.taf_visibility_below;
-          return trigCig || trigVis || flagCig || flagVis;
-        });
-      }
+      // Trigger logic (fallback only; backend will do the real thing)
+      const ceilLimit = Number(ceilEl.value||700);
+      const visLimit = Number(visEl.value||2);
+
+      const isTrigger = (r)=>{
+        const raw = `${r.metar?.raw||''}\n${r.taf?.raw||''}`;
+        // ceilings: BKN/OVC less than ceilLimit -> look for 007 and below when ceilLimit=700
+        // Simple pattern for hundreds: BKN/OVC + 3 digits; treat 000–006 as <700
+        const cigHit = /\b(?:BKN|OVC)0{0,2}0?[0-6]\b/.test(raw);
+        // visibility hits: <2SM including “1 1/2SM”, “M1/2SM”, “3/4SM”
+        const visHit = /\b(?:M?\d\s?\d?\/\d?|\d)(?:SM)\b/i.test(raw) &&
+                       /(?:\bM?1\/2SM\b|\b3\/4SM\b|\b1 1\/2SM\b|\b1SM\b)/i.test(raw)
+                       || (Number(r.metar?.visibility_sm) > 0 && r.metar.visibility_sm < visLimit);
+        const flagHit = r.flags?.metar_ceiling_below || r.flags?.taf_ceiling_below ||
+                        r.flags?.metar_visibility_below || r.flags?.taf_visibility_below;
+        return cigHit || visHit || flagHit;
+      };
+
+      if (filterEl.checked) list = list.filter(isTrigger);
 
       const showM = showMetarEl.checked, showT = showTafEl.checked;
 
-      let html = `<table style="width:100%; border-collapse:collapse; background:var(--table)">
-        <thead>
-          <tr style="background:rgba(0,0,0,.03)">
-            <th style="padding:10px 12px; border-bottom:1px solid var(--rule); text-align:left">ICAO</th>
-            ${showM ? '<th style="padding:10px 12px; border-bottom:1px solid var(--rule); text-align:left">METAR</th>' : ''}
-            ${showT ? '<th style="padding:10px 12px; border-bottom:1px solid var(--rule); text-align:left">TAF</th>' : ''}
-          </tr>
-        </thead>
-        <tbody>`;
+      const hilite = (text)=>{
+        // highlight BKN/OVC < 007
+        text = text.replace(/\b(BKN|OVC)(0{0,2}0?[0-6])\b/g, '<span class="trigger">$1$2</span>');
+        // highlight <2SM flavors
+        text = text.replace(/\b(M1\/2SM|1\/2SM|3\/4SM|1 1\/2SM|1SM)\b/gi, '<span class="trigger">$1</span>');
+        return text;
+      };
 
+      let out = '';
       for (const r of list){
-        const metar = r.metar?.raw || '<span class="muted">No METAR</span>';
-        const taf   = r.taf?.raw || '<span class="muted">No TAF</span>';
-        html += `<tr>
-          <td style="padding:10px 12px; border-bottom:1px solid var(--rule)"><code>${r.icao||''}</code></td>
-          ${showM ? `<td style="padding:10px 12px; border-bottom:1px solid var(--rule)">${escapeHtml(metar)}</td>` : ''}
-          ${showT ? `<td style="padding:10px 12px; border-bottom:1px solid var(--rule)">${escapeHtml(taf)}</td>` : ''}
-        </tr>`;
+        const icao = r.icao || '';
+        const metarRaw = r.metar?.raw || '';
+        const tafRaw   = r.taf?.raw || '';
+
+        out += `<article class="wx">
+          <div class="wx-icao"><code>${escapeHtml(icao)}</code></div>
+          ${showM ? `<pre class="wx-pre">${hilite(escapeHtml(metarRaw))}</pre>` : ''}
+          ${showT ? (tafRaw ? `<pre class="wx-pre">${hilite(escapeHtml(tafRaw))}</pre>`
+                             : `<div class="muted">No TAF</div>`) : ''}
+        </article>`;
       }
-      html += `</tbody></table>`;
-      return html;
+      return out || `<div class="muted" style="padding:12px">No results.</div>`;
     }
 
     function escapeHtml(s){
@@ -343,7 +357,7 @@
     fetchAndRender();
   </script>
 
-  <!-- AdSense loader at bottom as requested -->
+  <!-- AdSense -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192" crossorigin="anonymous"></script>
 </body>
 </html>
