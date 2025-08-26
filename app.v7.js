@@ -1,4 +1,4 @@
-// Show runtime errors in-page
+// Surface runtime errors in the page
 window.addEventListener('error', (e) => {
   const el = document.getElementById('err');
   if (!el) return;
@@ -171,8 +171,9 @@ window.addEventListener('error', (e) => {
     let html = '';
     for (const r of list) {
       const icao = r.icao || '';
-      let metarHTML = r.metar?.html || '';   // already <pre class="wx">...</pre> from backend
-      let tafHTML   = r.taf?.html   || '';   // already multiple <div class="taf-line">...</div>
+      let metarHTML = r.metar?.html || '';   // backend delivers <pre class="wx">...</pre>
+      let tafHTML   = r.taf?.html   || '';   // backend delivers multiple <div class="taf-line">...</div>
+      const tafRaw  = r.taf?.raw    || '';
 
       // time filter
       tafHTML = applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, applyTimeEl.checked);
@@ -183,14 +184,14 @@ window.addEventListener('error', (e) => {
                             (tafActiveOnly && containsActiveHit(tafActiveOnly));
       if (filterEl.checked && !activeTrigger) continue;
 
-      // render AWC-style blocks with blank lines
+      // render AWC-style: tight lines; blank line after METAR, after TAF, and extra between airports
       if (showM) {
         html += metarHTML ? metarHTML : `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>`;
-        html += '\n'; // separation within airport
+        html += '\n';
       }
       if (showT) {
         html += tafHTML ? tafHTML : `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>`;
-        html += '\n'; // separation within airport
+        html += '\n';
       }
       html += '<br/>'; // extra blank line between airports
     }
@@ -239,8 +240,7 @@ window.addEventListener('error', (e) => {
 
   // Initial load + auto-refresh
   fetchAndRender();
-
-  // Auto-refresh utilities
+  let refreshTimer = null;
   function startAutoRefresh(){
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
