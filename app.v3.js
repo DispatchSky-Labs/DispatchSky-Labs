@@ -1,4 +1,4 @@
-// Show any runtime error in the page so failures aren’t silent
+// Surface any runtime errors in the UI so failures aren’t silent
 window.addEventListener('error', (e) => {
   const el = document.getElementById('err');
   if (!el) return;
@@ -28,13 +28,16 @@ window.addEventListener('error', (e) => {
   const ts = $('#timestamp');
   const utcNow = $('#utcNow');
 
+  // Theme
   function applyTheme(mode){ document.body.classList.toggle('theme-dark', mode === 'dark'); localStorage.setItem('ct_theme', mode); }
   themeEl.addEventListener('change', e => applyTheme(e.target.value));
   (function initTheme(){ const saved = localStorage.getItem('ct_theme') || 'light'; themeEl.value = saved; applyTheme(saved);} )();
 
+  // UTC clock
   function updateUtcClock(){ const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0'); utcNow.textContent = `UTC ${hh}:${mm}`; }
   updateUtcClock(); setInterval(updateUtcClock, 30_000);
 
+  // Prefs
   function savePrefs(){
     localStorage.setItem('ct_ids', idsEl.value.trim());
     localStorage.setItem('ct_ceil', ceilEl.value);
@@ -65,6 +68,7 @@ window.addEventListener('error', (e) => {
   // ENTER submits form
   form.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
 
+  // React to control changes
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
     if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#showMetar,#showTaf,#alpha,#filter')){
@@ -74,13 +78,18 @@ window.addEventListener('error', (e) => {
   document.addEventListener('change', controlsChanged);
   document.addEventListener('input', controlsChanged);
 
-  // Auto-refresh every minute while tab is visible
-  let refreshTimer = null;
+  // ---------- Auto-refresh every minute while tab is visible ----------
+  let refreshTimer = null; // <-- single declaration
   function startAutoRefresh(){
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
   }
-  function stopAutoRefresh(){ if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
+  function stopAutoRefresh(){
+    if (refreshTimer) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
+  }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) stopAutoRefresh(); else { fetchAndRender(true); startAutoRefresh(); }
   });
@@ -96,7 +105,7 @@ window.addEventListener('error', (e) => {
     if (day < 1 || day > 31 || hour < 0 || hour > 23) return null;
     hour += 3;                 // add 3h buffer
     if (hour >= 24) { hour -= 24; day += 1; }  // rollover
-    if (day > 31) day = 31;   // clamp
+    if (day > 31) day = 31;   // clamp (short horizon)
     return { day, hour };
   }
   function ddhhCompare(a, b){
@@ -104,6 +113,7 @@ window.addEventListener('error', (e) => {
     if (a.hour !== b.hour) return a.hour > b.hour ? 1 : (a.hour < b.hour ? -1 : 0);
     return 0;
   }
+  // Extract a starting DDHH from a TAF segment
   function lineStartDDHH(text){
     let m = text.match(/\bFM(\d{2})(\d{2})\d{2}\b/);
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
@@ -111,13 +121,14 @@ window.addEventListener('error', (e) => {
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
     return null;
   }
+  // Add .after-shift to TAF lines that start after cutoff
   function applyTimeFilterToTafHtml(tafHtml, tafRaw, cutoffDDHH, enabled){
     if (!enabled || !tafHtml || !tafRaw || !cutoffDDHH) return tafHtml;
     const breaks = / (?=(FM\d{6}\b|TEMPO\b|BECMG\b|PROB(?:30|40)\b))/g;
     const rawLines = tafRaw.split(breaks).join('\n').split('\n').map(s => s.trim()).filter(Boolean);
     const afterFlags = rawLines.map(txt => {
       const start = lineStartDDHH(txt);
-      if (!start) return false;
+      if (!start) return false;           // keep context lines “in shift”
       return ddhhCompare(start, cutoffDDHH) === 1;
     });
     let idx = 0;
@@ -127,6 +138,7 @@ window.addEventListener('error', (e) => {
     });
   }
 
+  // Build HTML
   function clientSideFallbackRender(payload) {
     const rows = (payload && payload.results) ? payload.results : [];
     if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
@@ -161,6 +173,7 @@ window.addEventListener('error', (e) => {
 
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
+  // Fetch + render
   async function fetchAndRender(quiet){
     const ids = normalizedIds();
     const params = new URLSearchParams({
@@ -193,13 +206,7 @@ window.addEventListener('error', (e) => {
     }
   }
 
-  // initial load + auto-refresh
+  // Initial load + start auto-refresh
   fetchAndRender();
-  let refreshTimer = null;
-  function startAutoRefresh(){
-    if (refreshTimer) clearInterval(refreshTimer);
-    refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
-  }
-  function stopAutoRefresh(){ if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
   startAutoRefresh();
 })();
