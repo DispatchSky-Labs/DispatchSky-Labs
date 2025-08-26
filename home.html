@@ -19,7 +19,7 @@
     .tag { font-size:12px; padding:4px 8px; border-radius:8px; background:#eef2ff; color:#1f3db2; }
     .theme-dark .tag { background:#111827; color:#93c5fd; }
 
-    form.controls { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
+    form.controls { display:grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
     form.controls label { font-size:12px; color:#374151; display:block; margin-bottom:4px; }
     .theme-dark form.controls label { color:#9ca3af; }
 
@@ -35,49 +35,28 @@
     #err { display:none; color:#ef4444; font-weight:600; padding:8px 0; }
     .muted { color:#6b7280; }
 
-    /* --- AWC-like formatting for METAR and TAF --- */
-    .wx,
-    .taf-line {
-      margin: 0;
-      padding: 0 12px;
-      overflow: auto;
-      white-space: pre-wrap;
+    /* AWC-like monospace */
+    .wx, .taf-line {
+      margin:0; padding:0 12px; overflow:auto; white-space:pre-wrap;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-size: 14px;
-      line-height: 1.35;
+      font-size:14px; line-height:1.35;
     }
-    .wx { padding: 8px 12px; } /* METAR block gets full padding */
-    .taf-indent { text-indent: 16px; }
-    .taf-line:first-child { padding-top: 8px; }
-    .taf-line:last-child  { padding-bottom: 8px; }
-
+    .wx { padding:8px 12px; }
+    .taf-indent { text-indent:16px; }
+    .taf-line:first-child { padding-top:8px; }
+    .taf-line:last-child { padding-bottom:8px; }
     .hit { color:#ef4444; font-weight:700; }
-
-    select, input[type="text"], input[type="number"] {
-      width:100%; padding:7px 9px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:inherit;
-    }
-    .theme-dark select, .theme-dark input { background:#0e131a; border-color:#1f2937; color:#e5e7eb; }
+    .after-shift { color:#9ca3af; }
 
     /* Footer */
-    .site-footer {
-      margin-top: 28px;
-      padding: 14px 16px;
-      border-top: 1px solid #e5e7eb;
-      background: #fff;
-      color: #374151;
-      font-size: 14px;
-    }
-    .theme-dark .site-footer {
-      background: #0e131a;
-      border-color: #1f2937;
-      color: #9ca3af;
-    }
-    .site-footer a { text-decoration: none; color: inherit; }
-    .site-footer a:hover { text-decoration: underline; }
+    .site-footer { margin-top:28px; padding:14px 16px; border-top:1px solid #e5e7eb; background:#fff; color:#374151; font-size:14px; }
+    .theme-dark .site-footer { background:#0e131a; border-color:#1f2937; color:#9ca3af; }
+    .site-footer a { text-decoration:none; color:inherit; } .site-footer a:hover { text-decoration:underline; }
 
-    @media (max-width: 600px) {
-      .row { padding:6px 6px; border-radius:10px; }
-      .wx, .taf-line { font-size: 15px; line-height: 1.35; }
+    @media (max-width:600px){
+      .row { padding:6px; border-radius:10px; }
+      .wx, .taf-line { font-size:15px; line-height:1.35; }
+      form.controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -99,11 +78,10 @@
   </header>
 
   <main class="container">
-    <!-- ENTER triggers submit on this form -->
     <form id="controlsForm" class="controls">
       <div>
         <label for="ids">IDs</label>
-        <input id="ids" type="text" placeholder="KDEN,KATL">
+        <input id="ids" type="text" placeholder="KDEN,KATL" value="KDEN,KATL">
       </div>
       <div>
         <label for="ceil">Ceiling (in feet)</label>
@@ -112,6 +90,15 @@
       <div>
         <label for="vis">Visibility (SM)</label>
         <input id="vis" type="number" min="0" step="0.25" value="2">
+      </div>
+      <div>
+        <label for="shiftEnd">Shift End in Zulu</label>
+        <input id="shiftEnd" type="text" inputmode="numeric" pattern="[0-9]{4}" placeholder="DDHH"
+          title="Enter the last flight ETA in Zulu day and hour (e.g., 2321 = day 23 at 2100Z). A 3h buffer will be added automatically.">
+      </div>
+      <div>
+        <label for="applyTime">Time filter</label><br>
+        <label><input id="applyTime" type="checkbox"> Apply</label>
       </div>
       <div>
         <label><input id="showMetar" type="checkbox" checked> Show METAR</label><br>
@@ -129,9 +116,7 @@
     <div id="err"></div>
     <p id="summary" class="muted">Ready.</p>
 
-    <section id="board">
-      <div id="board-body"></div>
-    </section>
+    <section id="board"><div id="board-body"></div></section>
   </main>
 
   <footer class="site-footer">
@@ -144,137 +129,10 @@
     </div>
   </footer>
 
-  <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const DATA_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
+  <!-- load app logic externally so CSP doesn’t block it -->
+  <script defer src="/app.js?v=1"></script>
 
-    const $ = (s, r = document) => r.querySelector(s);
-    const form = $('#controlsForm');
-    const idsEl = $('#ids');
-    const ceilEl = $('#ceil');
-    const visEl = $('#vis');
-    const showMetarEl = $('#showMetar');
-    const showTafEl = $('#showTaf');
-    const alphaEl = $('#alpha');
-    const filterEl = $('#filter');
-    const themeEl = $('#theme');
-    const spin = $('#spin');
-    const err = $('#err');
-    const board = $('#board-body');
-    const summary = $('#summary');
-    const ts = $('#timestamp');
-    const utcNow = $('#utcNow');
-
-    function applyTheme(mode){ document.body.classList.toggle('theme-dark', mode === 'dark'); localStorage.setItem('ct_theme', mode); }
-    themeEl.addEventListener('change', e => applyTheme(e.target.value));
-    (function initTheme(){ const saved = localStorage.getItem('ct_theme') || 'light'; themeEl.value = saved; applyTheme(saved);} )();
-
-    function updateUtcClock(){ const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0'); utcNow.textContent = `UTC ${hh}:${mm}`; }
-    updateUtcClock(); setInterval(updateUtcClock, 30_000);
-
-    function savePrefs(){ localStorage.setItem('ct_ids', idsEl.value.trim()); localStorage.setItem('ct_ceil', ceilEl.value); localStorage.setItem('ct_vis', visEl.value); localStorage.setItem('ct_m', showMetarEl.checked ? '1' : '0'); localStorage.setItem('ct_t', showTafEl.checked ? '1' : '0'); localStorage.setItem('ct_a', alphaEl.checked ? '1' : '0'); localStorage.setItem('ct_f', filterEl.checked ? '1' : '0'); }
-    function loadPrefs(){ const sp=new URLSearchParams(location.search); idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN,KATL"; ceilEl.value= sp.get('ceil')|| localStorage.getItem('ct_ceil')|| "700"; visEl.value = sp.get('vis') || localStorage.getItem('ct_vis') || "2"; showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0'; showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0'; alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1'; filterEl.checked    = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1'; }
-    loadPrefs();
-
-    function normalizedIds(){ return (idsEl.value || '').trim().replace(/[\s;]+/g, ',').replace(/,+/g, ',').replace(/^,|,$/g, ''); }
-
-    // ENTER triggers fetch via form submit
-    form.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
-
-    function controlsChanged(e){
-      if (e.target.matches && e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')){
-        savePrefs(); fetchAndRender();
-      }
-    }
-    document.addEventListener('change', controlsChanged);
-    document.addEventListener('input', controlsChanged);
-
-    // Auto-refresh every minute while tab is visible
-    let refreshTimer = null;
-    function startAutoRefresh(){
-      if (refreshTimer) clearInterval(refreshTimer);
-      refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
-    }
-    function stopAutoRefresh(){ if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopAutoRefresh(); else { fetchAndRender(true); startAutoRefresh(); }
-    });
-    window.addEventListener('online',  () => { fetchAndRender(true); startAutoRefresh(); });
-    window.addEventListener('offline', () => { stopAutoRefresh(); });
-
-    let lastFetchAt = 0;
-
-    function clientSideFallbackRender(payload) {
-      const rows = (payload && payload.results) ? payload.results : [];
-      if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
-      let list = rows.slice();
-      if (alphaEl.checked) list.sort((a, b) => (a.icao || '').localeCompare(b.icao || ''));
-
-      const showM = showMetarEl.checked;
-      const showT = showTafEl.checked;
-
-      let html = '';
-      for (const r of list) {
-        const icao = r.icao || '';
-        const metarHTML = r.metar?.html || '';
-        const tafHTML   = r.taf?.html   || '';
-
-        html += `<div class="row">`;
-
-        if (showM) {
-          if (metarHTML) {
-            html += metarHTML;
-          } else {
-            html += `<div class="wx muted">No METARs found for ${escapeHtml(icao)}</div>`;
-          }
-        }
-
-        if (showT) {
-          if (tafHTML) {
-            html += tafHTML;
-          } else {
-            html += `<div class="wx muted">No TAFs found for ${escapeHtml(icao)}</div>`;
-          }
-        }
-
-        html += `</div>`;
-      }
-      return html;
-    }
-
-    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-
-    async function fetchAndRender(quiet){
-      const ids = normalizedIds();
-      const params = new URLSearchParams({ ids, ceil: ceilEl.value, vis: visEl.value, metar: showMetarEl.checked ? '1' : '0', taf: showTafEl.checked ? '1' : '0', alpha: alphaEl.checked ? '1' : '0', filter: filterEl.checked ? 'trigger' : 'all', });
-      if (!quiet){ summary.textContent='Loading…'; spin.style.display='inline-block'; err.style.display='none'; err.textContent=''; }
-      try{
-        const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' });
-        if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
-        const data = await res.json();
-        board.innerHTML = clientSideFallbackRender(data);
-
-        const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
-        ts.textContent = `Updated: ${hh}:${mm} UTC`;
-
-        const count = ids ? ids.split(',').filter(Boolean).length : 0;
-        summary.textContent=`${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
-
-        lastFetchAt=Date.now();
-      } catch(e){
-        err.style.display='block';
-        err.textContent = e && e.message ? e.message : String(e);
-      } finally{
-        spin.style.display='none';
-      }
-    }
-
-    fetchAndRender();
-    startAutoRefresh();
-  });
-  </script>
-
-  <!-- adsense -->
+  <!-- adsense (already external) -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192" crossorigin="anonymous"></script>
 </body>
 </html>
