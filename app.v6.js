@@ -33,7 +33,7 @@ window.addEventListener('error', (e) => {
   themeEl.addEventListener('change', e => applyTheme(e.target.value));
   (function initTheme(){ const saved = localStorage.getItem('ct_theme') || 'light'; themeEl.value = saved; applyTheme(saved);} )();
 
-  // UTC badge
+  // UTC clock
   function updateUtcClock(){ const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0'); utcNow.textContent = `UTC ${hh}:${mm}`; }
   updateUtcClock(); setInterval(updateUtcClock, 30_000);
 
@@ -51,7 +51,7 @@ window.addEventListener('error', (e) => {
   }
   function loadPrefs(){
     const sp = new URLSearchParams(location.search);
-    idsEl.value   = sp.get('ids')   || localStorage.getItem('ct_ids')   || idsEl.value || "KDEN,KATL";
+    idsEl.value   = sp.get('ids')   || localStorage.getItem('ct_ids')   || idsEl.value || "KDEN KSGU KACV";
     ceilEl.value  = sp.get('ceil')  || localStorage.getItem('ct_ceil')  || ceilEl.value || "700";
     visEl.value   = sp.get('vis')   || localStorage.getItem('ct_vis')   || visEl.value || "2";
     shiftEndEl.value = sp.get('shift') || localStorage.getItem('ct_shift') || "";
@@ -63,12 +63,18 @@ window.addEventListener('error', (e) => {
   }
   loadPrefs();
 
-  function normalizedIds(){ return (idsEl.value || '').trim().replace(/[\s;]+/g, ',').replace(/,+/g, ',').replace(/^,|,$/g, ''); }
+  function normalizedIds(){
+    return (idsEl.value || '')
+      .trim()
+      .replace(/[\s;]+/g, ',')
+      .replace(/,+/g, ',')
+      .replace(/^,|,$/g, '');
+  }
 
-  // Submit on Enter (and button click)
+  // Submit on Enter/click
   form.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
 
-  // Control changes trigger refresh
+  // React on changes
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
     if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#showMetar,#showTaf,#alpha,#filter')){
@@ -93,7 +99,7 @@ window.addEventListener('error', (e) => {
   window.addEventListener('online',  () => { fetchAndRender(true); startAutoRefresh(); });
   window.addEventListener('offline', () => { stopAutoRefresh(); });
 
-  // ---------- Time filter helpers ----------
+  // -------- Time filter helpers --------
   const pad2 = (n) => String(n).padStart(2,'0');
 
   function parseDDHH(s){
@@ -118,17 +124,17 @@ window.addEventListener('error', (e) => {
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
     m = txt.match(/\b(?:TEMPO|BECMG|PROB(?:30|40))\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
-    return null; // header/continuation has no explicit start
+    return null;
   }
 
-  // Tag after-shift lines by reading each line's text token (FM/TEMPO/…)
+  // Tag after-shift lines by reading each line's tokens
   function applyTimeFilterToTafHtmlByTokens(tafHtml, cutoffDDHH, enabled){
     if (!enabled || !tafHtml || !cutoffDDHH) return tafHtml;
 
     return tafHtml.replace(
       /<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g,
       (_, rest, inner) => {
-        const plain = inner.replace(/<[^>]+>/g,''); // strip markup to read tokens
+        const plain = inner.replace(/<[^>]+>/g,'');
         const start = extractStartDDHHFromLine(plain);
         const isAfter = start ? (ddhhCompare(start, cutoffDDHH) === 1) : false;
 
@@ -136,7 +142,7 @@ window.addEventListener('error', (e) => {
         let content = inner;
         if (isAfter) {
           cls += ' after-shift';
-          // Remove any red hit markers within after-shift lines
+          // Remove red hits within after-shift lines
           content = content.replace(/<span class="hit">/g,'').replace(/<\/span>/g,'');
         }
         return `<div class="${cls}">${content}</div>`;
@@ -144,16 +150,16 @@ window.addEventListener('error', (e) => {
     );
   }
 
-  // Remove after-shift lines completely (for trigger eval)
+  // Remove after-shift lines completely (for trigger evaluation)
   function stripAfterShiftBlocks(tafHtml){
     return tafHtml.replace(/<div class="taf-line[^"]*after-shift[^"]*">[\s\S]*?<\/div>/g, '');
   }
   const containsActiveHit = (html) => /class="hit"/.test(html);
 
-  // Build board
+  // Build content
   function clientSideFallbackRender(payload) {
     const rows = (payload && payload.results) ? payload.results : [];
-    if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
+    if (!rows.length) return `<div class="muted">No results.</div>`;
 
     let list = rows.slice();
     if (alphaEl.checked) list.sort((a,b)=>(a.icao||'').localeCompare(b.icao||''));
@@ -165,26 +171,31 @@ window.addEventListener('error', (e) => {
     let html = '';
     for (const r of list) {
       const icao = r.icao || '';
-      let metarHTML = r.metar?.html || '';
-      let tafHTML   = r.taf?.html   || '';
+      let metarHTML = r.metar?.html || '';   // already <pre class="wx">...</pre> from backend
+      let tafHTML   = r.taf?.html   || '';   // already multiple <div class="taf-line">...</div>
 
-      // Apply time filter and strip hits from after-shift lines
+      // time filter
       tafHTML = applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, applyTimeEl.checked);
 
-      // Determine active trigger: METAR hits OR TAF hits before cutoff only
+      // trigger logic based on active (pre-cutoff) only
       const tafActiveOnly = stripAfterShiftBlocks(tafHTML);
       const activeTrigger = (metarHTML && containsActiveHit(metarHTML)) ||
                             (tafActiveOnly && containsActiveHit(tafActiveOnly));
-
-      // If filtering, skip non-triggers
       if (filterEl.checked && !activeTrigger) continue;
 
-      html += `<div class="row">`;
-      if (showM) html += metarHTML ? metarHTML : `<div class="wx muted">No METARs found for ${escapeHtml(icao)}</div>`;
-      if (showT) html += tafHTML   ? tafHTML   : `<div class="wx muted">No TAFs found for ${escapeHtml(icao)}</div>`;
-      html += `</div>`;
+      // render AWC-style blocks with blank lines
+      if (showM) {
+        html += metarHTML ? metarHTML : `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>`;
+        html += '\n'; // separation within airport
+      }
+      if (showT) {
+        html += tafHTML ? tafHTML : `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>`;
+        html += '\n'; // separation within airport
+      }
+      html += '<br/>'; // extra blank line between airports
     }
-    return html || `<div class="muted" style="padding:12px">No results.</div>`;
+
+    return html || `<div class="muted">No results.</div>`;
   }
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -201,6 +212,7 @@ window.addEventListener('error', (e) => {
       alpha: alphaEl.checked     ? '1' : '0',
       filter: filterEl.checked   ? 'trigger' : 'all',
     });
+
     if (!quiet){ summary.textContent='Loading…'; spin.style.display='inline-block'; err.style.display='none'; err.textContent=''; }
     try{
       const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' });
@@ -216,7 +228,7 @@ window.addEventListener('error', (e) => {
       const cutoffBadge = (applyTimeEl.checked && shiftEndEl.value)
         ? ` • Shift cutoff with buffer: ${parseDDHH(shiftEndEl.value)?.disp ?? ''}`
         : '';
-      summary.textContent = `${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'All' : 'Trigger'}${cutoffBadge}`;
+      summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}${cutoffBadge}`;
     } catch(e){
       err.style.display='block';
       err.textContent = e && e.message ? e.message : String(e);
@@ -227,5 +239,11 @@ window.addEventListener('error', (e) => {
 
   // Initial load + auto-refresh
   fetchAndRender();
+
+  // Auto-refresh utilities
+  function startAutoRefresh(){
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
+  }
   startAutoRefresh();
 })();
