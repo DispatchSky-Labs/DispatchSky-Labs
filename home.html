@@ -19,9 +19,9 @@
     .tag { font-size:12px; padding:4px 8px; border-radius:8px; background:#eef2ff; color:#1f3db2; }
     .theme-dark .tag { background:#111827; color:#93c5fd; }
 
-    .controls { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
-    .controls label { font-size:12px; color:#374151; display:block; margin-bottom:4px; }
-    .theme-dark .controls label { color:#9ca3af; }
+    form.controls { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
+    form.controls label { font-size:12px; color:#374151; display:block; margin-bottom:4px; }
+    .theme-dark form.controls label { color:#9ca3af; }
 
     .row { display:block; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:8px; margin:10px 0; }
     .theme-dark .row { background:#0f1520; border-color:#1f2937; }
@@ -99,7 +99,8 @@
   </header>
 
   <main class="container">
-    <section class="controls">
+    <!-- ENTER triggers submit on this form -->
+    <form id="controlsForm" class="controls">
       <div>
         <label for="ids">IDs</label>
         <input id="ids" type="text" placeholder="KDEN,KATL">
@@ -121,9 +122,9 @@
         <label><input id="filter" type="checkbox"> Filter triggers</label>
       </div>
       <div style="display:flex; align-items:end; justify-content:flex-end;">
-        <button id="loadBtn" class="btn">Load</button>
+        <button id="loadBtn" class="btn" type="submit">Load</button>
       </div>
-    </section>
+    </form>
 
     <div id="err"></div>
     <p id="summary" class="muted">Ready.</p>
@@ -148,6 +149,7 @@
     const DATA_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
 
     const $ = (s, r = document) => r.querySelector(s);
+    const form = $('#controlsForm');
     const idsEl = $('#ids');
     const ceilEl = $('#ceil');
     const visEl = $('#vis');
@@ -162,7 +164,6 @@
     const summary = $('#summary');
     const ts = $('#timestamp');
     const utcNow = $('#utcNow');
-    const loadBtn = $('#loadBtn');
 
     function applyTheme(mode){ document.body.classList.toggle('theme-dark', mode === 'dark'); localStorage.setItem('ct_theme', mode); }
     themeEl.addEventListener('change', e => applyTheme(e.target.value));
@@ -172,18 +173,36 @@
     updateUtcClock(); setInterval(updateUtcClock, 30_000);
 
     function savePrefs(){ localStorage.setItem('ct_ids', idsEl.value.trim()); localStorage.setItem('ct_ceil', ceilEl.value); localStorage.setItem('ct_vis', visEl.value); localStorage.setItem('ct_m', showMetarEl.checked ? '1' : '0'); localStorage.setItem('ct_t', showTafEl.checked ? '1' : '0'); localStorage.setItem('ct_a', alphaEl.checked ? '1' : '0'); localStorage.setItem('ct_f', filterEl.checked ? '1' : '0'); }
-    function loadPrefs(){ const sp=new URLSearchParams(location.search); idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN,KATL"; ceilEl.value= sp.get('ceil')|| localStorage.getItem('ct_ceil')|| "700"; visEl.value = sp.get('vis') || localStorage.getItem('ct_vis')|| "2"; showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0'; showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0'; alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1'; filterEl.checked    = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1'; }
+    function loadPrefs(){ const sp=new URLSearchParams(location.search); idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN,KATL"; ceilEl.value= sp.get('ceil')|| localStorage.getItem('ct_ceil')|| "700"; visEl.value = sp.get('vis') || localStorage.getItem('ct_vis') || "2"; showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0'; showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0'; alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1'; filterEl.checked    = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1'; }
     loadPrefs();
 
     function normalizedIds(){ return (idsEl.value || '').trim().replace(/[\s;]+/g, ',').replace(/,+/g, ',').replace(/^,|,$/g, ''); }
 
-    function controlsChanged(e){ if (e.target.matches && e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')){ savePrefs(); fetchAndRender(); } }
+    // ENTER triggers fetch via form submit
+    form.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
+
+    function controlsChanged(e){
+      if (e.target.matches && e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')){
+        savePrefs(); fetchAndRender();
+      }
+    }
     document.addEventListener('change', controlsChanged);
     document.addEventListener('input', controlsChanged);
-    loadBtn.addEventListener('click', () => { savePrefs(); fetchAndRender(); });
+
+    // Auto-refresh every minute while tab is visible
+    let refreshTimer = null;
+    function startAutoRefresh(){
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
+    }
+    function stopAutoRefresh(){ if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopAutoRefresh(); else { fetchAndRender(true); startAutoRefresh(); }
+    });
+    window.addEventListener('online',  () => { fetchAndRender(true); startAutoRefresh(); });
+    window.addEventListener('offline', () => { stopAutoRefresh(); });
 
     let lastFetchAt = 0;
-    setInterval(() => { if (Date.now() - lastFetchAt >= 60_000 && lastFetchAt !== 0) fetchAndRender(true); }, 5_000);
 
     function clientSideFallbackRender(payload) {
       const rows = (payload && payload.results) ? payload.results : [];
@@ -251,6 +270,7 @@
     }
 
     fetchAndRender();
+    startAutoRefresh();
   });
   </script>
 
