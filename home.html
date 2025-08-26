@@ -1,75 +1,90 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>CieloTracker – METAR/TAF Board</title>
-
   <style>
-    :root { --brand:#0f5fff; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; background:#f6f7fb; color:#111827; }
-    .theme-dark { background:#0b0f14; color:#e5e7eb; }
-
-    header { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:14px 16px; background:#fff; border-bottom:1px solid #e5e7eb; }
-    .theme-dark header { background:#0e131a; border-color:#1f2937; }
-
-    .container { max-width:1000px; margin:0 auto; padding:16px; }
-    .toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    .tag { font-size:12px; padding:4px 8px; border-radius:8px; background:#eef2ff; color:#1f3db2; }
-    .theme-dark .tag { background:#111827; color:#93c5fd; }
-
-    form.controls { display:grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
-    form.controls label { font-size:12px; color:#374151; display:block; margin-bottom:4px; }
-    .theme-dark form.controls label { color:#9ca3af; }
-
-    .row { display:block; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:8px; margin:10px 0; }
-    .theme-dark .row { background:#0f1520; border-color:#1f2937; }
-
-    .btn { background:var(--brand); color:#fff; border:none; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
-    .btn:disabled { opacity:.6; cursor:not-allowed; }
-
-    #spin { display:none; width:16px; height:16px; border:2px solid #cbd5e1; border-top-color:#0f5fff; border-radius:50%; animation:sp 0.7s linear infinite; }
-    @keyframes sp { to { transform:rotate(360deg); } }
-
-    #err { display:none; color:#ef4444; font-weight:600; padding:8px 0; }
-    .muted { color:#6b7280; }
-
-    /* AWC-like monospace */
-    .wx, .taf-line {
-      margin:0; padding:0 12px; overflow:auto; white-space:pre-wrap;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-size:14px; line-height:1.35;
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9fafb;
+      color: #111;
     }
-    .wx { padding:8px 12px; }
-    .taf-indent { text-indent:16px; }
-    .taf-line:first-child { padding-top:8px; }
-    .taf-line:last-child { padding-bottom:8px; }
-    .hit { color:#ef4444; font-weight:700; }
-    .after-shift { color:#9ca3af; }
+    body.theme-dark { background: #111; color: #eee; }
 
-    /* Footer */
-    .site-footer { margin-top:28px; padding:14px 16px; border-top:1px solid #e5e7eb; background:#fff; color:#374151; font-size:14px; }
-    .theme-dark .site-footer { background:#0e131a; border-color:#1f2937; color:#9ca3af; }
-    .site-footer a { text-decoration:none; color:inherit; } .site-footer a:hover { text-decoration:underline; }
-
-    @media (max-width:600px){
-      .row { padding:6px; border-radius:10px; }
-      .wx, .taf-line { font-size:15px; line-height:1.35; }
-      form.controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      font-weight: bold;
     }
+
+    form.controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 16px;
+    }
+    form.controls input, form.controls select {
+      font-size: 14px;
+      padding: 7px 9px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      height: 36px;
+      line-height: 22px;
+    }
+    form.controls label {
+      font-size: 13px;
+      margin-right: 4px;
+    }
+    .row {
+      margin: 8px 16px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #fff;
+    }
+    body.theme-dark .row {
+      background: #222;
+      border-color: #444;
+    }
+    pre.wx {
+      font-family: monospace;
+      font-size: 15px;
+      white-space: pre-wrap;
+      margin: 0;
+    }
+    .taf-line { font-family: monospace; font-size: 15px; white-space: pre-wrap; }
+    .taf-indent { padding-left: 20px; }
+    .hit { font-weight: bold; color: red; }
+    .after-shift { background: #ccc; color: #555; }
+
+    .muted { color: #777; font-size: 14px; }
+
+    footer {
+      padding: 16px;
+      text-align: center;
+      font-size: 14px;
+    }
+    footer a { color: inherit; text-decoration: none; margin: 0 8px; }
+
+    /* hide numeric spinners, keep numeric keyboard */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
   </style>
 </head>
-<body>
+<body class="theme-light">
   <header>
-    <div class="toolbar">
-      <strong>CieloTracker</strong>
-      <span id="utcNow" class="tag">UTC --:--</span>
-      <span id="timestamp" class="tag">Updated: --:-- UTC</span>
-      <span id="spin" aria-hidden="true"></span>
+    <div>CieloTracker</div>
+    <div>
+      <span id="utcNow">UTC --:--</span> • <span id="timestamp">Updated: --:-- UTC</span>
     </div>
     <div>
-      <label for="theme" style="font-size:12px;color:#374151;">Theme</label>
+      Theme
       <select id="theme">
         <option value="light">Light</option>
         <option value="dark">Dark</option>
@@ -77,62 +92,35 @@
     </div>
   </header>
 
-  <main class="container">
-    <form id="controlsForm" class="controls">
-      <div>
-        <label for="ids">IDs</label>
-        <input id="ids" type="text" placeholder="KDEN,KATL" value="KDEN,KATL">
-      </div>
-      <div>
-        <label for="ceil">Ceiling (in feet)</label>
-        <input id="ceil" type="number" min="0" step="100" value="700">
-      </div>
-      <div>
-        <label for="vis">Visibility (SM)</label>
-        <input id="vis" type="number" min="0" step="0.25" value="2">
-      </div>
-      <div>
-        <label for="shiftEnd">Shift End in Zulu</label>
-        <input id="shiftEnd" type="text" inputmode="numeric" pattern="[0-9]{4}" placeholder="DDHH"
-          title="Enter the last flight ETA in Zulu day and hour (e.g., 2321 = day 23 at 2100Z). A 3h buffer will be added automatically.">
-      </div>
-      <div>
-        <label for="applyTime">Time filter</label><br>
-        <label><input id="applyTime" type="checkbox"> Apply</label>
-      </div>
-      <div>
-        <label><input id="showMetar" type="checkbox" checked> Show METAR</label><br>
-        <label><input id="showTaf" type="checkbox" checked> Show TAF</label>
-      </div>
-      <div>
-        <label><input id="alpha" type="checkbox"> Sort A→Z</label><br>
-        <label><input id="filter" type="checkbox"> Filter triggers</label>
-      </div>
-      <div style="display:flex; align-items:end; justify-content:flex-end;">
-        <button id="loadBtn" class="btn" type="submit">Load</button>
-      </div>
-    </form>
+  <form id="controlsForm" class="controls">
+    <input id="ids" placeholder="IDs" value="KDEN,KATL"/>
+    <label>Ceiling (in feet)
+      <input id="ceil" type="number" value="700">
+    </label>
+    <label>Visibility (SM)
+      <input id="vis" type="number" step="0.1" value="2">
+    </label>
+    <label>Shift End in Zulu
+      <input id="shiftEnd" placeholder="DDHH">
+    </label>
+    <label><input type="checkbox" id="applyTime"> Apply</label>
+    <label><input type="checkbox" id="showMetar" checked> Show METAR</label>
+    <label><input type="checkbox" id="showTaf" checked> Show TAF</label>
+    <label><input type="checkbox" id="alpha"> Sort A→Z</label>
+    <label><input type="checkbox" id="filter"> Filter triggers</label>
+    <button type="submit" id="loadBtn">Load</button>
+    <span id="spin" style="display:none">⏳</span>
+  </form>
 
-    <div id="err"></div>
-    <p id="summary" class="muted">Ready.</p>
+  <div id="summary" style="padding:0 16px;">Ready.</div>
+  <div id="err" style="display:none;color:red;padding:0 16px;"></div>
+  <section id="board-body"></section>
 
-    <section id="board"><div id="board-body"></div></section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="container" style="max-width:1000px;margin:0 auto;">
-      <nav>
-        <a href="/privacy.html">Privacy</a>
-        &nbsp;•&nbsp;
-        <a href="/support.html">Support</a>
-      </nav>
-    </div>
+  <footer>
+    <a href="privacy.html">Privacy</a> •
+    <a href="support.html">Support</a>
   </footer>
 
-  <!-- One external app script only (cache-busted & relative path) -->
-  <script defer src="./app.v3.js?v=2025-08-26-3"></script>
-
-  <!-- AdSense (external) -->
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192" crossorigin="anonymous"></script>
+  <script defer src="app.v3.js?v=2025-08-26-5"></script>
 </body>
 </html>
