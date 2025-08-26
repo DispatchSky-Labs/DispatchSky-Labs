@@ -1,4 +1,4 @@
-// Bubble up any script errors into the UI
+// Show any runtime error in the page so failures aren’t silent
 window.addEventListener('error', (e) => {
   const el = document.getElementById('err');
   if (!el) return;
@@ -66,7 +66,8 @@ window.addEventListener('error', (e) => {
   form.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
 
   function controlsChanged(e){
-    if (e.target.matches && e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#showMetar,#showTaf,#alpha,#filter')){
+    if (!e.target || !e.target.matches) return;
+    if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#showMetar,#showTaf,#alpha,#filter')){
       savePrefs(); fetchAndRender();
     }
   }
