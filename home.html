@@ -55,6 +55,23 @@
       width:100%; padding:7px 9px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:inherit;
     }
     .theme-dark select, .theme-dark input { background:#0e131a; border-color:#1f2937; color:#e5e7eb; }
+
+    /* Footer */
+    .site-footer {
+      margin-top: 28px;
+      padding: 14px 16px;
+      border-top: 1px solid #e5e7eb;
+      background: #fff;
+      color: #374151;
+      font-size: 14px;
+    }
+    .theme-dark .site-footer {
+      background: #0e131a;
+      border-color: #1f2937;
+      color: #9ca3af;
+    }
+    .site-footer a { text-decoration: none; color: inherit; }
+    .site-footer a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -108,6 +125,16 @@
       <div id="board-body"></div>
     </section>
   </main>
+
+  <footer class="site-footer">
+    <div class="container" style="max-width:1000px;margin:0 auto;">
+      <nav>
+        <a href="/privacy.html">Privacy</a>
+        &nbsp;•&nbsp;
+        <a href="/support.html">Support</a>
+      </nav>
+    </div>
+  </footer>
 
   <script>
   document.addEventListener('DOMContentLoaded', () => {
