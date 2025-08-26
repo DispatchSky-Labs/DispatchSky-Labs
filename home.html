@@ -10,29 +10,50 @@
     * { box-sizing:border-box; }
     body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; background:#f6f7fb; color:#111827; }
     .theme-dark { background:#0b0f14; color:#e5e7eb; }
+
     header { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:14px 16px; background:#fff; border-bottom:1px solid #e5e7eb; }
     .theme-dark header { background:#0e131a; border-color:#1f2937; }
+
     .container { max-width:1000px; margin:0 auto; padding:16px; }
     .toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
     .tag { font-size:12px; padding:4px 8px; border-radius:8px; background:#eef2ff; color:#1f3db2; }
     .theme-dark .tag { background:#111827; color:#93c5fd; }
+
     .controls { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
     .controls label { font-size:12px; color:#374151; display:block; margin-bottom:4px; }
     .theme-dark .controls label { color:#9ca3af; }
+
     .row { display:block; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:10px; margin:10px 0; }
     .theme-dark .row { background:#0f1520; border-color:#1f2937; }
+
     .btn { background:var(--brand); color:#fff; border:none; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
     .btn:disabled { opacity:.6; cursor:not-allowed; }
+
     #spin { display:none; width:16px; height:16px; border:2px solid #cbd5e1; border-top-color:#0f5fff; border-radius:50%; animation:sp 0.7s linear infinite; }
     @keyframes sp { to { transform:rotate(360deg); } }
+
     #err { display:none; color:#ef4444; font-weight:600; padding:8px 0; }
     .muted { color:#6b7280; }
-    .wx { margin:0; padding:10px 12px; overflow:auto; white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px; }
-    /* Server-provided highlights & layout hooks */
-    .hit { color:#ef4444; font-weight:700; }
-    .taf-line { white-space:pre-wrap; }
+
+    /* AWC-like monospace for BOTH METAR and TAF */
+    .wx,
+    .taf-line {
+      margin:0;
+      padding:10px 12px;
+      overflow:auto;
+      white-space:pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
     .taf-indent { padding-left:16px; }
-    select, input[type="text"], input[type="number"] { width:100%; padding:7px 9px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:inherit; }
+
+    /* server-marked highlights */
+    .hit { color:#ef4444; font-weight:700; }
+
+    select, input[type="text"], input[type="number"] {
+      width:100%; padding:7px 9px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:inherit;
+    }
     .theme-dark select, .theme-dark input { background:#0e131a; border-color:#1f2937; color:#e5e7eb; }
   </style>
 </head>
@@ -56,11 +77,11 @@
   <main class="container">
     <section class="controls">
       <div>
-        <label for="ids">ICAOs (comma/space/semicolon)</label>
+        <label for="ids">IDs</label>
         <input id="ids" type="text" placeholder="KDEN,KATL">
       </div>
       <div>
-        <label for="ceil">Ceiling (ft AGL)</label>
+        <label for="ceil">Ceiling (in feet)</label>
         <input id="ceil" type="number" min="0" step="100" value="700">
       </div>
       <div>
@@ -141,12 +162,28 @@
 
       let html = '';
       for (const r of list) {
-        const metarHTML = r.metar?.html || (r.metar?.raw ? `<pre class="wx">${escapeHtml(r.metar.raw)}</pre>` : '');
-        const tafHTML   = r.taf?.html   || (r.taf?.raw   ? `<div class="wx">${escapeHtml(r.taf.raw)}</div>` : '');
+        const icao = r.icao || '';
+        const metarHTML = r.metar?.html || '';
+        const tafHTML   = r.taf?.html   || '';
 
         html += `<div class="row">`;
-        if (showM && metarHTML) html += metarHTML;
-        if (showT && tafHTML) html += tafHTML;
+
+        if (showM) {
+          if (metarHTML) {
+            html += metarHTML;
+          } else {
+            html += `<div class="wx muted">No METARs found for ${escapeHtml(icao)}</div>`;
+          }
+        }
+
+        if (showT) {
+          if (tafHTML) {
+            html += tafHTML;
+          } else {
+            html += `<div class="wx muted">No TAFs found for ${escapeHtml(icao)}</div>`;
+          }
+        }
+
         html += `</div>`;
       }
       return html;
@@ -158,7 +195,25 @@
       const ids = normalizedIds();
       const params = new URLSearchParams({ ids, ceil: ceilEl.value, vis: visEl.value, metar: showMetarEl.checked ? '1' : '0', taf: showTafEl.checked ? '1' : '0', alpha: alphaEl.checked ? '1' : '0', filter: filterEl.checked ? 'trigger' : 'all', });
       if (!quiet){ summary.textContent='Loading…'; spin.style.display='inline-block'; err.style.display='none'; err.textContent=''; }
-      try{ const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' }); if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`); const data = await res.json(); board.innerHTML = clientSideFallbackRender(data); const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0'); ts.textContent = `Updated: ${hh}:${mm} UTC`; const count = ids ? ids.split(',').filter(Boolean).length : 0; summary.textContent=`${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`; lastFetchAt=Date.now(); } catch(e){ err.style.display='block'; err.textContent = e && e.message ? e.message : String(e); } finally{ spin.style.display='none'; }
+      try{
+        const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' });
+        if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
+        const data = await res.json();
+        board.innerHTML = clientSideFallbackRender(data);
+
+        const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
+        ts.textContent = `Updated: ${hh}:${mm} UTC`;
+
+        const count = ids ? ids.split(',').filter(Boolean).length : 0;
+        summary.textContent=`${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
+
+        lastFetchAt=Date.now();
+      } catch(e){
+        err.style.display='block';
+        err.textContent = e && e.message ? e.message : String(e);
+      } finally{
+        spin.style.display='none';
+      }
     }
 
     fetchAndRender();
