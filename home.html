@@ -1,32 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CieloTracker – METAR/TAF Board</title>
+
   <style>
-    :root { --bg:#0b0f14; --fg:#101417; --text:#1b1f23; --muted:#6b7280; --card:#ffffff; --brand:#0f5fff; }
+    :root { --brand:#0f5fff; }
+    * { box-sizing:border-box; }
     body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; background:#f6f7fb; color:#111827; }
-    .theme-dark { background:var(--bg); color:#e5e7eb; }
+    .theme-dark { background:#0b0f14; color:#e5e7eb; }
     header { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:14px 16px; background:#fff; border-bottom:1px solid #e5e7eb; }
     .theme-dark header { background:#0e131a; border-color:#1f2937; }
-    .row { display:grid; grid-template-columns:110px 1fr; gap:12px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:10px; margin:10px 0; }
-    .theme-dark .row { background:#0f1520; border-color:#1f2937; }
-    .controls { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap:10px; margin:10px 0; }
-    .controls label { font-size:12px; color:#374151; }
-    .theme-dark .controls label { color:#9ca3af; }
-    .wx { margin:0; padding:10px 12px; overflow:auto; white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px; }
-    .col-icao { font-weight:700; letter-spacing:0.5px; padding:10px 8px; }
-    .muted { color:#6b7280; }
     .container { max-width:1000px; margin:0 auto; padding:16px; }
     .toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    .btn { background:var(--brand); color:#fff; border:none; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
-    .btn:disabled { opacity:.6; cursor:not-allowed; }
     .tag { font-size:12px; padding:4px 8px; border-radius:8px; background:#eef2ff; color:#1f3db2; }
     .theme-dark .tag { background:#111827; color:#93c5fd; }
+    .controls { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
+    .controls label { font-size:12px; color:#374151; display:block; margin-bottom:4px; }
+    .theme-dark .controls label { color:#9ca3af; }
+    .row { display:block; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:10px; margin:10px 0; }
+    .theme-dark .row { background:#0f1520; border-color:#1f2937; }
+    .btn { background:var(--brand); color:#fff; border:none; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
     #spin { display:none; width:16px; height:16px; border:2px solid #cbd5e1; border-top-color:#0f5fff; border-radius:50%; animation:sp 0.7s linear infinite; }
     @keyframes sp { to { transform:rotate(360deg); } }
     #err { display:none; color:#ef4444; font-weight:600; padding:8px 0; }
+    .muted { color:#6b7280; }
+    .wx { margin:0; padding:10px 12px; overflow:auto; white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:13px; }
+    /* Server-provided highlights & layout hooks */
+    .hit { color:#ef4444; font-weight:700; }
+    .taf-line { white-space:pre-wrap; }
+    .taf-indent { padding-left:16px; }
+    select, input[type="text"], input[type="number"] { width:100%; padding:7px 9px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:inherit; }
+    .theme-dark select, .theme-dark input { background:#0e131a; border-color:#1f2937; color:#e5e7eb; }
   </style>
 </head>
 <body>
@@ -38,7 +45,7 @@
       <span id="spin" aria-hidden="true"></span>
     </div>
     <div>
-      <label for="theme">Theme&nbsp;</label>
+      <label for="theme" style="font-size:12px;color:#374151;">Theme</label>
       <select id="theme">
         <option value="light">Light</option>
         <option value="dark">Dark</option>
@@ -50,19 +57,19 @@
     <section class="controls">
       <div>
         <label for="ids">ICAOs (comma/space/semicolon)</label>
-        <input id="ids" type="text" placeholder="KDEN,KATL" style="width:100%;">
+        <input id="ids" type="text" placeholder="KDEN,KATL">
       </div>
       <div>
         <label for="ceil">Ceiling (ft AGL)</label>
-        <input id="ceil" type="number" min="0" step="100" value="700" style="width:100%;">
+        <input id="ceil" type="number" min="0" step="100" value="700">
       </div>
       <div>
         <label for="vis">Visibility (SM)</label>
-        <input id="vis" type="number" min="0" step="0.5" value="2" style="width:100%;">
+        <input id="vis" type="number" min="0" step="0.25" value="2">
       </div>
       <div>
-        <label><input id="showMetar" type="checkbox" checked> METAR</label><br>
-        <label><input id="showTaf" type="checkbox" checked> TAF</label>
+        <label><input id="showMetar" type="checkbox" checked> Show METAR</label><br>
+        <label><input id="showTaf" type="checkbox" checked> Show TAF</label>
       </div>
       <div>
         <label><input id="alpha" type="checkbox"> Sort A→Z</label><br>
@@ -74,7 +81,6 @@
     </section>
 
     <div id="err"></div>
-
     <p id="summary" class="muted">Ready.</p>
 
     <section id="board">
@@ -84,10 +90,8 @@
 
   <script>
   document.addEventListener('DOMContentLoaded', () => {
-    // ---- config
-const DATA_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
-    
-    // ---- dom
+    const DATA_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
+
     const $ = (s, r = document) => r.querySelector(s);
     const idsEl = $('#ids');
     const ceilEl = $('#ceil');
@@ -105,121 +109,63 @@ const DATA_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/pr
     const utcNow = $('#utcNow');
     const loadBtn = $('#loadBtn');
 
-    // ---- guards (helps if markup changes)
-    const required = { idsEl, ceilEl, visEl, showMetarEl, showTafEl, alphaEl, filterEl, themeEl, spin, err, board, summary, ts, utcNow, loadBtn };
-    for (const [k,v] of Object.entries(required)) {
-      if (!v) { console.error('Missing element:', k); return; }
-    }
-
-    // ---- theme
     function applyTheme(mode){ document.body.classList.toggle('theme-dark', mode === 'dark'); localStorage.setItem('ct_theme', mode); }
     themeEl.addEventListener('change', e => applyTheme(e.target.value));
     (function initTheme(){ const saved = localStorage.getItem('ct_theme') || 'light'; themeEl.value = saved; applyTheme(saved);} )();
 
-    // ---- clock
-    function updateUtcClock(){
-      const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
-      utcNow.textContent = `UTC ${hh}:${mm}`;
-    }
+    function updateUtcClock(){ const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0'); utcNow.textContent = `UTC ${hh}:${mm}`; }
     updateUtcClock(); setInterval(updateUtcClock, 30_000);
 
-    // ---- prefs
-    function savePrefs(){
-      localStorage.setItem('ct_ids', idsEl.value.trim());
-      localStorage.setItem('ct_ceil', ceilEl.value);
-      localStorage.setItem('ct_vis', visEl.value);
-      localStorage.setItem('ct_m', showMetarEl.checked ? '1' : '0');
-      localStorage.setItem('ct_t', showTafEl.checked ? '1' : '0');
-      localStorage.setItem('ct_a', alphaEl.checked ? '1' : '0');
-      localStorage.setItem('ct_f', filterEl.checked ? '1' : '0');
-    }
-    function loadPrefs(){
-      const sp=new URLSearchParams(location.search);
-      idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN,KATL";
-      ceilEl.value= sp.get('ceil')|| localStorage.getItem('ct_ceil')|| "700";
-      visEl.value = sp.get('vis') || localStorage.getItem('ct_vis') || "2";
-      showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
-      showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0';
-      alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1';
-      filterEl.checked    = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1';
-    }
+    function savePrefs(){ localStorage.setItem('ct_ids', idsEl.value.trim()); localStorage.setItem('ct_ceil', ceilEl.value); localStorage.setItem('ct_vis', visEl.value); localStorage.setItem('ct_m', showMetarEl.checked ? '1' : '0'); localStorage.setItem('ct_t', showTafEl.checked ? '1' : '0'); localStorage.setItem('ct_a', alphaEl.checked ? '1' : '0'); localStorage.setItem('ct_f', filterEl.checked ? '1' : '0'); }
+    function loadPrefs(){ const sp=new URLSearchParams(location.search); idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN,KATL"; ceilEl.value= sp.get('ceil')|| localStorage.getItem('ct_ceil')|| "700"; visEl.value = sp.get('vis') || localStorage.getItem('ct_vis') || "2"; showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0'; showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0'; alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1'; filterEl.checked    = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1'; }
     loadPrefs();
 
-    function normalizedIds(){ return (idsEl.value||'').trim().replace(/[\s;]+/g,',').replace(/,+/g,',').replace(/^,|,$/g,''); }
+    function normalizedIds(){ return (idsEl.value || '').trim().replace(/[\s;]+/g, ',').replace(/,+/g, ',').replace(/^,|,$/g, ''); }
 
-    function controlsChanged(e){
-      if (e.target.matches && e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')){
-        savePrefs(); fetchAndRender();
-      }
-    }
+    function controlsChanged(e){ if (e.target.matches && e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')){ savePrefs(); fetchAndRender(); } }
     document.addEventListener('change', controlsChanged);
     document.addEventListener('input', controlsChanged);
     loadBtn.addEventListener('click', () => { savePrefs(); fetchAndRender(); });
 
     let lastFetchAt = 0;
-    setInterval(() => {
-      if (Date.now() - lastFetchAt >= 60_000 && lastFetchAt !== 0) fetchAndRender(true);
-    }, 5_000);
+    setInterval(() => { if (Date.now() - lastFetchAt >= 60_000 && lastFetchAt !== 0) fetchAndRender(true); }, 5_000);
 
-    async function fetchAndRender(quiet){
-      const ids = normalizedIds();
-      const params = new URLSearchParams({
-        ids,
-        ceil: ceilEl.value,
-        vis: visEl.value,
-        metar: showMetarEl.checked ? '1' : '0',
-        taf:   showTafEl.checked ? '1' : '0',
-        alpha: alphaEl.checked ? '1' : '0',
-        filter: filterEl.checked ? 'trigger' : 'all',
-      });
-
-      if (!quiet){ summary.textContent='Loading…'; spin.style.display='inline-block'; err.style.display='none'; err.textContent=''; }
-
-      try{
-        const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' });
-        if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
-        const data = await res.json();
-        board.innerHTML = clientSideFallbackRender(data);
-
-        const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
-        ts.textContent = `Updated: ${hh}:${mm} UTC`;
-        const count = ids ? ids.split(',').filter(Boolean).length : 0;
-        summary.textContent = `${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
-        lastFetchAt = Date.now();
-      } catch(e){
-        err.style.display='block'; err.textContent = e?.message ?? String(e);
-      } finally {
-        spin.style.display='none';
-      }
-    }
-
-    function clientSideFallbackRender(payload){
-      const rows = payload?.results || [];
+    function clientSideFallbackRender(payload) {
+      const rows = (payload && payload.results) ? payload.results : [];
       if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
       let list = rows.slice();
-      if (alphaEl.checked) list.sort((a,b)=>(a.icao||'').localeCompare(b.icao||''));
-      const showM = showMetarEl.checked, showT = showTafEl.checked;
+      if (alphaEl.checked) list.sort((a, b) => (a.icao || '').localeCompare(b.icao || ''));
+
+      const showM = showMetarEl.checked;
+      const showT = showTafEl.checked;
+
       let html = '';
-      for (const r of list){
-        const metarRaw = r.metar?.raw || '';
-        const tafRaw = r.taf?.raw || '';
-        html += `<div class="row">
-          <div class="col-icao">${escapeHtml(r.icao||'')}</div>
-          <div class="col-wx">` +
-          (showM ? (metarRaw ? `<pre class="wx">${escapeHtml(metarRaw)}</pre>` : `<div class="muted" style="padding:10px 12px;">No METAR</div>`) : ``) +
-          (showT ? (tafRaw  ? `<pre class="wx">${escapeHtml(tafRaw)}</pre>`  : `<div class="muted" style="padding:10px 12px;">No TAF</div>`)   : ``) +
-          `</div></div>`;
+      for (const r of list) {
+        const metarHTML = r.metar?.html || (r.metar?.raw ? `<pre class="wx">${escapeHtml(r.metar.raw)}</pre>` : '');
+        const tafHTML   = r.taf?.html   || (r.taf?.raw   ? `<div class="wx">${escapeHtml(r.taf.raw)}</div>` : '');
+
+        html += `<div class="row">`;
+        if (showM && metarHTML) html += metarHTML;
+        if (showT && tafHTML) html += tafHTML;
+        html += `</div>`;
       }
       return html;
     }
+
     function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
-    // first load
+    async function fetchAndRender(quiet){
+      const ids = normalizedIds();
+      const params = new URLSearchParams({ ids, ceil: ceilEl.value, vis: visEl.value, metar: showMetarEl.checked ? '1' : '0', taf: showTafEl.checked ? '1' : '0', alpha: alphaEl.checked ? '1' : '0', filter: filterEl.checked ? 'trigger' : 'all', });
+      if (!quiet){ summary.textContent='Loading…'; spin.style.display='inline-block'; err.style.display='none'; err.textContent=''; }
+      try{ const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' }); if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`); const data = await res.json(); board.innerHTML = clientSideFallbackRender(data); const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0'); ts.textContent = `Updated: ${hh}:${mm} UTC`; const count = ids ? ids.split(',').filter(Boolean).length : 0; summary.textContent=`${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`; lastFetchAt=Date.now(); } catch(e){ err.style.display='block'; err.textContent = e && e.message ? e.message : String(e); } finally{ spin.style.display='none'; }
+    }
+
     fetchAndRender();
   });
   </script>
 
-  <!-- AdSense (optional) -->
+  <!-- adsense -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192" crossorigin="anonymous"></script>
 </body>
 </html>
