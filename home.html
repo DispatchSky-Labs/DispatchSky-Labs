@@ -4,6 +4,11 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>CieloTracker – METAR/TAF Board</title>
+
+  <!-- Google AdSense -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192"
+     crossorigin="anonymous"></script>
+
   <style>
     :root { --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --border:#e5e7eb; --brand:#0f5fff; }
     body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; background:var(--bg); color:var(--fg); }
@@ -21,36 +26,34 @@
     }
     .field { display:flex; flex-direction:column; gap:3px; }
     .field label { font-size:12px; color:var(--muted); }
-    .ctl, .btn { height:34px; padding:6px 9px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--fg); }
+    .ctl, .btn { height:32px; padding:5px 8px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--fg); }
     .theme-dark .ctl { background:#111827; border-color:#374151; color:#e5e7eb; }
     .btn { background:var(--brand); color:#fff; border:0; font-weight:600; cursor:pointer; }
-    .chk { display:flex; align-items:center; gap:6px; height:34px; }
+    .chk { display:flex; align-items:center; gap:6px; height:32px; }
+
     /* width by expected chars */
     .w-ids { width: 26ch; max-width: 60vw; }
-    .w4   { width: 6ch; }       /* 4 digits */
-    .w3   { width: 5ch; }       /* e.g. 2.5 */
-    .w4d  { width: 6ch; }       /* DDHH */
+    .w4   { width: 6ch; }
+    .w3   { width: 5ch; }
+    .w4d  { width: 6ch; }
 
-    /* hide number spinners behavior-style, but we use text inputs */
     input[type=number]::-webkit-outer-spin-button,
     input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
     input[type=number] { -moz-appearance:textfield; }
 
-    /* content area */
     .section { padding: 8px 16px; }
 
-    /* AWC-style text blocks */
     pre.wx, .taf-line {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-size: 16px;               /* same for METAR and TAF */
-      line-height: 1.35;
+      font-size: 16px;
+      line-height: 1.25;
       white-space: pre-wrap;
-      margin: 0 0 12px 0;            /* blank line after each block */
+      margin: 0;
     }
-    .taf-indent { text-indent:16px; }
+    .taf-indent { text-indent: 16px; }
     .hit { color:#ef4444; font-weight:700; }
     .after-shift { color:#9ca3af; }
-    .muted { color:var(--muted); font-size:14px; margin:0 0 12px 0; }
+    .muted { color:var(--muted); font-size:14px; margin:0; }
 
     footer { margin-top:12px; padding:14px 16px; font-size:14px; color:var(--muted); }
     footer a { color:inherit; text-decoration:none; margin-right:12px; }
@@ -112,9 +115,9 @@
   <footer>
     <a href="privacy.html">Privacy</a>
     <a href="support.html">Support</a>
+    <a href="https://discord.gg/pn8uC2eV" target="_blank" rel="noopener">Discord</a>
   </footer>
 
-  <!-- bump the version string when you redeploy to bust caches -->
-  <script defer src="app.v6.js?v=2025-08-26-1"></script>
+  <script defer src="app.v7.js?v=2025-08-26-3"></script>
 </body>
 </html>
