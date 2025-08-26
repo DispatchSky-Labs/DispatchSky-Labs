@@ -19,7 +19,7 @@
     .tag { font-size:12px; padding:4px 8px; border-radius:8px; background:#eef2ff; color:#1f3db2; }
     .theme-dark .tag { background:#111827; color:#93c5fd; }
 
-    form.controls { display:grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
+    form.controls { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap:10px; margin:10px 0 2px; }
     form.controls label { font-size:12px; color:#374151; display:block; margin-bottom:4px; }
     .theme-dark form.controls label { color:#9ca3af; }
 
@@ -51,11 +51,7 @@
     .taf-line:first-child { padding-top: 8px; }
     .taf-line:last-child  { padding-bottom: 8px; }
 
-    /* backend highlights */
     .hit { color:#ef4444; font-weight:700; }
-
-    /* new: after-shift grey-out */
-    .after-shift { color:#9ca3af; }
 
     select, input[type="text"], input[type="number"] {
       width:100%; padding:7px 9px; border:1px solid #d1d5db; border-radius:10px; background:#fff; color:inherit;
@@ -82,7 +78,6 @@
     @media (max-width: 600px) {
       .row { padding:6px 6px; border-radius:10px; }
       .wx, .taf-line { font-size: 15px; line-height: 1.35; }
-      form.controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -104,7 +99,7 @@
   </header>
 
   <main class="container">
-    <!-- ENTER submits this form -->
+    <!-- ENTER triggers submit on this form -->
     <form id="controlsForm" class="controls">
       <div>
         <label for="ids">IDs</label>
@@ -118,18 +113,6 @@
         <label for="vis">Visibility (SM)</label>
         <input id="vis" type="number" min="0" step="0.25" value="2">
       </div>
-
-      <!-- NEW: Shift End filter (Zulu) -->
-      <div>
-        <label for="shiftEnd">Shift End in Zulu</label>
-        <input id="shiftEnd" type="text" inputmode="numeric" pattern="\\d{4}" placeholder="DDHH"
-               title="Enter the last flight ETA in Zulu day+hour. Example: “2321” means day 23 at 2100Z. We’ll add a 3h buffer automatically.">
-      </div>
-      <div>
-        <label for="applyTime">Time filter</label><br>
-        <label><input id="applyTime" type="checkbox"> Apply</label>
-      </div>
-
       <div>
         <label><input id="showMetar" type="checkbox" checked> Show METAR</label><br>
         <label><input id="showTaf" type="checkbox" checked> Show TAF</label>
@@ -138,7 +121,6 @@
         <label><input id="alpha" type="checkbox"> Sort A→Z</label><br>
         <label><input id="filter" type="checkbox"> Filter triggers</label>
       </div>
-
       <div style="display:flex; align-items:end; justify-content:flex-end;">
         <button id="loadBtn" class="btn" type="submit">Load</button>
       </div>
@@ -171,8 +153,6 @@
     const idsEl = $('#ids');
     const ceilEl = $('#ceil');
     const visEl = $('#vis');
-    const shiftEndEl = $('#shiftEnd');
-    const applyTimeEl = $('#applyTime');
     const showMetarEl = $('#showMetar');
     const showTafEl = $('#showTaf');
     const alphaEl = $('#alpha');
@@ -192,38 +172,17 @@
     function updateUtcClock(){ const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0'); utcNow.textContent = `UTC ${hh}:${mm}`; }
     updateUtcClock(); setInterval(updateUtcClock, 30_000);
 
-    function savePrefs(){
-      localStorage.setItem('ct_ids', idsEl.value.trim());
-      localStorage.setItem('ct_ceil', ceilEl.value);
-      localStorage.setItem('ct_vis', visEl.value);
-      localStorage.setItem('ct_shift', shiftEndEl.value.trim());
-      localStorage.setItem('ct_applyTime', applyTimeEl.checked ? '1' : '0');
-      localStorage.setItem('ct_m', showMetarEl.checked ? '1' : '0');
-      localStorage.setItem('ct_t', showTafEl.checked ? '1' : '0');
-      localStorage.setItem('ct_a', alphaEl.checked ? '1' : '0');
-      localStorage.setItem('ct_f', filterEl.checked ? '1' : '0');
-    }
-    function loadPrefs(){
-      const sp = new URLSearchParams(location.search);
-      idsEl.value   = sp.get('ids')   || localStorage.getItem('ct_ids')   || "KDEN,KATL";
-      ceilEl.value  = sp.get('ceil')  || localStorage.getItem('ct_ceil')  || "700";
-      visEl.value   = sp.get('vis')   || localStorage.getItem('ct_vis')   || "2";
-      shiftEndEl.value = sp.get('shift') || localStorage.getItem('ct_shift') || "";
-      applyTimeEl.checked = (sp.get('applyTime') ?? localStorage.getItem('ct_applyTime')) === '1';
-      showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
-      showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0';
-      alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1';
-      filterEl.checked    = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1';
-    }
+    function savePrefs(){ localStorage.setItem('ct_ids', idsEl.value.trim()); localStorage.setItem('ct_ceil', ceilEl.value); localStorage.setItem('ct_vis', visEl.value); localStorage.setItem('ct_m', showMetarEl.checked ? '1' : '0'); localStorage.setItem('ct_t', showTafEl.checked ? '1' : '0'); localStorage.setItem('ct_a', alphaEl.checked ? '1' : '0'); localStorage.setItem('ct_f', filterEl.checked ? '1' : '0'); }
+    function loadPrefs(){ const sp=new URLSearchParams(location.search); idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN,KATL"; ceilEl.value= sp.get('ceil')|| localStorage.getItem('ct_ceil')|| "700"; visEl.value = sp.get('vis') || localStorage.getItem('ct_vis') || "2"; showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0'; showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0'; alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1'; filterEl.checked    = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1'; }
     loadPrefs();
 
     function normalizedIds(){ return (idsEl.value || '').trim().replace(/[\s;]+/g, ',').replace(/,+/g, ',').replace(/^,|,$/g, ''); }
 
-    // ENTER submits form
+    // ENTER triggers fetch via form submit
     form.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
 
     function controlsChanged(e){
-      if (e.target.matches && e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#showMetar,#showTaf,#alpha,#filter')){
+      if (e.target.matches && e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')){
         savePrefs(); fetchAndRender();
       }
     }
@@ -243,59 +202,6 @@
     window.addEventListener('online',  () => { fetchAndRender(true); startAutoRefresh(); });
     window.addEventListener('offline', () => { stopAutoRefresh(); });
 
-    // ---------- Time filter helpers (DDHH with +3h buffer) ----------
-    function parseDDHH(s){
-      if (!s) return null;
-      const m = String(s).trim().match(/^(\d{2})(\d{2})$/);
-      if (!m) return null;
-      let day = parseInt(m[1],10), hour = parseInt(m[2],10);
-      if (day < 1 || day > 31 || hour < 0 || hour > 23) return null;
-      // add 3h buffer
-      hour += 3;
-      if (hour >= 24) { hour -= 24; day += 1; }
-      if (day > 31) day = 31; // clamp; TAF horizons are short, month rollover not critical for UI
-      return { day, hour };
-    }
-    function ddhhCompare(a, b){
-      // returns 1 if a>b, 0 if equal, -1 if a<b
-      if (a.day !== b.day) return a.day > b.day ? 1 : -1;
-      if (a.hour !== b.hour) return a.hour > b.hour ? 1 : (a.hour < b.hour ? -1 : 0);
-      return 0;
-    }
-    // extract a starting DDHH from a TAF line, if present
-    function lineStartDDHH(text){
-      // FM270000 -> use 27 00
-      let m = text.match(/\bFM(\d{2})(\d{2})\d{2}\b/);
-      if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
-      // TEMPO 2712/2715, BECMG 2618/2620, PROB30 2621/2624 -> use first pair
-      m = text.match(/\b(?:TEMPO|BECMG|PROB(?:30|40))\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
-      if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
-      return null;
-    }
-
-    // map backend taf.html to add .after-shift to lines beyond cutoff
-    function applyTimeFilterToTafHtml(tafHtml, tafRaw, cutoffDDHH, enabled){
-      if (!enabled || !tafHtml || !tafRaw || !cutoffDDHH) return tafHtml;
-
-      // split raw into logical lines the same way backend did (before FM/TEMPO/BECMG/PROBxx)
-      const breaks = / (?=(FM\d{6}\b|TEMPO\b|BECMG\b|PROB(?:30|40)\b))/g;
-      const rawLines = tafRaw.split(breaks).join('\n').split('\n').map(s => s.trim()).filter(Boolean);
-
-      // for each line, decide if it's after cutoff
-      const afterFlags = rawLines.map(txt => {
-        const start = lineStartDDHH(txt);
-        if (!start) return false; // lines without explicit time keep context; conservative = not after
-        return ddhhCompare(start, cutoffDDHH) === 1; // strictly after
-      });
-
-      // now add class to corresponding <div class="taf-line..."> in HTML
-      let idx = 0;
-      return tafHtml.replace(/<div class="taf-line([^"]*)">/g, (_, rest) => {
-        const extra = (afterFlags[idx++] ? ' after-shift' : '');
-        return `<div class="taf-line${extra}${rest}">`;
-      });
-    }
-
     let lastFetchAt = 0;
 
     function clientSideFallbackRender(payload) {
@@ -307,17 +213,11 @@
       const showM = showMetarEl.checked;
       const showT = showTafEl.checked;
 
-      // compute cutoff once
-      const cutoff = parseDDHH(shiftEndEl.value);
       let html = '';
       for (const r of list) {
         const icao = r.icao || '';
-        let metarHTML = r.metar?.html || '';
-        let tafHTML   = r.taf?.html   || '';
-        const tafRaw  = r.taf?.raw    || '';
-
-        // apply time filter to TAF html
-        tafHTML = applyTimeFilterToTafHtml(tafHTML, tafRaw, cutoff, applyTimeEl.checked);
+        const metarHTML = r.metar?.html || '';
+        const tafHTML   = r.taf?.html   || '';
 
         html += `<div class="row">`;
 
@@ -346,15 +246,7 @@
 
     async function fetchAndRender(quiet){
       const ids = normalizedIds();
-      const params = new URLSearchParams({
-        ids,
-        ceil: ceilEl.value,
-        vis: visEl.value,
-        metar: showMetarEl.checked ? '1' : '0',
-        taf:   showTafEl.checked   ? '1' : '0',
-        alpha: alphaEl.checked     ? '1' : '0',
-        filter: filterEl.checked   ? 'trigger' : 'all',
-      });
+      const params = new URLSearchParams({ ids, ceil: ceilEl.value, vis: visEl.value, metar: showMetarEl.checked ? '1' : '0', taf: showTafEl.checked ? '1' : '0', alpha: alphaEl.checked ? '1' : '0', filter: filterEl.checked ? 'trigger' : 'all', });
       if (!quiet){ summary.textContent='Loading…'; spin.style.display='inline-block'; err.style.display='none'; err.textContent=''; }
       try{
         const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' });
@@ -366,8 +258,7 @@
         ts.textContent = `Updated: ${hh}:${mm} UTC`;
 
         const count = ids ? ids.split(',').filter(Boolean).length : 0;
-        const timeBadge = applyTimeEl.checked && shiftEndEl.value ? ` • Shift cutoff: ${escapeHtml(shiftEndEl.value)} (+3h)` : '';
-        summary.textContent=`${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}${timeBadge}`;
+        summary.textContent=`${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
 
         lastFetchAt=Date.now();
       } catch(e){
@@ -379,14 +270,6 @@
     }
 
     fetchAndRender();
-
-    // start auto-refresh
-    let refreshTimer = null;
-    function startAutoRefresh(){
-      if (refreshTimer) clearInterval(refreshTimer);
-      refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
-    }
-    function stopAutoRefresh(){ if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
     startAutoRefresh();
   });
   </script>
