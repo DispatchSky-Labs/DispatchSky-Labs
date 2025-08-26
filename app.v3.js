@@ -79,7 +79,7 @@ window.addEventListener('error', (e) => {
   document.addEventListener('input', controlsChanged);
 
   // ---------- Auto-refresh every minute while tab is visible ----------
-  let refreshTimer = null; // <-- single declaration
+  let refreshTimer = null;
   function startAutoRefresh(){
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
@@ -97,6 +97,8 @@ window.addEventListener('error', (e) => {
   window.addEventListener('offline', () => { stopAutoRefresh(); });
 
   // ---------- Time filter helpers (DDHH with +3h buffer) ----------
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
   function parseDDHH(s){
     if (!s) return null;
     const m = String(s).trim().match(/^(\d{2})(\d{2})$/);
@@ -106,7 +108,7 @@ window.addEventListener('error', (e) => {
     hour += 3;                 // add 3h buffer
     if (hour >= 24) { hour -= 24; day += 1; }  // rollover
     if (day > 31) day = 31;   // clamp (short horizon)
-    return { day, hour };
+    return { day, hour, disp: `${pad2(day)}${pad2(hour)}` };
   }
   function ddhhCompare(a, b){
     if (a.day !== b.day) return a.day > b.day ? 1 : -1;
@@ -121,21 +123,40 @@ window.addEventListener('error', (e) => {
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
     return null;
   }
-  // Add .after-shift to TAF lines that start after cutoff
+
+  // Tag "after-shift" lines; also strip hit spans inside after-shift blocks
   function applyTimeFilterToTafHtml(tafHtml, tafRaw, cutoffDDHH, enabled){
     if (!enabled || !tafHtml || !tafRaw || !cutoffDDHH) return tafHtml;
+
+    // Decide which raw segments start after cutoff
     const breaks = / (?=(FM\d{6}\b|TEMPO\b|BECMG\b|PROB(?:30|40)\b))/g;
     const rawLines = tafRaw.split(breaks).join('\n').split('\n').map(s => s.trim()).filter(Boolean);
     const afterFlags = rawLines.map(txt => {
       const start = lineStartDDHH(txt);
-      if (!start) return false;           // keep context lines “in shift”
+      if (!start) return false;           // context/no explicit start => keep as in-shift
       return ddhhCompare(start, cutoffDDHH) === 1;
     });
+
+    // Apply flags to HTML lines and remove hits inside after-shift
     let idx = 0;
-    return tafHtml.replace(/<div class="taf-line([^"]*)">/g, (_, rest) => {
-      const extra = (afterFlags[idx++] ? ' after-shift' : '');
-      return `<div class="taf-line${extra}${rest}">`;
+    return tafHtml.replace(/<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g, (_, rest, inner) => {
+      const isAfter = afterFlags[idx++] || /\bafter-shift\b/.test(rest);
+      const cls = isAfter ? `taf-line${rest} after-shift` : `taf-line${rest}`;
+      if (isAfter) {
+        // strip red-hit spans in after-shift content
+        inner = inner.replace(/<span class="hit">/g,'').replace(/<\/span>/g,'');
+      }
+      return `<div class="${cls}">${inner}</div>`;
     });
+  }
+
+  // Remove entire after-shift blocks (for trigger evaluation only)
+  function stripAfterShiftBlocks(tafHtml){
+    return tafHtml.replace(/<div class="taf-line[^"]*after-shift[^"]*">[\s\S]*?<\/div>/g, '');
+  }
+
+  function containsActiveHit(html){
+    return /class="hit"/.test(html);
   }
 
   // Build HTML
@@ -148,7 +169,7 @@ window.addEventListener('error', (e) => {
     const showM = showMetarEl.checked;
     const showT = showTafEl.checked;
 
-    const cutoff = parseDDHH(shiftEndEl.value);
+    const cutoff = parseDDHH(shiftEndEl.value); // {day, hour, disp}
     let html = '';
     for (const r of list) {
       const icao = r.icao || '';
@@ -156,10 +177,19 @@ window.addEventListener('error', (e) => {
       let tafHTML   = r.taf?.html   || '';
       const tafRaw  = r.taf?.raw    || '';
 
+      // Tag after-shift and strip hits inside those lines
       tafHTML = applyTimeFilterToTafHtml(tafHTML, tafRaw, cutoff, applyTimeEl.checked);
 
-      html += `<div class="row">`;
+      // Compute "active trigger": hits in METAR, or hits in TAF that are NOT after-shift
+      const tafActiveOnly = stripAfterShiftBlocks(tafHTML);
+      const activeTrigger =
+        (metarHTML && containsActiveHit(metarHTML)) ||
+        (tafActiveOnly && containsActiveHit(tafActiveOnly));
 
+      // If "Filter triggers" is enabled, skip non-trigger rows
+      if (filterEl.checked && !activeTrigger) continue;
+
+      html += `<div class="row">`;
       if (showM) {
         html += metarHTML ? metarHTML : `<div class="wx muted">No METARs found for ${escapeHtml(icao)}</div>`;
       }
@@ -168,7 +198,7 @@ window.addEventListener('error', (e) => {
       }
       html += `</div>`;
     }
-    return html;
+    return html || `<div class="muted" style="padding:12px">No results.</div>`;
   }
 
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
@@ -196,8 +226,10 @@ window.addEventListener('error', (e) => {
       ts.textContent = `Updated: ${hh}:${mm} UTC`;
 
       const count = ids ? ids.split(',').filter(Boolean).length : 0;
-      const timeBadge = applyTimeEl.checked && shiftEndEl.value ? ` • Shift cutoff: ${escapeHtml(shiftEndEl.value)} (+3h)` : '';
-      summary.textContent=`${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}${timeBadge}`;
+      const cutoffBadge = (applyTimeEl.checked && shiftEndEl.value)
+        ? ` • Shift cutoff with buffer: ${parseDDHH(shiftEndEl.value)?.disp ?? ''}`
+        : '';
+      summary.textContent=`${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}${cutoffBadge}`;
     } catch(e){
       err.style.display='block';
       err.textContent = e && e.message ? e.message : String(e);
