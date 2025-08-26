@@ -1,186 +1,8 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CieloTracker — METAR/TAF Monitor</title>
-  <meta name="description" content="Sadiom METAR/TAF monitor with backend-rendered highlighting and triggers." />
+<script>
+    // Backend endpoint
+    const DATA_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-cf";
 
-  <style>
-    :root{
-      --fg:#0b0b0b; --bg:#ffffff; --card:#f7f7f7; --muted:#666; --ink:#0b6;
-      --warn:#b00020; --table:#ffffff; --rule:#e9e9e9;
-    }
-    .theme-dark{
-      --fg:#eaeaea; --bg:#0b0b0b; --card:#11151a; --muted:#a1a1a1; --ink:#59c3ff;
-      --warn:#ff6b6b; --table:#0f141a; --rule:#20252b;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; background:var(--bg); color:var(--fg);
-      font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
-      display:flex; flex-direction:column; min-height:100vh;
-    }
-    a{color:var(--ink)}
-    header{background:#0b2239; color:#fff; padding:16px 20px}
-    header h1{margin:0 0 4px; font-size:20px}
-    header p{margin:0; opacity:.85; font-size:14px}
-    nav.top{max-width:1200px; margin:0 auto; padding:8px 0 0; display:flex; gap:14px}
-    nav.top a{color:#cfe8ff; text-decoration:none; font-size:14px}
-    nav.top a:hover{text-decoration:underline}
-
-    main{flex:1; max-width:1200px; margin:18px auto; padding:0 12px 32px}
-    .toolbar{
-      background:var(--card); border:1px solid var(--rule); border-radius:12px; padding:14px; display:flex; flex-wrap:wrap; gap:12px; align-items:center;
-    }
-    .toolbar .group{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    label{font-size:14px; color:var(--fg); display:flex; align-items:center; gap:6px}
-    input[type="text"], input[type="number"], select{
-      padding:8px 10px; border:1px solid var(--rule); background:#fff; border-radius:8px; min-width:120px; font-size:14px;
-    }
-    .theme-dark input[type="text"], .theme-dark input[type="number"], .theme-dark select {
-      background:#0e1216; color:var(--fg); border-color:#222a31;
-    }
-    .switch{display:inline-flex; align-items:center; gap:6px; cursor:pointer}
-    .switch input{accent-color:var(--ink); width:18px; height:18px}
-    .btn{
-      padding:8px 12px; border:1px solid var(--rule); border-radius:10px; background:transparent; color:var(--fg); cursor:pointer; font-weight:600;
-    }
-    .btn:hover{border-color:var(--ink)}
-    .btn.primary{border-color:var(--ink); color:var(--ink)}
-
-    .error{
-      display:none; margin-top:12px; padding:10px; border-radius:8px;
-      color:#7a0000; background:#ffe9e9; border:1px solid #f3bcbc; white-space:pre-wrap;
-    }
-    .theme-dark .error{color:#300; background:#3b0000; border-color:#5b2222}
-
-    .board{
-      margin-top:14px; background:var(--card); border:1px solid var(--rule); border-radius:12px; overflow:hidden;
-    }
-    .board-header{padding:10px 12px; border-bottom:1px solid var(--rule); display:flex; justify-content:space-between; align-items:center}
-    .board-body{padding:0; background:var(--table)}
-    .spinner{display:none; margin-left:8px; width:16px; height:16px; border:2px solid #ddd; border-top-color:var(--ink); border-radius:50%; animation:spin .8s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    footer{margin-top:auto; border-top:1px solid var(--rule); background:#fafafa}
-    .theme-dark footer{background:#0e1216}
-    .footwrap{max-width:1200px; margin:0 auto; padding:14px 12px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:14px; color:var(--muted)}
-    .footwrap a{text-decoration:none}
-    .footwrap a:hover{text-decoration:underline}
-
-    /* classes the backend may include in its returned HTML */
-    .trigger{font-weight:800; color:var(--warn)}
-    .muted{color:var(--muted)}
-    pre.wx { margin:0; padding:10px 12px; border-bottom:1px solid var(--rule); font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; white-space:pre-wrap }
-    .row { display:flex; gap:18px; align-items:flex-start; padding:10px 12px; border-bottom:1px solid var(--rule) }
-    .col-icao { width:6ch; font-weight:700 }
-    .col-wx { flex:1 }
-  </style>
-</head>
-<body>
-  <header>
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-      <div>
-        <h1 style="margin:0 0 4px;">CieloTracker — METAR/TAF Monitor</h1>
-        <p style="margin:0;opacity:.85">
-          by <strong>Sadiom</strong> • <span class="muted">For information purposes only.</span>
-        </p>
-        <nav class="top">
-          <a href="/home.html">Home</a>
-          <a href="/support.html">iOS Support</a>
-          <a href="/privacy.html">Privacy</a>
-        </nav>
-      </div>
-      <div style="text-align:right;min-width:110px;">
-        <div class="muted" id="utcNow" aria-label="Current UTC time">UTC —</div>
-      </div>
-    </div>
-  </header>
-
-  <main>
-    <div class="toolbar" role="region" aria-label="Controls">
-      <div class="group">
-        <label title="IDs separated by spaces or commas">
-          IDs
-          <input id="ids" type="text" placeholder="e.g., KDEN KATL KLAX" value="KDEN KATL" />
-        </label>
-      </div>
-
-      <div class="group">
-        <label>
-          Theme
-          <select id="theme">
-            <option value="light" selected>Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="group">
-        <label>
-          Ceiling (ft)
-          <input id="ceil" type="number" value="700" min="0" step="100" />
-        </label>
-        <label>
-          Visibility (SM)
-          <input id="vis" type="number" value="2" min="0" step="0.25" />
-        </label>
-      </div>
-
-      <div class="group">
-        <label class="switch"><input id="showMetar" type="checkbox" checked /> METAR</label>
-        <label class="switch"><input id="showTaf" type="checkbox" checked /> TAF</label>
-        <label class="switch" title="Sort IDs alphabetically">
-          <input id="alpha" type="checkbox" /> Alphabetize
-        </label>
-      </div>
-
-      <div class="group">
-        <label class="switch" title="Show only trigger airports">
-          <input id="filter" type="checkbox" />
-          Filter: Trigger airports
-        </label>
-
-        <!-- Load (manual) -->
-        <button id="loadBtn" class="btn primary" title="Fetch latest data">Load</button>
-
-        <div class="spinner" id="spin" aria-label="Loading"></div>
-      </div>
-    </div>
-
-    <div id="err" class="error" role="alert"></div>
-
-    <section class="board" aria-live="polite">
-      <div class="board-header">
-        <div id="summary" class="muted">Waiting for data…</div>
-        <div id="timestamp" class="muted"></div>
-      </div>
-      <div id="board-body" class="board-body">
-        <!-- Backend will return ready-to-insert HTML here. -->
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="footwrap">
-      <div>© 2025 Sadiom</div>
-      <div>
-        <a href="/home.html">Home</a> &nbsp;|&nbsp;
-        <a href="/privacy.html">Privacy</a> &nbsp;|&nbsp;
-        <a href="/support.html">iOS Support</a>
-      </div>
-    </div>
-  </footer>
-
-  <!-- ================== App Script ================== -->
-  <script>
-    // Backend endpoints
-    const RENDER_URL = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/render";
-    const DATA_URL   = "https://awc-weather-752k4ah3ra-uc.a.run.app/api/weather";
-
-    const $ = (s, r=document) => r.querySelector(s);
+    const $ = (s, r = document) => r.querySelector(s);
     const idsEl = $('#ids');
     const ceilEl = $('#ceil');
     const visEl = $('#vis');
@@ -197,191 +19,170 @@
     const ts = $('#timestamp');
 
     // Theme handling
-    function applyTheme(mode){
-      document.body.classList.toggle('theme-dark', mode === 'dark');
-      localStorage.setItem('ct_theme', mode);
+    function applyTheme(mode) {
+        document.body.classList.toggle('theme-dark', mode === 'dark');
+        localStorage.setItem('ct_theme', mode);
     }
     themeEl.addEventListener('change', e => { applyTheme(e.target.value); });
-    (function initTheme(){
-      const saved = localStorage.getItem('ct_theme') || 'light';
-      themeEl.value = saved; applyTheme(saved);
+    (function initTheme() {
+        const saved = localStorage.getItem('ct_theme') || 'light';
+        themeEl.value = saved; applyTheme(saved);
     })();
 
-    // UTC clock (no seconds)
+    // UTC clock
     function updateUtcClock() {
-      const d = new Date();
-      const hh = String(d.getUTCHours()).padStart(2,'0');
-      const mm = String(d.getUTCMinutes()).padStart(2,'0');
-      $('#utcNow').textContent = `UTC ${hh}:${mm}`;
+        const d = new Date();
+        const hh = String(d.getUTCHours()).padStart(2, '0');
+        const mm = String(d.getUTCMinutes()).padStart(2, '0');
+        $('#utcNow').textContent = `UTC ${hh}:${mm}`;
     }
     updateUtcClock();
     setInterval(updateUtcClock, 30 * 1000);
 
     // Preferences
-    function savePrefs(){
-      localStorage.setItem('ct_ids', idsEl.value.trim());
-      localStorage.setItem('ct_ceil', ceilEl.value);
-      localStorage.setItem('ct_vis', visEl.value);
-      localStorage.setItem('ct_m', showMetarEl.checked ? '1':'0');
-      localStorage.setItem('ct_t', showTafEl.checked ? '1':'0');
-      localStorage.setItem('ct_a', alphaEl.checked ? '1':'0');
-      localStorage.setItem('ct_f', filterEl.checked ? '1':'0');
+    function savePrefs() {
+        localStorage.setItem('ct_ids', idsEl.value.trim());
+        localStorage.setItem('ct_ceil', ceilEl.value);
+        localStorage.setItem('ct_vis', visEl.value);
+        localStorage.setItem('ct_m', showMetarEl.checked ? '1' : '0');
+        localStorage.setItem('ct_t', showTafEl.checked ? '1' : '0');
+        localStorage.setItem('ct_a', alphaEl.checked ? '1' : '0');
+        localStorage.setItem('ct_f', filterEl.checked ? '1' : '0');
     }
-    function loadPrefs(){
-      const sp = new URLSearchParams(location.search);
-      idsEl.value       = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN KATL";
-      ceilEl.value      = sp.get('ceil') || localStorage.getItem('ct_ceil') || "700";
-      visEl.value       = sp.get('vis')  || localStorage.getItem('ct_vis')  || "2";
-      showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
-      showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0';
-      alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1';
-      filterEl.checked    = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1';
+    function loadPrefs() {
+        const sp = new URLSearchParams(location.search);
+        idsEl.value = sp.get('ids') || localStorage.getItem('ct_ids') || "KDEN,KATL";
+        ceilEl.value = sp.get('ceil') || localStorage.getItem('ct_ceil') || "700";
+        visEl.value = sp.get('vis') || localStorage.getItem('ct_vis') || "2";
+        showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
+        showTafEl.checked = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0';
+        alphaEl.checked = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1';
+        filterEl.checked = (sp.get('f') ?? localStorage.getItem('ct_f')) === '1';
     }
     loadPrefs();
 
-    // Normalize IDs: spaces/semicolons/extra commas -> single commas
     function normalizedIds() {
-      return (idsEl.value || '')
-        .trim()
-        .replace(/[\s;]+/g, ',')
-        .replace(/,+/g, ',')
-        .replace(/^,|,$/g, '');
+        return (idsEl.value || '')
+            .trim()
+            .replace(/[\s;]+/g, ',')
+            .replace(/,+/g, ',')
+            .replace(/^,|,$/g, '');
     }
 
-    // Load button (manual fetch for IDs to avoid API hammering)
     const loadBtn = $('#loadBtn');
     loadBtn.addEventListener('click', () => { savePrefs(); fetchAndRender(); });
 
-    // Refresh when *non-ID* controls change
-    function controlsChanged(e){
-      if (e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')) {
-        savePrefs();
-        fetchAndRender();
-      }
+    function controlsChanged(e) {
+        if (e.target.matches('#theme,#ceil,#vis,#showMetar,#showTaf,#alpha,#filter')) {
+            savePrefs();
+            fetchAndRender();
+        }
     }
     document.addEventListener('change', controlsChanged);
     document.addEventListener('input', controlsChanged);
 
-    // Courtesy refresh: only once per minute after a Load/refresh
     let lastFetchAt = 0;
     setInterval(() => {
-      if (Date.now() - lastFetchAt >= 60*1000) {
-        // soft refresh if user previously loaded
-        if (lastFetchAt !== 0) fetchAndRender(true);
-      }
+        if (Date.now() - lastFetchAt >= 60 * 1000) {
+            if (lastFetchAt !== 0) fetchAndRender(true);
+        }
     }, 5000);
 
-    async function fetchAndRender(quiet){
-      const ids = normalizedIds();
-      const params = new URLSearchParams({
-        ids,
-        ceil: ceilEl.value,
-        vis:  visEl.value,
-        metar: showMetarEl.checked ? '1':'0',
-        taf:   showTafEl.checked ? '1':'0',
-        alpha: alphaEl.checked ? '1':'0',
-        filter: filterEl.checked ? 'trigger':'all',
-      });
+    async function fetchAndRender(quiet) {
+        const ids = normalizedIds();
+        const params = new URLSearchParams({
+            ids,
+            ceil: ceilEl.value,
+            vis: visEl.value,
+            metar: showMetarEl.checked ? '1' : '0',
+            taf: showTafEl.checked ? '1' : '0',
+            alpha: alphaEl.checked ? '1' : '0',
+            filter: filterEl.checked ? 'trigger' : 'all',
+        });
 
-      if (!quiet) {
-        summary.textContent = 'Loading…';
-        spin.style.display = 'inline-block';
-        err.style.display='none';
-        err.textContent='';
-      }
-
-      try {
-        let html = await tryRender(params);
-        if (!html) {
-          // Fallback JSON: render a simple vertical layout
-          const data = await fetchJSON(params);
-          html = clientSideFallbackRender(data);
-        }
-        board.innerHTML = html;
-
-        const d = new Date();
-        const hh = String(d.getUTCHours()).padStart(2,'0');
-        const mm = String(d.getUTCMinutes()).padStart(2,'0');
-        ts.textContent = `Updated: ${hh}:${mm} UTC`;
-
-        const count = ids ? ids.split(',').filter(Boolean).length : 0;
-        summary.textContent = `${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
-
-        lastFetchAt = Date.now();
-      } catch (e) {
-        err.style.display = 'block';
-        err.textContent = e && e.message ? e.message : String(e);
-      } finally {
-        spin.style.display = 'none';
-      }
-    }
-
-    async function tryRender(params){
-      try{
-        const res = await fetch(`${RENDER_URL}?${params}`, { method: 'GET' });
-        if (res.status === 404) return ''; // endpoint not deployed
-        if (!res.ok) throw new Error(`Render API ${res.status} ${res.statusText}`);
-        return await res.text(); // HTML from backend (including trigger highlighting)
-      } catch {
-        return '';
-      }
-    }
-
-    async function fetchJSON(params){
-      const res = await fetch(`${DATA_URL}?${params}`, { method: 'GET' });
-      if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
-      return await res.json();
-    }
-
-    // Minimal vertical fallback rendering if /api/render isn't ready.
-    function clientSideFallbackRender(payload){
-      const rows = (payload && payload.results) ? payload.results : [];
-      if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
-
-      // Optional alphabetize
-      let list = rows.slice();
-      if (alphaEl.checked) list.sort((a,b)=> (a.icao||'').localeCompare(b.icao||''));
-
-      // Simple vertical layout similar to AWC text style
-      const showM = showMetarEl.checked;
-      const showT = showTafEl.checked;
-
-      let html = '';
-      for (const r of list){
-        const metarRaw = r.metar?.raw || '';
-        const tafRaw   = r.taf?.raw || '';
-
-        html += `<div class="row">
-          <div class="col-icao">${escapeHtml(r.icao || '')}</div>
-          <div class="col-wx">`;
-
-        if (showM) {
-          html += metarRaw
-            ? `<pre class="wx">${escapeHtml(metarRaw)}</pre>`
-            : `<div class="muted" style="padding:10px 12px;">No METAR</div>`;
-        }
-        if (showT) {
-          html += tafRaw
-            ? `<pre class="wx">${escapeHtml(tafRaw)}</pre>`
-            : `<div class="muted" style="padding:10px 12px;">No TAF</div>`;
+        if (!quiet) {
+            summary.textContent = 'Loading…';
+            spin.style.display = 'inline-block';
+            err.style.display = 'none';
+            err.textContent = '';
         }
 
-        html += `</div></div>`;
-      }
-      return html;
+        try {
+            const data = await fetchJSON(params);
+            const html = clientSideFallbackRender(data);
+            board.innerHTML = html;
+
+            const d = new Date();
+            const hh = String(d.getUTCHours()).padStart(2, '0');
+            const mm = String(d.getUTCMinutes()).padStart(2, '0');
+            ts.textContent = `Updated: ${hh}:${mm} UTC`;
+
+            const count = ids ? ids.split(',').filter(Boolean).length : 0;
+            summary.textContent = `${count} airport(s) • Theme: ${themeEl.value} • Filter: ${filterEl.checked ? 'Trigger' : 'All'}`;
+
+            lastFetchAt = Date.now();
+        } catch (e) {
+            err.style.display = 'block';
+            err.textContent = e && e.message ? e.message : String(e);
+        } finally {
+            spin.style.display = 'none';
+        }
     }
 
-    function escapeHtml(s){
-      return String(s).replace(/[&<>"']/g, m => (
-        { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[m]
-      ));
+    async function fetchJSON(params) {
+        const res = await fetch(`${DATA_URL}?${params}`, { method: 'GET', mode: 'cors' });
+        if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
+        return await res.json();
     }
 
-    // Do an initial fetch with defaults on first load:
+    function clientSideFallbackRender(payload) {
+        const rows = (payload && payload.results) ? payload.results : [];
+        if (!rows.length) return `<div class="muted" style="padding:12px">No results.</div>`;
+
+        let list = rows.slice();
+        if (alphaEl.checked) list.sort((a, b) => (a.icao || '').localeCompare(b.icao || ''));
+
+        const showM = showMetarEl.checked;
+        const showT = showTafEl.checked;
+
+        let html = '';
+        for (const r of list) {
+            const metarRaw = r.metar?.raw || '';
+            const tafRaw = r.taf?.raw || '';
+
+            html += `<div class="row">
+                <div class="col-icao">${escapeHtml(r.icao || '')}</div>
+                <div class="col-wx">`;
+
+            if (showM) {
+                html += metarRaw
+                    ? `<pre class="wx">${escapeHtml(metarRaw)}</pre>`
+                    : `<div class="muted" style="padding:10px 12px;">No METAR</div>`;
+            }
+            if (showT) {
+                html += tafRaw
+                    ? `<pre class="wx">${escapeHtml(tafRaw)}</pre>`
+                    : `<div class="muted" style="padding:10px 12px;">No TAF</div>`;
+            }
+
+            html += `</div></div>`;
+        }
+        return html;
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+    }
+
+    // Update DATA_URL to use the new function
+    const DATA_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-cf";
+
+    // Initial fetch
     fetchAndRender();
-  </script>
+</script>
 
-  <!-- AdSense loader at bottom -->
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192" crossorigin="anonymous"></script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192" crossorigin="anonymous"></script>
 </body>
 </html>
