@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-59T34PRT4E"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-59T34PRT4E');
+  </script>
+
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CieloTracker – Beta (Drill Down)</title>
+
+  <!-- Google AdSense (optional to include on beta) -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192" crossorigin="anonymous"></script>
+
+  <style>
+    :root { --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --border:#e5e7eb; --brand:#0f5fff; }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; background:var(--bg); color:var(--fg); }
+    .theme-dark { --bg:#0b0f14; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; }
+
+    header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; }
+    .badges { display:flex; gap:8px; font-size:12px; }
+    .badge { background:#eef2ff; padding:3px 8px; border-radius:6px; }
+    .theme-dark .badge { background:#1f2937; }
+
+    form.controls { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:end; padding:10px 16px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+    .field { display:flex; flex-direction:column; gap:3px; }
+    .field label { font-size:12px; color:var(--muted); }
+    .ctl, .btn { height:32px; padding:5px 8px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--fg); }
+    .theme-dark .ctl { background:#111827; border-color:#374151; color:#e5e7eb; }
+    .btn { background:var(--brand); color:#fff; border:0; font-weight:600; cursor:pointer; }
+    .chk { display:flex; align-items:center; gap:6px; height:32px; }
+
+    .w-ids { width: 26ch; max-width: 60vw; }
+    .w4   { width: 6ch; }
+    .w3   { width: 5ch; }
+    .w4d  { width: 6ch; }
+
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+    input[type=number] { -moz-appearance:textfield; }
+
+    .section { padding: 8px 16px; }
+
+    pre.wx, .taf-line {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 16px;
+      line-height: 1.25;
+      white-space: pre-wrap;
+      margin: 0;
+    }
+    .taf-indent { text-indent: 16px; }
+    .hit { color:#ef4444; font-weight:700; }
+    .after-shift { color:#9ca3af; }
+    .muted { color:var(--muted); font-size:14px; margin:0; }
+
+    .mode-wrap { display:flex; align-items:center; gap:8px; }
+    .mode-labels { display:flex; gap:8px; font-size:12px; color:var(--muted); }
+    .mode-current { font-weight:600; color:var(--fg); }
+
+    .drill-sep { border-bottom:1px dashed var(--muted); margin:6px 0 10px; }
+
+    footer { margin-top:12px; padding:14px 16px; font-size:14px; color:var(--muted); }
+    footer a { color:inherit; text-decoration:none; margin-right:12px; }
+    footer a:hover { text-decoration:underline; }
+
+    .instructions { padding: 14px 16px; font-size: 14px; color: var(--muted); line-height: 1.4; }
+  </style>
+</head>
+<body class="theme-light">
+  <header>
+    <div>CieloTracker <strong>Beta</strong></div>
+    <div class="badges">
+      <span id="utcNow" class="badge">UTC --:--</span>
+      <span id="timestamp" class="badge">Updated: --:-- UTC</span>
+    </div>
+    <div>
+      Theme
+      <select id="theme" class="ctl">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  </header>
+
+  <form id="controlsForm" class="controls">
+    <div class="field">
+      <label for="ids">IDs</label>
+      <input id="ids" class="ctl w-ids" placeholder="KDEN KSGU KACV" title="Enter ICAO IDs separated by comma, space, or semicolon">
+    </div>
+
+    <div class="field">
+      <label for="ceil">Ceiling (in feet)</label>
+      <input id="ceil" class="ctl w4" type="text" inputmode="numeric" pattern="[0-9]{1,4}" maxlength="4" value="700">
+    </div>
+
+    <div class="field">
+      <label for="vis">Visibility (SM)</label>
+      <input id="vis" class="ctl w3" type="text" inputmode="decimal" pattern="^[0-9]{1,2}(\.[0-9])?$" maxlength="3" value="2">
+    </div>
+
+    <div class="field">
+      <label for="shiftEnd">Shift End in Zulu</label>
+      <input id="shiftEnd" class="ctl w4d" type="text" inputmode="numeric" pattern="^[0-9]{4}$" maxlength="4" placeholder="DDHH">
+    </div>
+
+    <label class="chk"><input type="checkbox" id="applyTime"> Apply Shift End</label>
+    <label class="chk"><input type="checkbox" id="showMetar" checked> Show METAR</label>
+    <label class="chk"><input type="checkbox" id="showTaf" checked> Show TAF</label>
+    <label class="chk"><input type="checkbox" id="alpha"> Sort A→Z</label>
+
+    <!-- New 3-position slider: All / Filter / Drill Down -->
+    <div class="field">
+      <label for="mode">Display Mode</label>
+      <div class="mode-wrap">
+        <input id="mode" class="ctl" type="range" min="0" max="2" step="1" value="0" style="width:160px">
+        <div class="mode-labels">
+          <span>All</span><span>Filter</span><span>Drill Down</span>
+        </div>
+      </div>
+      <div class="mode-current" id="modeLabel">All</div>
+    </div>
+
+    <button type="submit" id="loadBtn" class="btn">Load</button>
+    <span id="spin" style="display:none">⏳</span>
+  </form>
+
+  <div id="summary" class="section">Ready.</div>
+  <div id="err" class="section" style="display:none;color:#ef4444;"></div>
+  <section id="board-body" class="section"></section>
+
+  <div class="instructions">
+    Beta adds a 3-mode slider. <strong>All</strong> shows everything. <strong>Filter</strong> shows only trigger airports. 
+    <strong>Drill Down</strong> shows the METAR and only TAF lines with hits; a dashed line appears under the METAR to indicate hidden TAF content.
+  </div>
+
+  <footer>
+    <a href="home.html">Home</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="support.html">Support</a>
+    <a href="https://discord.gg/pn8uC2eV" target="_blank" rel="noopener">Discord</a>
+  </footer>
+
+  <script defer src="app.v8b.js?v=2025-08-29-1"></script>
+</body>
+</html>
