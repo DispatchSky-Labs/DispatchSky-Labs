@@ -28,8 +28,19 @@ window.addEventListener('error', (e) => {
   const summary = $('#summary');
   const ts = $('#timestamp');
   const utcNow = $('#utcNow');
+  const scanBar = $('#refreshScan');
 
-  // Theme
+  /* ===== Delta state across refreshes ===== */
+  let refreshCycle = 0;
+  // prevState: icao -> { metar: {hits, hadHit, hash}, taf: Map(hash -> {hits, hadHit}) }
+  const prevState = new Map();
+  // flashImproved: key -> expireCycle (one cycle visibility)
+  const flashImproved = new Map();
+  const keyFor = (icao, kind, hash) => `${icao}|${kind}|${hash||''}`;
+  const countHits = (html) => (html && (html.match(/class="hit"/g) || []).length) || 0;
+  const textHash = (s) => (s || '').replace(/<[^>]+>/g,'').trim();
+
+  /* ===== Theme ===== */
   function applyTheme(mode){
     document.body.classList.toggle('theme-dark', mode === 'dark');
     localStorage.setItem('ct_theme', mode);
@@ -44,7 +55,7 @@ window.addEventListener('error', (e) => {
     applyTheme(localStorage.getItem('ct_theme') || 'light');
   }
 
-  // UTC clock
+  /* ===== UTC clock ===== */
   function updateUtcClock(){
     const d=new Date();
     const hh=String(d.getUTCHours()).padStart(2,'0');
@@ -53,7 +64,7 @@ window.addEventListener('error', (e) => {
   }
   updateUtcClock(); setInterval(updateUtcClock, 30_000);
 
-  // Prefs
+  /* ===== Prefs ===== */
   function savePrefs(){
     localStorage.setItem('ct_ids', (idsEl?.value || '').trim());
     localStorage.setItem('ct_ceil', ceilEl?.value || '');
@@ -95,12 +106,10 @@ window.addEventListener('error', (e) => {
       .replace(/^,|,$/g, '');
   }
 
-  // Submit
+  /* ===== Form & change handling ===== */
   if (form) {
     form.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
   }
-
-  // React to control changes (light debounce for text)
   let changeTimer = null;
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
@@ -118,17 +127,15 @@ window.addEventListener('error', (e) => {
   document.addEventListener('change', controlsChanged);
   document.addEventListener('input', controlsChanged);
 
-  // ===== Time filter helpers =====
+  /* ===== Time helpers ===== */
   const pad2 = (n) => String(n).padStart(2,'0');
-
   function parseDDHH(s){
     if (!s) return null;
     const m = String(s).trim().match(/^(\d{2})(\d{2})$/);
     if (!m) return null;
     let day = parseInt(m[1],10), hour = parseInt(m[2],10);
     if (day < 1 || day > 31 || hour < 0 || hour > 23) return null;
-    hour += 3; // +3h buffer
-    if (hour >= 24) { hour -= 24; day += 1; }
+    hour += 3; if (hour >= 24) { hour -= 24; day += 1; }
     if (day > 31) day = 31;
     return { day, hour, disp: `${pad2(day)}${pad2(hour)}` };
   }
@@ -169,23 +176,36 @@ window.addEventListener('error', (e) => {
   }
   const containsActiveHit = (html) => /class="hit"/.test(html);
 
-  // Drill-down: keep only taf lines that contain hits (and not after-shift)
-  function drillTafToHitLines(tafHtml) {
-    if (!tafHtml) return '';
-    const blocks = [];
-    tafHtml.replace(/<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g, (m, rest, inner) => {
+  /* Break TAF html into line objects for delta logic */
+  function parseTafLines(tafHtml) {
+    const out = [];
+    (tafHtml || '').replace(/<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g, (m, rest, inner) => {
       const cls = `taf-line${rest}`;
-      const isAfter = /after-shift/.test(cls);
+      const after = /after-shift/.test(cls);
       const hasHit = /class="hit"/.test(inner);
-      if (!isAfter && hasHit) blocks.push(`<div class="${cls}">${inner}</div>`);
+      const hash = textHash(inner);
+      out.push({ cls, inner, hash, after, hasHit, hits: countHits(inner) });
       return m;
     });
-    return blocks.join('\n');
+    return out;
+  }
+
+  function drillTafToHitLinesObj(lines) {
+    return lines.filter(l => !l.after && l.hasHit);
   }
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-  // Fetch + render
+  /* ===== Refresh scan animation ===== */
+  function runScan(){
+    if (!scanBar) return;
+    scanBar.classList.remove('run'); // restart animation
+    // force reflow
+    void scanBar.offsetWidth;
+    scanBar.classList.add('run');
+  }
+
+  /* ===== Fetch + render ===== */
   async function fetchAndRender(quiet){
     const ids = normalizedIds();
     const mode = Number(modeEl?.value || 0); // 0=All,1=Filter,2=Drill
@@ -215,68 +235,168 @@ window.addEventListener('error', (e) => {
         const cutoff = parseDDHH(shiftEndEl?.value);
 
         let html = '';
+        const nextPrevState = new Map();
+
         for (const r of rows) {
           const icao = r.icao || '';
           let metarHTML = r.metar?.html || '';
           let tafHTML   = r.taf?.html   || '';
 
-          // Time filter tags (after-shift)
+          // Apply time filter
           tafHTML = applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, !!(applyTimeEl?.checked));
-          const tafActiveOnly = stripAfterShiftBlocks(tafHTML);
-          const activeTrigger = (metarHTML && containsActiveHit(metarHTML)) ||
-                                (tafActiveOnly && containsActiveHit(tafActiveOnly));
 
-          // Mode logic
-          if (mode === 1 && !activeTrigger) continue;     // Filter
-          if (mode === 2 && !activeTrigger) continue;     // Drill requires trigger airport
+          // Determine trigger at airport level (for filter/drill)
+          const tafActiveOnlyHtml = stripAfterShiftBlocks(tafHTML);
+          const airportActive = (metarHTML && containsActiveHit(metarHTML)) ||
+                                (tafActiveOnlyHtml && containsActiveHit(tafActiveOnlyHtml));
 
-          // Drill reductions
-          let drilled = false;
-          if (mode === 2) {
-            const original = tafHTML;
-            const pruned = drillTafToHitLines(tafHTML);
-            drilled = !!(original && pruned && original.trim() !== pruned.trim());
-            tafHTML = pruned; // only hit lines
+          if ((mode === 1 || mode === 2) && !airportActive) {
+            // BUT: we may still show improved flashes in Drill/Filter — handled later
+            if (mode === 1) continue;
+            // For Drill, continue only if we have flashes
+            const metarKey = keyFor(icao,'METAR','');
+            const hadMetarFlash = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
+            let hasTafFlash = false;
+            if (!hadMetarFlash) {
+              for (const [k,v] of flashImproved.entries()) {
+                if (k.startsWith(`${icao}|TAF|`) && v >= refreshCycle) { hasTafFlash = true; break; }
+              }
+            }
+            if (!hadMetarFlash && !hasTafFlash) continue;
           }
 
-          // Build output
+          /* ===== Line-level analysis for deltas ===== */
+          // Previous snapshots
+          const prev = prevState.get(icao) || { metar:{hits:0, hadHit:false, hash:''}, taf:new Map() };
+
+          // --- METAR
+          const metarHits = countHits(metarHTML);
+          const metarHadHit = metarHits > 0;
+          const metarHash = textHash(metarHTML);
+          const metarPrev = prev.metar || {hits:0, hadHit:false, hash:''};
+          const metarWorse = (!metarPrev.hadHit && metarHadHit) || (metarHits > metarPrev.hits);
+          const metarImprovedNow = (metarPrev.hadHit && !metarHadHit);
+
+          // persist next prev
+          nextPrevState.set(icao, { metar:{hits:metarHits, hadHit:metarHadHit, hash:metarHash}, taf: new Map() });
+
+          // Flash handling for METAR
+          const metarKey = keyFor(icao,'METAR','');
+          if (metarImprovedNow) flashImproved.set(metarKey, refreshCycle + 1);
+
+          // Decide whether to show METAR and with which classes
           if (showM) {
             if (metarHTML) {
-              if (mode === 2 && drilled) {
-                // No <br/> before dashed line to avoid extra top gap
-                html += metarHTML + '<div class="drill-sep"></div>';
-              } else {
-                html += metarHTML + '<br/>';
+              let metarOut = metarHTML;
+              if (metarWorse) metarOut = metarOut.replace('<pre class="wx"', '<pre class="wx worse"');
+              // If improved (no longer a trigger) and still within flash window, paint green
+              const metarFlashActive = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
+              if (!metarHadHit && metarFlashActive) {
+                metarOut = metarOut.replace('<pre class="wx"', '<pre class="wx improved"');
               }
+              // dashed separator only when drilling and we reduced TAF to hits (handled later)
+              html += metarOut + '<br/>';
             } else {
               html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>`;
             }
           }
 
+          // --- TAF
+          const tafLines = parseTafLines(tafHTML);
+          const nextTafMap = new Map();
+
+          // compare each line vs previous
+          for (const line of tafLines) {
+            const prevLine = prev.taf.get(line.hash) || {hits:0, hadHit:false};
+            const worse = (!prevLine.hadHit && line.hasHit) || (line.hits > prevLine.hits);
+            const improvedNow = (prevLine.hadHit && !line.hasHit);
+            // record snapshot for next cycle
+            nextTafMap.set(line.hash, {hits: line.hits, hadHit: line.hasHit});
+            // schedule flash if improved
+            if (improvedNow) {
+              const k = keyFor(icao,'TAF', line.hash);
+              flashImproved.set(k, refreshCycle + 1);
+            }
+            // annotate class for current render
+            if (line.hasHit && worse) {
+              line.cls = line.cls.replace('taf-line', 'taf-line worse');
+            }
+          }
+
+          // save taf map into nextPrevState
+          const holder = nextPrevState.get(icao);
+          if (holder) holder.taf = nextTafMap;
+
+          // Render per mode
+          const modeIsDrill = (mode === 2);
+          let outLines = [];
           if (showT) {
-            if (tafHTML && tafHTML.trim()) {
-              html += tafHTML;
+            if (modeIsDrill) {
+              // keep only hit lines + flashed-improved lines
+              const hitLines = drillTafToHitLinesObj(tafLines);
+              outLines = hitLines.slice();
+
+              // add one-cycle improved flashes (non-hit) for this ICAO
+              for (const ln of tafLines) {
+                if (!ln.after && !ln.hasHit) {
+                  const k = keyFor(icao,'TAF', ln.hash);
+                  if ((flashImproved.get(k) ?? -1) >= refreshCycle) {
+                    // mark green
+                    ln.cls = ln.cls.replace('taf-line', 'taf-line improved');
+                    outLines.push(ln);
+                  }
+                }
+              }
+            } else if (mode === 1) {
+              // Filter (keep all lines but airport already filtered above)
+              outLines = tafLines.filter(l => !l.after);
+            } else {
+              // All
+              outLines = tafLines;
+            }
+
+            // Build HTML
+            if (outLines.length) {
+              // If we’re in Drill and we pruned anything, insert dashed separator after METAR
+              if (modeIsDrill && tafLines.length !== outLines.length) {
+                html = html.replace(/<br\/>$/, '') + '<div class="drill-sep"></div>';
+              }
+              html += outLines.map(l => `<div class="${l.cls}">${l.inner}</div>`).join('\n');
             } else if (mode !== 2) {
-              // Only show this message in All/Filter; in Drill a blank can mean "pruned to no-hit lines"
               html += `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>`;
             }
             html += '\n';
           }
 
           html += '<br/>'; // space between airports
+        } // end rows
+
+        // commit next prev state
+        prevState.clear();
+        for (const [k,v] of nextPrevState.entries()) prevState.set(k,v);
+        // expire flashes from older cycles
+        for (const [k,exp] of flashImproved.entries()) {
+          if (exp < refreshCycle) flashImproved.delete(k);
         }
+
         board.innerHTML = html || `<div class="muted">No results.</div>`;
       }
 
       const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
       if (ts) ts.textContent = `Updated: ${hh}:${mm} UTC`;
 
+      const ids = normalizedIds();
       const count = ids ? ids.split(',').filter(Boolean).length : 0;
       const cutoffBadge = ((applyTimeEl?.checked) && (shiftEndEl?.value))
         ? ` • Shift cutoff with buffer: ${parseDDHH(shiftEndEl.value)?.disp ?? ''}`
         : '';
       const modeTxt = Number(modeEl?.value||0)===0?'All':(Number(modeEl?.value||0)===1?'Filter':'Drill Down');
       if (summary) summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeTxt}${cutoffBadge}`;
+
+      // Successful refresh → bump cycle + run scan
+      refreshCycle += 1;
+      runScan();
+
     } catch(e){
       if (err){
         err.style.display='block';
