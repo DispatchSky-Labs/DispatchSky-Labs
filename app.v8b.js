@@ -196,7 +196,7 @@ window.addEventListener('error', (e) => {
       metar: showMetarEl?.checked ? '1' : '0',
       taf:   showTafEl?.checked   ? '1' : '0',
       alpha: alphaEl?.checked     ? '1' : '0',
-      filter: mode === 0 ? 'all' : 'trigger', // Filter/Drill request trigger set
+      filter: mode === 0 ? 'all' : 'trigger',
     });
 
     if (!quiet){ if (summary) summary.textContent='Loading…'; if (spin) spin.style.display='inline-block'; if (err){ err.style.display='none'; err.textContent=''; } }
@@ -236,22 +236,33 @@ window.addEventListener('error', (e) => {
             const original = tafHTML;
             const pruned = drillTafToHitLines(tafHTML);
             drilled = !!(original && pruned && original.trim() !== pruned.trim());
-            tafHTML = pruned; // show only hit lines
+            tafHTML = pruned; // only hit lines
           }
 
           // Build output
           if (showM) {
             if (metarHTML) {
-              html += metarHTML + '<br/>'; // visible gap after METAR
-              if (mode === 2 && drilled) html += '<div class="drill-sep"></div>';
+              if (mode === 2 && drilled) {
+                // No <br/> before dashed line to avoid extra top gap
+                html += metarHTML + '<div class="drill-sep"></div>';
+              } else {
+                html += metarHTML + '<br/>';
+              }
             } else {
               html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>`;
             }
           }
+
           if (showT) {
-            html += tafHTML ? tafHTML : `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>`;
+            if (tafHTML && tafHTML.trim()) {
+              html += tafHTML;
+            } else if (mode !== 2) {
+              // Only show this message in All/Filter; in Drill a blank can mean "pruned to no-hit lines"
+              html += `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>`;
+            }
             html += '\n';
           }
+
           html += '<br/>'; // space between airports
         }
         board.innerHTML = html || `<div class="muted">No results.</div>`;
