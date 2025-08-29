@@ -28,13 +28,12 @@ window.addEventListener('error', (e) => {
   const summary = $('#summary');
   const ts = $('#timestamp');
   const utcNow = $('#utcNow');
-  const scanBar = $('#refreshScan');
 
   /* ===== Delta state across refreshes ===== */
   let refreshCycle = 0;
-  // prevState: icao -> { metar: {hits, hadHit, hash}, taf: Map(hash -> {hits, hadHit}) }
+  // icao -> { metar:{hits,hadHit,hash}, taf: Map(hash->{hits,hadHit}) }
   const prevState = new Map();
-  // flashImproved: key -> expireCycle (one cycle visibility)
+  // key -> expireCycle (one-cycle flashes for improvements)
   const flashImproved = new Map();
   const keyFor = (icao, kind, hash) => `${icao}|${kind}|${hash||''}`;
   const countHits = (html) => (html && (html.match(/class="hit"/g) || []).length) || 0;
@@ -176,7 +175,7 @@ window.addEventListener('error', (e) => {
   }
   const containsActiveHit = (html) => /class="hit"/.test(html);
 
-  /* Break TAF html into line objects for delta logic */
+  /* Parse TAF html to line objects */
   function parseTafLines(tafHtml) {
     const out = [];
     (tafHtml || '').replace(/<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g, (m, rest, inner) => {
@@ -194,15 +193,43 @@ window.addEventListener('error', (e) => {
     return lines.filter(l => !l.after && l.hasHit);
   }
 
-  const escapeHtml = (s) => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-
-  /* ===== Refresh scan animation ===== */
+  /* ===== Refresh sweep animation on board (Web Animations API) ===== */
   function runScan(){
-    if (!scanBar) return;
-    scanBar.classList.remove('run'); // restart animation
-    // force reflow
-    void scanBar.offsetWidth;
-    scanBar.classList.add('run');
+    const container = board;
+    if (!container) return;
+
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const sweep = document.createElement('div');
+    sweep.className = 'refresh-sweep';
+    container.appendChild(sweep);
+
+    if (reduce) {
+      requestAnimationFrame(() => {
+        sweep.style.opacity = '.2';
+        setTimeout(() => {
+          sweep.style.opacity = '0';
+          setTimeout(() => sweep.remove(), 120);
+        }, 140);
+      });
+      return;
+    }
+
+    const distance = container.scrollHeight * 1.2;
+    const anim = sweep.animate([
+      { transform: 'translateY(-20%)', opacity: 0 },
+      { transform: 'translateY(0%)',   opacity: 0.9, offset: 0.08 },
+      { transform: `translateY(${distance}px)`, opacity: 0.9, offset: 0.92 },
+      { transform: `translateY(${distance + 60}px)`, opacity: 0 }
+    ], {
+      duration: 900,
+      easing: 'cubic-bezier(.22,.61,.36,1)',
+      fill: 'forwards'
+    });
+
+    anim.addEventListener('finish', () => {
+      sweep.remove();
+    });
   }
 
   /* ===== Fetch + render ===== */
@@ -245,119 +272,91 @@ window.addEventListener('error', (e) => {
           // Apply time filter
           tafHTML = applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, !!(applyTimeEl?.checked));
 
-          // Determine trigger at airport level (for filter/drill)
+          // Airport active?
           const tafActiveOnlyHtml = stripAfterShiftBlocks(tafHTML);
           const airportActive = (metarHTML && containsActiveHit(metarHTML)) ||
                                 (tafActiveOnlyHtml && containsActiveHit(tafActiveOnlyHtml));
 
           if ((mode === 1 || mode === 2) && !airportActive) {
-            // BUT: we may still show improved flashes in Drill/Filter — handled later
-            if (mode === 1) continue;
-            // For Drill, continue only if we have flashes
+            if (mode === 1) continue; // Filter mode hides airport if not active
+            // Drill: allow if there are pending green flashes
             const metarKey = keyFor(icao,'METAR','');
-            const hadMetarFlash = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
-            let hasTafFlash = false;
-            if (!hadMetarFlash) {
+            const metarFlash = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
+            let tafFlash = false;
+            if (!metarFlash) {
               for (const [k,v] of flashImproved.entries()) {
-                if (k.startsWith(`${icao}|TAF|`) && v >= refreshCycle) { hasTafFlash = true; break; }
+                if (k.startsWith(`${icao}|TAF|`) && v >= refreshCycle) { tafFlash = true; break; }
               }
             }
-            if (!hadMetarFlash && !hasTafFlash) continue;
+            if (!metarFlash && !tafFlash) continue;
           }
 
-          /* ===== Line-level analysis for deltas ===== */
-          // Previous snapshots
+          /* ===== Delta analysis ===== */
           const prev = prevState.get(icao) || { metar:{hits:0, hadHit:false, hash:''}, taf:new Map() };
 
-          // --- METAR
+          // METAR
           const metarHits = countHits(metarHTML);
           const metarHadHit = metarHits > 0;
           const metarHash = textHash(metarHTML);
           const metarPrev = prev.metar || {hits:0, hadHit:false, hash:''};
           const metarWorse = (!metarPrev.hadHit && metarHadHit) || (metarHits > metarPrev.hits);
           const metarImprovedNow = (metarPrev.hadHit && !metarHadHit);
+          nextPrevState.set(icao, { metar:{hits:metarHits, hadHit:metarHadHit, hash:metarHash}, taf:new Map() });
+          const metarKey = keyFor(icao,'METAR',''); if (metarImprovedNow) flashImproved.set(metarKey, refreshCycle + 1);
 
-          // persist next prev
-          nextPrevState.set(icao, { metar:{hits:metarHits, hadHit:metarHadHit, hash:metarHash}, taf: new Map() });
-
-          // Flash handling for METAR
-          const metarKey = keyFor(icao,'METAR','');
-          if (metarImprovedNow) flashImproved.set(metarKey, refreshCycle + 1);
-
-          // Decide whether to show METAR and with which classes
           if (showM) {
             if (metarHTML) {
               let metarOut = metarHTML;
               if (metarWorse) metarOut = metarOut.replace('<pre class="wx"', '<pre class="wx worse"');
-              // If improved (no longer a trigger) and still within flash window, paint green
-              const metarFlashActive = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
-              if (!metarHadHit && metarFlashActive) {
-                metarOut = metarOut.replace('<pre class="wx"', '<pre class="wx improved"');
-              }
-              // dashed separator only when drilling and we reduced TAF to hits (handled later)
+              const flashActive = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
+              if (!metarHadHit && flashActive) metarOut = metarOut.replace('<pre class="wx"', '<pre class="wx improved"');
               html += metarOut + '<br/>';
             } else {
               html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>`;
             }
           }
 
-          // --- TAF
+          // TAF
           const tafLines = parseTafLines(tafHTML);
           const nextTafMap = new Map();
-
-          // compare each line vs previous
           for (const line of tafLines) {
             const prevLine = prev.taf.get(line.hash) || {hits:0, hadHit:false};
             const worse = (!prevLine.hadHit && line.hasHit) || (line.hits > prevLine.hits);
             const improvedNow = (prevLine.hadHit && !line.hasHit);
-            // record snapshot for next cycle
             nextTafMap.set(line.hash, {hits: line.hits, hadHit: line.hasHit});
-            // schedule flash if improved
             if (improvedNow) {
               const k = keyFor(icao,'TAF', line.hash);
               flashImproved.set(k, refreshCycle + 1);
             }
-            // annotate class for current render
             if (line.hasHit && worse) {
               line.cls = line.cls.replace('taf-line', 'taf-line worse');
             }
           }
+          const holder = nextPrevState.get(icao); if (holder) holder.taf = nextTafMap;
 
-          // save taf map into nextPrevState
-          const holder = nextPrevState.get(icao);
-          if (holder) holder.taf = nextTafMap;
-
-          // Render per mode
           const modeIsDrill = (mode === 2);
           let outLines = [];
           if (showT) {
             if (modeIsDrill) {
-              // keep only hit lines + flashed-improved lines
               const hitLines = drillTafToHitLinesObj(tafLines);
               outLines = hitLines.slice();
-
-              // add one-cycle improved flashes (non-hit) for this ICAO
+              // append green flashes (non-hit) for one cycle
               for (const ln of tafLines) {
                 if (!ln.after && !ln.hasHit) {
                   const k = keyFor(icao,'TAF', ln.hash);
                   if ((flashImproved.get(k) ?? -1) >= refreshCycle) {
-                    // mark green
                     ln.cls = ln.cls.replace('taf-line', 'taf-line improved');
                     outLines.push(ln);
                   }
                 }
               }
             } else if (mode === 1) {
-              // Filter (keep all lines but airport already filtered above)
               outLines = tafLines.filter(l => !l.after);
             } else {
-              // All
               outLines = tafLines;
             }
 
-            // Build HTML
             if (outLines.length) {
-              // If we’re in Drill and we pruned anything, insert dashed separator after METAR
               if (modeIsDrill && tafLines.length !== outLines.length) {
                 html = html.replace(/<br\/>$/, '') + '<div class="drill-sep"></div>';
               }
@@ -368,16 +367,13 @@ window.addEventListener('error', (e) => {
             html += '\n';
           }
 
-          html += '<br/>'; // space between airports
-        } // end rows
+          html += '<br/>';
+        }
 
-        // commit next prev state
+        // commit snapshots and expire flashes
         prevState.clear();
         for (const [k,v] of nextPrevState.entries()) prevState.set(k,v);
-        // expire flashes from older cycles
-        for (const [k,exp] of flashImproved.entries()) {
-          if (exp < refreshCycle) flashImproved.delete(k);
-        }
+        for (const [k,exp] of flashImproved.entries()) if (exp < refreshCycle) flashImproved.delete(k);
 
         board.innerHTML = html || `<div class="muted">No results.</div>`;
       }
@@ -385,15 +381,15 @@ window.addEventListener('error', (e) => {
       const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
       if (ts) ts.textContent = `Updated: ${hh}:${mm} UTC`;
 
-      const ids = normalizedIds();
-      const count = ids ? ids.split(',').filter(Boolean).length : 0;
+      const ids2 = normalizedIds();
+      const count = ids2 ? ids2.split(',').filter(Boolean).length : 0;
       const cutoffBadge = ((applyTimeEl?.checked) && (shiftEndEl?.value))
         ? ` • Shift cutoff with buffer: ${parseDDHH(shiftEndEl.value)?.disp ?? ''}`
         : '';
       const modeTxt = Number(modeEl?.value||0)===0?'All':(Number(modeEl?.value||0)===1?'Filter':'Drill Down');
       if (summary) summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeTxt}${cutoffBadge}`;
 
-      // Successful refresh → bump cycle + run scan
+      // Successful refresh → bump cycle + run sweep
       refreshCycle += 1;
       runScan();
 
