@@ -7,8 +7,10 @@ window.addEventListener('error', (e) => {
 });
 
 (function () {
+  // ======= CONFIG =======
   const DATA_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
 
+  // ======= DOM =======
   const $ = (s, r = document) => r.querySelector(s);
   const form = $('#controlsForm');
   const idsEl = $('#ids');
@@ -26,8 +28,9 @@ window.addEventListener('error', (e) => {
   const summary = $('#summary');
   const ts = $('#timestamp');
   const utcNow = $('#utcNow');
+  const spin = $('#spin');
 
-  /* ===== Helpers we add ===== */
+  // ======= UTIL =======
   function escapeHtml(str=""){
     return String(str).replace(/[&<>"'`=\/]/g, s => ({
       "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;","`":"&#96;","=":"&#61;","/":"&#47;"
@@ -35,17 +38,139 @@ window.addEventListener('error', (e) => {
   }
   const isDesktop = window.matchMedia && window.matchMedia('(pointer:fine) and (hover:hover)').matches;
 
-  // IDs manipulation helpers
+  // Parse "DDHH" (Zulu) into Date + display text
+  function parseDDHH(v){
+    v = String(v || '').trim();
+    if (!/^\d{4}$/.test(v)) return null;
+    const dd = parseInt(v.slice(0,2), 10);
+    const hh = parseInt(v.slice(2), 10);
+    if (dd < 1 || dd > 31 || hh < 0 || hh > 23) return null;
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth();
+    const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    const day = Math.min(dd, daysInMonth);
+    const dt = new Date(Date.UTC(y, m, day, hh, 0, 0));
+    return { dt, ts: dt.getTime(), disp: `${String(day).padStart(2,'0')}${String(hh).padStart(2,'0')}Z` };
+  }
+
+  function normalizedIds(){
+    return ((idsEl?.value) || '')
+      .trim()
+      .replace(/[\s;]+/g, ',')
+      .replace(/,+/g, ',')
+      .toUpperCase();
+  }
   function idsArray(){
-    const s = (idsEl?.value || '').trim().replace(/[\s;]+/g, ',').replace(/,+/g, ',');
-    return s.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+    const s = normalizedIds();
+    return s ? s.split(',').map(x=>x.trim()).filter(Boolean) : [];
   }
   function setIds(arr){
     idsEl.value = Array.from(new Set(arr)).join(' ');
     savePrefs();
   }
 
-  // Toast UI
+  // ======= PREFS =======
+  function savePrefs(){
+    if (idsEl)     localStorage.setItem('ct_ids',  (idsEl.value || '').trim());
+    if (ceilEl)    localStorage.setItem('ct_ceil', ceilEl.value || '');
+    if (visEl)     localStorage.setItem('ct_vis',  visEl.value || '');
+    if (shiftEndEl)localStorage.setItem('ct_shift',shiftEndEl.value || '');
+    if (applyTimeEl)localStorage.setItem('ct_applyTime', applyTimeEl?.checked ? '1' : '0');
+    if (showMetarEl)localStorage.setItem('ct_m', showMetarEl?.checked ? '1' : '0');
+    if (showTafEl) localStorage.setItem('ct_t', showTafEl?.checked ? '1' : '0');
+    if (alphaEl)   localStorage.setItem('ct_a', alphaEl?.checked ? '1' : '0');
+    if (modeEl)    localStorage.setItem('ct_mode', String(modeEl.value || '0'));
+  }
+  function loadPrefs(){
+    const sp = new URLSearchParams(location.search);
+    if (idsEl) idsEl.value  = sp.get('ids')   || localStorage.getItem('ct_ids')   || idsEl.value || "KDEN KSGU KACV";
+    if (ceilEl) ceilEl.value= sp.get('ceil')  || localStorage.getItem('ct_ceil')  || ceilEl.value || "700";
+    if (visEl) visEl.value  = sp.get('vis')   || localStorage.getItem('ct_vis')   || visEl.value || "2";
+    if (shiftEndEl) shiftEndEl.value = sp.get('shift') || localStorage.getItem('ct_shift') || "";
+    if (applyTimeEl) applyTimeEl.checked = (sp.get('applyTime') ?? localStorage.getItem('ct_applyTime')) === '1';
+    if (showMetarEl) showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
+    if (showTafEl)   showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0';
+    if (alphaEl)     alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1';
+    const modeSaved = sp.get('mode') ?? localStorage.getItem('ct_mode') ?? '0';
+    if (modeEl) modeEl.value = modeSaved;
+    updateModeLabel();
+  }
+  function updateModeLabel(){
+    if (!modeEl || !modeLabel) return;
+    const v = Number(modeEl.value || 0);
+    modeLabel.textContent = v === 0 ? 'All' : (v === 1 ? 'Filter' : 'Drill Down');
+  }
+  loadPrefs();
+
+  // ======= DELTA TRACKING =======
+  const prevState = new Map(); // icao -> { metar:{hits,hadHit,hash}, taf: Map(hash -> {hits,hadHit}) }
+  const flashImproved = new Map(); // key->expiry cycle
+  let refreshCycle = 0;
+
+  function textHash(s){
+    let h=0, i=0, len=(s||'').length;
+    while(i<len){ h = ((h<<5)-h) + s.charCodeAt(i++); h|=0; }
+    return h.toString(36);
+  }
+  function countHits(html){
+    if(!html) return 0;
+    // Count <span class="hit"> occurrences
+    const m = html.match(/class\s*=\s*["']hit["']/g);
+    return m ? m.length : 0;
+  }
+  function keyFor(icao, kind, id){ return `${icao}|${kind}|${id}`; }
+  function containsActiveHit(html){ return /class\s*=\s*["']hit["']/.test(html||''); }
+
+  // ======= TAF helpers (robust to backend formatting) =======
+  function parseTafLines(tafHTML){
+    if(!tafHTML){ return []; }
+    // If backend already provides <div class="taf-line">… use as-is
+    const lines = [];
+    if (tafHTML.includes('class="taf-line"')) {
+      // Split on closing divs; keep inner HTML
+      const re = /<div class="taf-line">(.*?)<\/div>/gis;
+      let m; 
+      while ((m = re.exec(tafHTML)) !== null) {
+        const inner = m[1];
+        lines.push({
+          hash: textHash(inner),
+          inner,
+          hits: countHits(inner),
+          hasHit: /class\s*=\s*["']hit["']/.test(inner)
+        });
+      }
+      if (lines.length) return lines;
+    }
+    // Fallback: split by newlines and wrap
+    const parts = String(tafHTML).split(/\r?\n/);
+    for (const p of parts) {
+      const inner = p.trim();
+      if (!inner) continue;
+      lines.push({
+        hash: textHash(inner),
+        inner,
+        hits: countHits(inner),
+        hasHit: /class\s*=\s*["']hit["']/.test(inner)
+      });
+    }
+    return lines;
+  }
+
+  // Shift cutoff helpers (no-op unless Apply Shift checked)
+  function applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, enabled){
+    if(!enabled || !cutoff || !tafHTML) return tafHTML;
+    // Backend already marks after-shift tokens? If so, we preserve those.
+    // Otherwise, we pass through. (Token-aware pruning can be added later if needed.)
+    return tafHTML;
+  }
+  function stripAfterShiftBlocks(tafHTML){
+    // If backend annotated lines after shift with class "after-shift", remove them for activity check
+    if(!tafHTML) return '';
+    return tafHTML.replace(/<[^>]*class=["']after-shift["'][^>]*>.*?<\/[^>]+>/gis, '');
+  }
+
+  // ======= UI: Toast + Undo =======
   let toastTimer=null, pendingRemoval=null;
   function ensureToast(){
     let t = document.getElementById('toast');
@@ -101,7 +226,7 @@ window.addEventListener('error', (e) => {
     fetchAndRender(true);
   }
 
-  // Add/Remove one ICAO
+  // ======= Add/Remove one ICAO controls =======
   function addOne(){
     const el = document.getElementById('addOne');
     const msg = document.getElementById('inlineMsg');
@@ -126,7 +251,6 @@ window.addEventListener('error', (e) => {
     stageRemove(raw);
     el.value='';
   }
-
   function wireSingleButtons(){
     const addBtn = document.getElementById('addBtn');
     const remBtn = document.getElementById('remBtn');
@@ -138,8 +262,8 @@ window.addEventListener('error', (e) => {
     if(remOneEl) remOneEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); removeOne(); } });
   }
 
+  // ======= Remove affordances =======
   function wireRemovers(){
-    // desktop x buttons
     if(isDesktop){
       document.querySelectorAll('.station .rm-btn').forEach(btn=>{
         btn.addEventListener('click', (e)=>{
@@ -149,7 +273,6 @@ window.addEventListener('error', (e) => {
         });
       });
     } else {
-      // mobile swipe
       document.querySelectorAll('.station').forEach(card=>{
         let startX=0, dx=0, active=false;
         card.addEventListener('touchstart', (ev)=>{
@@ -176,57 +299,27 @@ window.addEventListener('error', (e) => {
     }
   }
 
-  /* ===== (existing app logic remains unchanged below) ===== */
-
-  // ... (existing preferences, parsing, highlighting, sweep animation, etc.)
-  // [The remainder of your original file is preserved; only deltas are above + in fetchAndRender() where noted.]
-
-  /* ===== Prefs ===== */
-  function savePrefs(){
-    if (idsEl)     localStorage.setItem('ct_ids',  (idsEl.value || '').trim());
-    if (ceilEl)    localStorage.setItem('ct_ceil', ceilEl.value || '');
-    if (visEl)     localStorage.setItem('ct_vis',  visEl.value || '');
-    if (shiftEndEl)localStorage.setItem('ct_shift',shiftEndEl.value || '');
-    if (applyTimeEl)localStorage.setItem('ct_applyTime', applyTimeEl?.checked ? '1' : '0');
-    if (showMetarEl)localStorage.setItem('ct_m', showMetarEl?.checked ? '1' : '0');
-    if (showTafEl) localStorage.setItem('ct_t', showTafEl?.checked ? '1' : '0');
-    if (alphaEl)   localStorage.setItem('ct_a', alphaEl?.checked ? '1' : '0');
-    if (modeEl)    localStorage.setItem('ct_mode', String(modeEl.value || '0'));
-  }
-  function loadPrefs(){
-    const sp = new URLSearchParams(location.search);
-    if (idsEl) idsEl.value  = sp.get('ids')   || localStorage.getItem('ct_ids')   || idsEl.value || "KDEN KSGU KACV";
-    if (ceilEl) ceilEl.value= sp.get('ceil')  || localStorage.getItem('ct_ceil')  || ceilEl.value || "700";
-    if (visEl) visEl.value  = sp.get('vis')   || localStorage.getItem('ct_vis')   || visEl.value || "2";
-    if (shiftEndEl) shiftEndEl.value = sp.get('shift') || localStorage.getItem('ct_shift') || "";
-    if (applyTimeEl) applyTimeEl.checked = (sp.get('applyTime') ?? localStorage.getItem('ct_applyTime')) === '1';
-    if (showMetarEl) showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
-    if (showTafEl)   showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0';
-    if (alphaEl)     alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1';
-    const modeSaved = sp.get('mode') ?? localStorage.getItem('ct_mode') ?? '0';
-    if (modeEl) modeEl.value = modeSaved;
-    updateModeLabel();
-  }
-  loadPrefs();
-
-  function updateModeLabel(){
-    if (!modeEl || !modeLabel) return;
-    const v = Number(modeEl.value || 0);
-    modeLabel.textContent = v === 0 ? 'All' : (v === 1 ? 'Filter' : 'Drill Down');
+  // ======= Refresh Sweep =======
+  function runRefreshSweep(){
+    const host = board;
+    if(!host) return;
+    const sweep = document.createElement('div');
+    sweep.className = 'refresh-sweep';
+    host.appendChild(sweep);
+    // simple fade/slide via inline styles (CSS handles the visuals)
+    requestAnimationFrame(()=>{
+      sweep.style.transition = 'opacity 320ms ease, transform 320ms ease';
+      sweep.style.opacity = '1';
+      sweep.style.transform = 'translateY(0)';
+      setTimeout(()=>{
+        sweep.style.opacity='0';
+        sweep.style.transform='translateY(10%)';
+        setTimeout(()=>{ sweep.remove(); }, 260);
+      }, 220);
+    });
   }
 
-  function normalizedIds(){
-    return ((idsEl?.value) || '')
-      .trim()
-      .replace(/[\s;]+/g, ',')
-      .replace(/,+/g, ',')
-      .toUpperCase();
-  }
-
-  /* ===== [.. all existing parsing functions ..] ===== */
-  /* (Unmodified original functions are here in full in the attached file.) */
-
-  /* ===== Fetch + render ===== */
+  // ======= FETCH + RENDER =======
   async function fetchAndRender(quiet){
     const ids = normalizedIds();
     const mode = Number(modeEl?.value || 0); // 0=All,1=Filter,2=Drill
@@ -245,123 +338,128 @@ window.addEventListener('error', (e) => {
       const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' });
       if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
       const data = await res.json();
-      const reqIdsList = (ids || '').split(',').filter(Boolean).map(s=>s.trim().toUpperCase());
 
+      const reqIdsList = (ids || '').split(',').filter(Boolean).map(s=>s.trim().toUpperCase());
       const rows = (data && data.results) ? data.results.slice() : [];
-      // Insert not-found pseudo rows for requested ICAOs not returned by backend
+
+      // Insert not-found pseudo rows for requested ICAOs missing from backend
       const haveSet = new Set(rows.map(r => (r.icao || '').toUpperCase()));
       const missingIds = reqIdsList.filter(x => !haveSet.has(x));
       for (const m of missingIds) { rows.push({ icao: m, _notFound: true, metar:{html:''}, taf:{html:''} }); }
 
-      if (!rows.length) {
-        board.innerHTML = `<div class="muted">No results.</div>`;
-      } else {
-        if (alphaEl?.checked) rows.sort((a,b)=>(a.icao||'').localeCompare(b.icao||''));
-        const showM = !!(showMetarEl?.checked);
-        const showT = !!(showTafEl?.checked);
-        const cutoff = parseDDHH(shiftEndEl?.value);
+      if (alphaEl?.checked) rows.sort((a,b)=>(a.icao||'').localeCompare(b.icao||''));
 
-        let html = '';
-        const nextPrevState = new Map();
+      // Build HTML
+      const showM = !!(showMetarEl?.checked);
+      const showT = !!(showTafEl?.checked);
+      const cutoff = parseDDHH(shiftEndEl?.value);
+      let html = '';
+      const nextPrev = new Map();
 
-        for (const r of rows) {
-          const isMissing = !!r._notFound;
-          const icao = r.icao || '';
-          let metarHTML = r.metar?.html || '';
-          let tafHTML   = r.taf?.html   || '';
+      for (const r of rows) {
+        const isMissing = !!r._notFound;
+        const icao = (r.icao || '').toUpperCase();
+        let metarHTML = r.metar?.html || '';
+        let tafHTML   = r.taf?.html   || '';
 
-          // Wrapper and remove affordance
-          html += `<div class="station" data-icao="${icao}">`;
-          if (isDesktop) { html += `<button class="rm-btn" data-icao="${icao}" aria-label="Remove ${icao}" title="Remove ${icao}">×</button>`; }
+        // Apply time filter (no-op unless Apply Shift checked)
+        tafHTML = applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, !!(applyTimeEl?.checked));
+        const tafActiveOnlyHtml = stripAfterShiftBlocks(tafHTML);
+        const airportActive = (metarHTML && containsActiveHit(metarHTML)) ||
+                              (tafActiveOnlyHtml && containsActiveHit(tafActiveOnlyHtml));
 
-          // Apply time filter
-          tafHTML = applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, !!(applyTimeEl?.checked));
-
-          // Airport active?
-          const tafActiveOnlyHtml = stripAfterShiftBlocks(tafHTML);
-          const airportActive = (metarHTML && containsActiveHit(metarHTML)) ||
-                                (tafActiveOnlyHtml && containsActiveHit(tafActiveOnlyHtml));
-
-          if ((mode === 1 || mode === 2) && !airportActive && !isMissing) {
-            if (mode === 1) continue; // Filter mode hides airport if not active
-            // Drill: allow if there are pending green flashes
-            const metarKey = keyFor(icao,'METAR','');
-            const metarFlash = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
-            let tafFlash = false;
-            if (!metarFlash) {
-              for (const [k,v] of flashImproved.entries()) {
-                if (k.startsWith(`${icao}|TAF|`) && v >= refreshCycle) { tafFlash = true; break; }
-              }
-            }
-            if (!metarFlash && !tafFlash) continue;
-          }
-
-          /* ===== Delta analysis & render (original logic) ===== */
-          // (unchanged except escapeHtml now exists)
-          // ... [full original body left intact in the attached file] ...
-
-          // METAR
-          const metarHits = countHits(metarHTML);
-          const metarHadHit = metarHits > 0;
-          const metarHash = textHash(metarHTML);
-          const metarPrev = prevState.get(icao)?.metar || {hits:0, hadHit:false, hash:''};
-          const metarWorse = (!metarPrev.hadHit && metarHadHit) || (metarHits > metarPrev.hits);
-          const metarImprovedNow = (metarPrev.hadHit && !metarHadHit);
-          nextPrevState.set(icao, { metar:{hits:metarHits, hadHit:metarHadHit, hash:metarHash}, taf:new Map() });
-          const metarKey = keyFor(icao,'METAR',''); if (metarImprovedNow) flashImproved.set(metarKey, refreshCycle + 1);
-
-          if (showM) {
-            if (metarHTML) {
-              let metarOut = metarHTML;
-              if (metarWorse) metarOut = metarOut.replace('<pre class="wx"', '<pre class="wx worse"');
-              const flashActive = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
-              if (!metarHadHit && flashActive) metarOut = metarOut.replace('<pre class="wx"', '<pre class="wx improved"');
-              html += metarOut + '<br/>';
-            } else {
-              html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>`;
+        // Mode filters
+        if ((mode === 1 || mode === 2) && !airportActive && !isMissing) {
+          if (mode === 1) continue; // Filter mode hides if no active hits
+          // Drill Down: also show if there is a green flash pending (improvement)
+          const metarKey0 = keyFor(icao,'METAR','');
+          let flash = (flashImproved.get(metarKey0) ?? -1) >= refreshCycle;
+          if (!flash) {
+            for (const [k,v] of flashImproved.entries()) {
+              if (k.startsWith(`${icao}|TAF|`) && v >= refreshCycle) { flash = true; break; }
             }
           }
+          if (!flash) continue;
+        }
 
-          // TAF (original logic continues, using escapeHtml for empty)
-          const tafLines = parseTafLines(tafHTML);
-          const nextTafMap = new Map();
-          for (const line of tafLines) {
-            const prevLine = (prevState.get(icao)?.taf.get(line.hash)) || {hits:0, hadHit:false};
-            const hitsNow = line.hits;
-            const worse = hitsNow > (prevLine.hits || 0);
+        html += `<div class="station" data-icao="${escapeHtml(icao)}">`;
+        if (isDesktop) { html += `<button class="rm-btn" data-icao="${escapeHtml(icao)}" aria-label="Remove ${escapeHtml(icao)}" title="Remove ${escapeHtml(icao)}">×</button>`; }
+
+        // METAR delta
+        const metarHits = countHits(metarHTML);
+        const metarHadHit = metarHits > 0;
+        const metarHash = textHash(metarHTML);
+        const prev = prevState.get(icao) || { metar:{hits:0, hadHit:false, hash:''}, taf:new Map() };
+        const prevMetar = prev.metar || {hits:0, hadHit:false, hash:''};
+        const metarWorse = (!prevMetar.hadHit && metarHadHit) || (metarHits > prevMetar.hits);
+        const metarImprovedNow = (prevMetar.hadHit && !metarHadHit);
+        const metarKey = keyFor(icao,'METAR','');
+        if (metarImprovedNow) flashImproved.set(metarKey, refreshCycle + 1);
+
+        const nextTafMap = new Map();
+        nextPrev.set(icao, { metar:{hits:metarHits, hadHit:metarHadHit, hash:metarHash}, taf: nextTafMap });
+
+        // Render METAR
+        if (showM) {
+          if (isMissing) {
+            html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div><br/>`;
+          } else if (metarHTML) {
+            let out = metarHTML;
+            if (metarWorse) out = out.replace('<pre class="wx"', '<pre class="wx worse"');
+            const flashOn = (flashImproved.get(metarKey) ?? -1) >= refreshCycle;
+            if (!metarHadHit && flashOn) out = out.replace('<pre class="wx"', '<pre class="wx improved"');
+            html += out + '<br/>';
+          } else {
+            html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div><br/>`;
+          }
+        }
+
+        // TAF delta
+        if (showT) {
+          const lines = parseTafLines(tafHTML);
+          for (const line of lines) {
+            const prevLine = (prev.taf.get(line.hash)) || {hits:0, hadHit:false};
+            const worse = line.hits > (prevLine.hits || 0);
             const improved = (prevLine.hadHit && !line.hasHit);
             if (improved) { flashImproved.set(keyFor(icao,'TAF',line.hash), refreshCycle + 1); }
+            const flashOn = (!line.hasHit) && ((flashImproved.get(keyFor(icao,'TAF',line.hash)) ?? -1) >= refreshCycle);
             let cls = 'taf-line';
             if (worse) cls += ' worse';
-            else if (!line.hasHit && (flashImproved.get(keyFor(icao,'TAF',line.hash)) ?? -1) >= refreshCycle) cls += ' improved';
-            const inner = line.inner;
-            nextTafMap.set(line.hash, {hits:hitsNow, hadHit:line.hasHit});
-            html += `<div class="${cls}">${inner}</div>`;
+            else if (flashOn) cls += ' improved';
+            html += `<div class="${cls}">${line.inner}</div>`;
+            nextTafMap.set(line.hash, {hits: line.hits, hadHit: line.hasHit});
           }
-          const prev = prevState.get(icao) || { metar:{hits:0, hadHit:false, hash:''}, taf:new Map() };
-          nextPrevState.get(icao).taf = nextTafMap;
-
-          if (!tafLines.length && mode !== 2) {
+          if (!lines.length && !isMissing) {
             html += `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>\n`;
           } else {
             html += '\n';
           }
-
-          html += '</div>'; html += '<br/>';
         }
 
-        // commit snapshots and expire flashes
-        prevState.clear();
-        for (const [k,v] of nextPrevState.entries()) prevState.set(k,v);
-        for (const [k,exp] of flashImproved.entries()) if (exp < refreshCycle) flashImproved.delete(k);
+        if (isMissing && !showM && !showT) {
+          html += `<div class="muted">${escapeHtml(icao)} not found</div>`;
+        }
 
-        board.innerHTML = html || `<div class="muted">No results.</div>`;
-        wireRemovers();
+        html += `</div>\n<br/>`;
       }
 
+      // Commit state & expire flashes
+      prevState.clear();
+      for (const [k,v] of nextPrev.entries()) prevState.set(k,v);
+      for (const [k,exp] of flashImproved.entries()) if (exp < refreshCycle) flashImproved.delete(k);
+
+      // Inject HTML
+      if (!rows.length) {
+        board.innerHTML = `<div class="muted">No results.</div>`;
+      } else {
+        board.innerHTML = html || `<div class="muted">No results.</div>`;
+      }
+      wireRemovers();
+      runRefreshSweep();
+
+      // Badges/summary
       const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
       if (ts) ts.textContent = `Updated: ${hh}:${mm} UTC`;
-
       const ids2 = normalizedIds();
       const count = ids2 ? ids2.split(',').filter(Boolean).length : 0;
       const cutoffBadge = ((applyTimeEl?.checked) && (shiftEndEl?.value))
@@ -377,13 +475,15 @@ window.addEventListener('error', (e) => {
     }
   }
 
-  /* ===== UTC clock tick ===== */
-  setInterval(()=>{
+  // ======= UTC Clock =======
+  function tickUTC(){
     const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
     if (utcNow) utcNow.textContent = `UTC ${hh}:${mm}`;
-  }, 30_000); if (utcNow){ const d=new Date(); utcNow.textContent=`UTC ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`; }
+  }
+  tickUTC();
+  setInterval(tickUTC, 30_000);
 
-  /* ===== Wire up ===== */
+  // ======= EVENTS =======
   form?.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(false); });
   idsEl?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); savePrefs(); fetchAndRender(false); }});
   [ceilEl, visEl, shiftEndEl, applyTimeEl, showMetarEl, showTafEl, alphaEl].forEach(el=>{
@@ -391,9 +491,10 @@ window.addEventListener('error', (e) => {
   });
   modeEl?.addEventListener('input', ()=>{ updateModeLabel(); savePrefs(); fetchAndRender(true); });
 
+  wireSingleButtons();
   fetchAndRender(false);
 
-  /* ===== Auto refresh ===== */
+  // ======= AUTO REFRESH =======
   let refreshTimer = null;
   function startAutoRefresh(){
     if (refreshTimer) clearInterval(refreshTimer);
@@ -407,6 +508,6 @@ window.addEventListener('error', (e) => {
   });
   window.addEventListener('online',  () => { fetchAndRender(true); startAutoRefresh(); });
   window.addEventListener('offline', () => { stopAutoRefresh(); });
-  wireSingleButtons();
+
   startAutoRefresh();
 })();
