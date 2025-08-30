@@ -115,20 +115,44 @@ window.addEventListener('error', (e) => {
   }
   function countHits(html){
     if(!html) return 0;
-    // Count <span class="hit"> occurrences
     const m = html.match(/class\s*=\s*["']hit["']/g);
     return m ? m.length : 0;
   }
   function keyFor(icao, kind, id){ return `${icao}|${kind}|${id}`; }
   function containsActiveHit(html){ return /class\s*=\s*["']hit["']/.test(html||''); }
 
-  // ======= TAF helpers (robust to backend formatting) =======
+  // ======= Payload normalization =======
+  function wrapMetarPre(txt){
+    return `<pre class="wx">${escapeHtml(String(txt || '').trim())}</pre>`;
+  }
+  function normalizeMetar(metar){
+    if (!metar) return '';
+    if (typeof metar === 'string') return wrapMetarPre(metar);
+    if (Array.isArray(metar))      return metar.length ? wrapMetarPre(metar.join('\n')) : '';
+    if (typeof metar === 'object'){
+      if (typeof metar.html === 'string' && metar.html.trim()) return metar.html;
+      if (typeof metar.data === 'string' && metar.data.trim()) return wrapMetarPre(metar.data);
+      if (typeof metar.text === 'string' && metar.text.trim()) return wrapMetarPre(metar.text);
+    }
+    return '';
+  }
+  function normalizeTaf(taf){
+    if (!taf) return '';
+    if (typeof taf === 'string') return taf;         // may already be HTML
+    if (Array.isArray(taf))      return taf.join('\n');
+    if (typeof taf === 'object'){
+      if (typeof taf.html === 'string') return taf.html;
+      if (typeof taf.data === 'string') return taf.data;
+      if (typeof taf.text === 'string') return taf.text;
+    }
+    return '';
+  }
+
+  // ======= TAF helpers =======
   function parseTafLines(tafHTML){
     if(!tafHTML){ return []; }
-    // If backend already provides <div class="taf-line">… use as-is
     const lines = [];
     if (tafHTML.includes('class="taf-line"')) {
-      // Split on closing divs; keep inner HTML
       const re = /<div class="taf-line">(.*?)<\/div>/gis;
       let m; 
       while ((m = re.exec(tafHTML)) !== null) {
@@ -142,7 +166,6 @@ window.addEventListener('error', (e) => {
       }
       if (lines.length) return lines;
     }
-    // Fallback: split by newlines and wrap
     const parts = String(tafHTML).split(/\r?\n/);
     for (const p of parts) {
       const inner = p.trim();
@@ -160,12 +183,9 @@ window.addEventListener('error', (e) => {
   // Shift cutoff helpers (no-op unless Apply Shift checked)
   function applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, enabled){
     if(!enabled || !cutoff || !tafHTML) return tafHTML;
-    // Backend already marks after-shift tokens? If so, we preserve those.
-    // Otherwise, we pass through. (Token-aware pruning can be added later if needed.)
-    return tafHTML;
+    return tafHTML; // placeholder: backend may already apply cutoff styling
   }
   function stripAfterShiftBlocks(tafHTML){
-    // If backend annotated lines after shift with class "after-shift", remove them for activity check
     if(!tafHTML) return '';
     return tafHTML.replace(/<[^>]*class=["']after-shift["'][^>]*>.*?<\/[^>]+>/gis, '');
   }
@@ -306,7 +326,6 @@ window.addEventListener('error', (e) => {
     const sweep = document.createElement('div');
     sweep.className = 'refresh-sweep';
     host.appendChild(sweep);
-    // simple fade/slide via inline styles (CSS handles the visuals)
     requestAnimationFrame(()=>{
       sweep.style.transition = 'opacity 320ms ease, transform 320ms ease';
       sweep.style.opacity = '1';
@@ -323,6 +342,7 @@ window.addEventListener('error', (e) => {
   async function fetchAndRender(quiet){
     const ids = normalizedIds();
     const mode = Number(modeEl?.value || 0); // 0=All,1=Filter,2=Drill
+    // IMPORTANT: always request full data so METARs are present even without triggers
     const params = new URLSearchParams({
       ids,
       ceil: ceilEl?.value ?? '',
@@ -330,7 +350,7 @@ window.addEventListener('error', (e) => {
       metar: showMetarEl?.checked ? '1' : '0',
       taf:   showTafEl?.checked   ? '1' : '0',
       alpha: alphaEl?.checked     ? '1' : '0',
-      filter: mode === 0 ? 'all' : 'trigger',
+      filter: 'all' // <— do not use 'trigger' here; we filter TAF lines client-side
     });
 
     if (!quiet){ if (summary) summary.textContent='Loading...'; if (spin) spin.style.display='inline-block'; if (err){ err.style.display='none'; err.textContent=''; } }
@@ -345,11 +365,10 @@ window.addEventListener('error', (e) => {
       // Insert not-found pseudo rows for requested ICAOs missing from backend
       const haveSet = new Set(rows.map(r => (r.icao || '').toUpperCase()));
       const missingIds = reqIdsList.filter(x => !haveSet.has(x));
-      for (const m of missingIds) { rows.push({ icao: m, _notFound: true, metar:{html:''}, taf:{html:''} }); }
+      for (const m of missingIds) { rows.push({ icao: m, _notFound: true, metar:null, taf:null }); }
 
       if (alphaEl?.checked) rows.sort((a,b)=>(a.icao||'').localeCompare(b.icao||''));
 
-      // Build HTML
       const showM = !!(showMetarEl?.checked);
       const showT = !!(showTafEl?.checked);
       const cutoff = parseDDHH(shiftEndEl?.value);
@@ -359,8 +378,9 @@ window.addEventListener('error', (e) => {
       for (const r of rows) {
         const isMissing = !!r._notFound;
         const icao = (r.icao || '').toUpperCase();
-        let metarHTML = r.metar?.html || '';
-        let tafHTML   = r.taf?.html   || '';
+
+        let metarHTML = normalizeMetar(r.metar);
+        let tafHTML   = normalizeTaf(r.taf);
 
         // Apply time filter (no-op unless Apply Shift checked)
         tafHTML = applyTimeFilterToTafHtmlByTokens(tafHTML, cutoff, !!(applyTimeEl?.checked));
@@ -368,7 +388,7 @@ window.addEventListener('error', (e) => {
         const airportActive = (metarHTML && containsActiveHit(metarHTML)) ||
                               (tafActiveOnlyHtml && containsActiveHit(tafActiveOnlyHtml));
 
-        // Mode filters
+        // Client-side mode filtering
         if ((mode === 1 || mode === 2) && !airportActive && !isMissing) {
           if (mode === 1) continue; // Filter mode hides if no active hits
           // Drill Down: also show if there is a green flash pending (improvement)
@@ -402,7 +422,7 @@ window.addEventListener('error', (e) => {
         // Render METAR
         if (showM) {
           if (isMissing) {
-            html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div><br/>`;
+            html += `<div class="muted">${escapeHtml(icao)} not found</div><br/>`;
           } else if (metarHTML) {
             let out = metarHTML;
             if (metarWorse) out = out.replace('<pre class="wx"', '<pre class="wx worse"');
@@ -414,7 +434,7 @@ window.addEventListener('error', (e) => {
           }
         }
 
-        // TAF delta
+        // TAF (only lines with hits are relevant for Drill; parse handles both)
         if (showT) {
           const lines = parseTafLines(tafHTML);
           for (const line of lines) {
@@ -436,10 +456,6 @@ window.addEventListener('error', (e) => {
           }
         }
 
-        if (isMissing && !showM && !showT) {
-          html += `<div class="muted">${escapeHtml(icao)} not found</div>`;
-        }
-
         html += `</div>\n<br/>`;
       }
 
@@ -449,11 +465,7 @@ window.addEventListener('error', (e) => {
       for (const [k,exp] of flashImproved.entries()) if (exp < refreshCycle) flashImproved.delete(k);
 
       // Inject HTML
-      if (!rows.length) {
-        board.innerHTML = `<div class="muted">No results.</div>`;
-      } else {
-        board.innerHTML = html || `<div class="muted">No results.</div>`;
-      }
+      board.innerHTML = rows.length ? (html || `<div class="muted">No results.</div>`) : `<div class="muted">No results.</div>`;
       wireRemovers();
       runRefreshSweep();
 
@@ -491,7 +503,18 @@ window.addEventListener('error', (e) => {
   });
   modeEl?.addEventListener('input', ()=>{ updateModeLabel(); savePrefs(); fetchAndRender(true); });
 
-  wireSingleButtons();
+  // Wire tiny Add/Remove controls
+  (function wireSingleButtons(){
+    const addBtn = document.getElementById('addBtn');
+    const remBtn = document.getElementById('remBtn');
+    const addOneEl = document.getElementById('addOne');
+    const remOneEl = document.getElementById('remOne');
+    if(addBtn) addBtn.addEventListener('click', (e)=>{ e.preventDefault(); addOne(); });
+    if(remBtn) remBtn.addEventListener('click', (e)=>{ e.preventDefault(); removeOne(); });
+    if(addOneEl) addOneEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); addOne(); } });
+    if(remOneEl) remOneEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); removeOne(); } });
+  })();
+
   fetchAndRender(false);
 
   // ======= AUTO REFRESH =======
@@ -508,6 +531,43 @@ window.addEventListener('error', (e) => {
   });
   window.addEventListener('online',  () => { fetchAndRender(true); startAutoRefresh(); });
   window.addEventListener('offline', () => { stopAutoRefresh(); });
+
+  // Remove affordances after first render
+  function wireRemovers(){
+    if(isDesktop){
+      document.querySelectorAll('.station .rm-btn').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.preventDefault();
+          const icao = btn.getAttribute('data-icao');
+          stageRemove(icao);
+        });
+      });
+    } else {
+      document.querySelectorAll('.station').forEach(card=>{
+        let startX=0, dx=0, active=false;
+        card.addEventListener('touchstart', (ev)=>{
+          startX = ev.touches[0].clientX; active=true;
+          card.classList.add('swiping');
+        }, {passive:true});
+        card.addEventListener('touchmove', (ev)=>{
+          if(!active) return;
+          dx = ev.touches[0].clientX - startX;
+          if(dx<0) card.style.transform = `translateX(${dx}px)`;
+        }, {passive:true});
+        card.addEventListener('touchend', ()=>{
+          card.classList.remove('swiping');
+          if(dx < -60){
+            const icao = card.getAttribute('data-icao'); 
+            card.classList.add('swiped');
+            stageRemove(icao);
+          } else {
+            card.style.transform='';
+          }
+          active=false; dx=0;
+        });
+      });
+    }
+  }
 
   startAutoRefresh();
 })();
