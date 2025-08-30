@@ -104,6 +104,22 @@
     footer a:hover { text-decoration:underline; }
 
     .instructions { padding: 14px 16px; font-size: 14px; color: var(--muted); line-height: 1.4; }
+
+    /* Remove affordances & station wrapper */
+    .station { position: relative; border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin:8px 0; background: #fff; }
+    .theme-dark .station { background:#0d1218; }
+    .rm-btn { position:absolute; top:8px; right:8px; width:28px; height:28px; border:1px solid var(--border); border-radius:6px; background:transparent; color:inherit; cursor:pointer; }
+    .rm-btn:hover { background:rgba(0,0,0,0.04); }
+    .pending-remove { opacity:0.5; }
+    /* swipe feedback */
+    .station.swiping { transition:none; }
+    .station.swiped { transform:translateX(-100%); opacity:0; transition:transform .2s ease, opacity .2s ease; }
+    /* inline row for Add/Remove small boxes */
+    .row-inline { display:flex; gap:6px; align-items:center; }
+    /* toast */
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111;color:#fff;
+           padding:10px 14px;border-radius:8px;display:none;gap:12px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:1000}
+    .toast button{background:transparent;border:1px solid #fff;color:#fff;padding:4px 8px;border-radius:6px;cursor:pointer}
   </style>
 </head>
 <body class="theme-light">
@@ -128,6 +144,23 @@
       <input id="ids" class="ctl w-ids" placeholder="KDEN KSGU KACV" title="Enter ICAO IDs separated by comma, space, or semicolon">
     </div>
 
+    <!-- New: Add/Remove one ICAO -->
+    <div class="field">
+      <label for="addOne">Add one</label>
+      <div class="row-inline">
+        <input id="addOne" class="ctl w4" type="text" inputmode="latin-prose" maxlength="4" placeholder="KDEN">
+        <button id="addBtn" class="btn" type="button">Add</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="remOne">Remove one</label>
+      <div class="row-inline">
+        <input id="remOne" class="ctl w4" type="text" inputmode="latin-prose" maxlength="4" placeholder="KDEN">
+        <button id="remBtn" class="btn" type="button">Remove</button>
+      </div>
+    </div>
+    <div class="field"><label>&nbsp;</label><div id="inlineMsg" class="muted" aria-live="polite"></div></div>
+
     <div class="field">
       <label for="ceil">Ceiling (in feet)</label>
       <input id="ceil" class="ctl w4" type="text" inputmode="numeric" pattern="[0-9]{1,4}" maxlength="4" value="700">
@@ -135,7 +168,7 @@
 
     <div class="field">
       <label for="vis">Visibility (SM)</label>
-      <input id="vis" class="ctl w3" type="text" inputmode="decimal" pattern="^[0-9]{1,2}(\.[0-9])?$" maxlength="3" value="2">
+      <input id="vis" class="ctl w3" type="text" inputmode="decimal" pattern="^[0-9]{1,2}(\\.[0-9])?$" maxlength="3" value="2">
     </div>
 
     <div class="field">
@@ -178,6 +211,11 @@
     <a href="support.html">Support</a>
     <a href="https://discord.gg/pn8uC2eV" target="_blank" rel="noopener">Discord</a>
   </footer>
+
+  <!-- Toast container -->
+  <div id="toast" class="toast" role="status" aria-live="assertive" style="display:none">
+    <span id="toastMsg"></span><button id="undoBtn" type="button">Undo</button>
+  </div>
 
   <script defer src="app.v8b.js?v=2025-08-29-5"></script>
 </body>
