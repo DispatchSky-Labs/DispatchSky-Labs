@@ -14,10 +14,17 @@ window.addEventListener('error', (e) => {
   const $ = (s, r = document) => r.querySelector(s);
   const form       = $('#controlsForm');
   const idsEl      = $('#ids');
+  const addOneEl   = $('#addOne');
+  const remOneEl   = $('#remOne');
+  const addBtn     = $('#addBtn');
+  const remBtn     = $('#remBtn');
+  const inlineMsg  = $('#inlineMsg');
+
   const ceilEl     = $('#ceil');
   const visEl      = $('#vis');
   const shiftEndEl = $('#shiftEnd');
   const applyTimeEl= $('#applyTime');
+  const adverseEl  = $('#adverse');       // NEW
   const showMetarEl= $('#showMetar');
   const showTafEl  = $('#showTaf');
   const alphaEl    = $('#alpha');
@@ -71,6 +78,7 @@ window.addEventListener('error', (e) => {
     localStorage.setItem('ct_vis',  visEl?.value || '');
     localStorage.setItem('ct_shift', shiftEndEl?.value.trim() || '');
     localStorage.setItem('ct_applyTime', applyTimeEl?.checked ? '1' : '0');
+    localStorage.setItem('ct_adv', adverseEl?.checked ? '1' : '0'); // NEW
     localStorage.setItem('ct_m', showMetarEl?.checked ? '1' : '0');
     localStorage.setItem('ct_t', showTafEl?.checked   ? '1' : '0');
     localStorage.setItem('ct_a', alphaEl?.checked     ? '1' : '0');
@@ -84,6 +92,7 @@ window.addEventListener('error', (e) => {
     if (visEl)      visEl.value      = sp.get('vis')   || localStorage.getItem('ct_vis')   || visEl.value || "2";
     if (shiftEndEl) shiftEndEl.value = sp.get('shift') || localStorage.getItem('ct_shift') || "";
     if (applyTimeEl) applyTimeEl.checked = (sp.get('applyTime') ?? localStorage.getItem('ct_applyTime')) === '1';
+    if (adverseEl)   adverseEl.checked   = (sp.get('adv') ?? localStorage.getItem('ct_adv')) === '1';
     if (showMetarEl) showMetarEl.checked = (sp.get('m') ?? localStorage.getItem('ct_m')) !== '0';
     if (showTafEl)   showTafEl.checked   = (sp.get('t') ?? localStorage.getItem('ct_t')) !== '0';
     if (alphaEl)     alphaEl.checked     = (sp.get('a') ?? localStorage.getItem('ct_a')) === '1';
@@ -106,20 +115,47 @@ window.addEventListener('error', (e) => {
       .replace(/^,|,$/g, '');
   }
 
+  // ===== Add / Remove one (fixed) =====
+  function toast(msg, ms=1800){
+    if (!inlineMsg) return;
+    inlineMsg.textContent = msg;
+    inlineMsg.style.opacity = '1';
+    setTimeout(()=>{ inlineMsg.style.opacity=''; }, ms);
+  }
+  addBtn?.addEventListener('click', (e)=>{
+    e.preventDefault();
+    const v = (addOneEl?.value || '').toUpperCase().trim();
+    if (!/^[A-Z0-9]{3,4}$/.test(v)) { toast('Enter a valid ICAO (3–4 chars)'); return; }
+    const set = new Set(normalizedIds().split(',').filter(Boolean));
+    set.add(v);
+    if (idsEl) idsEl.value = Array.from(set).join(' ');
+    toast(`${v} added`);
+    savePrefs(); fetchAndRender();
+  });
+  remBtn?.addEventListener('click', (e)=>{
+    e.preventDefault();
+    const v = (remOneEl?.value || '').toUpperCase().trim();
+    if (!v) { toast('Enter ICAO to remove'); return; }
+    const arr = normalizedIds().split(',').filter(Boolean).filter(x=>x!==v);
+    if (idsEl) idsEl.value = arr.join(' ');
+    toast(`${v} removed`);
+    savePrefs(); fetchAndRender();
+  });
+
   // Submit on click/Enter
   form?.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
 
   // React to control changes
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
-    if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#showMetar,#showTaf,#alpha,#filter,#mode')){
+    if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#adverse,#showMetar,#showTaf,#alpha,#filter,#mode')){
       savePrefs(); fetchAndRender();
     }
   }
   document.addEventListener('change', controlsChanged);
   document.addEventListener('input',  controlsChanged);
 
-  // ===== Time filter helpers (TAF only) =====
+  // ===== Time filter helpers (TAF only; +3h buffer) =====
   const pad2 = (n) => String(n).padStart(2,'0');
 
   function parseDDHHWithBuffer(s){
@@ -168,8 +204,25 @@ window.addEventListener('error', (e) => {
   function stripAfterShiftLines(tafHtml){
     return tafHtml.replace(/<div class="taf-line[^"]*\bafter-shift\b[^"]*">[\s\S]*?<\/div>/g, '');
   }
+
+  // ===== Adverse Wx detection/marking =====
+  // Ordered longest-first to avoid partial matches (e.g., TSRA before TS)
+  const ADV_TOKENS = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
+  const ADV_RE = new RegExp(
+    '(?<![A-Z0-9+])(' + ADV_TOKENS.map(t => t.replace(/[+]/g,'\\+')).join('|') + ')(?![A-Z0-9])',
+    'g'
+  );
+
+  function markAdverse(html){
+    if (!html) return { html, hasAdv:false };
+    const out = html.replace(ADV_RE, '<span class="adv">$1</span>');
+    const has = /class="adv"/.test(out);
+    return { html: out, hasAdv: has };
+  }
+  const containsAdv = (html) => /class="adv"/.test(html || '');
   const containsHit = (html) => /class="hit"/.test(html || '');
 
+  // Mode: 0=All, 1=Filter triggers, 2=Drill Down
   function currentMode(){
     if (modeEl) return parseInt(modeEl.value,10) || 0;
     if (filterEl && filterEl.checked) return 1;
@@ -188,6 +241,7 @@ window.addEventListener('error', (e) => {
     const showT = !!(showTafEl?.checked);
     const mode  = currentMode();
     const cutoff = parseDDHHWithBuffer(shiftEndEl?.value);
+    const adverseOn = !!(adverseEl?.checked);
 
     let html = '';
     for (const r of list){
@@ -198,37 +252,55 @@ window.addEventListener('error', (e) => {
       let metarHTML = metarAvailable ? (r.metar.html || '') : '';
       let tafHTML   = tafAvailable   ? (r.taf.html   || '') : '';
 
-      // TAF shift application (TAF only)
+      // Apply TAF shift filter (TAF only)
       tafHTML = applyShiftToTafHtml(tafHTML, cutoff, !!(applyTimeEl?.checked));
 
-      // Drill Down: keep only TAF lines with hits
+      // Mark adverse tokens (both METAR & TAF) — visual underline + blue
+      let metarAdv = { html: metarHTML, hasAdv:false };
+      let tafAdv   = { html: tafHTML,   hasAdv:false };
+      if (adverseOn){
+        metarAdv = markAdverse(metarHTML);
+        tafAdv   = markAdverse(tafHTML);
+        metarHTML = metarAdv.html;
+        tafHTML   = tafAdv.html;
+      }
+
+      // For Drill Down keep only TAF lines with either server hits OR adverse tokens
       if (mode === 2 && tafAvailable && showT){
         tafHTML = tafHTML.replace(
           /<div class="taf-line[^"]*">([\s\S]*?)<\/div>/g,
-          (full, inner) => /class="hit"/.test(inner) ? full : ''
+          (full, inner) => {
+            const keep = /class="hit"/.test(inner) || (adverseOn && /class="adv"/.test(inner));
+            return keep ? full : '';
+          }
         );
       }
 
-      // Trigger determination (METAR hits OR TAF hits before cutoff)
-      const tafActive   = containsHit(stripAfterShiftLines(tafHTML));
-      const metarActive = containsHit(metarHTML);
+      // Trigger determination:
+      // - METAR: server hit OR adverse token (both always current)
+      // - TAF: server hit OR adverse token, but **not** after-shift
+      const tafBeforeCut = stripAfterShiftLines(tafHTML);
+      const tafActive = containsHit(tafBeforeCut) || (adverseOn && containsAdv(tafBeforeCut));
+      const metarActive = containsHit(metarHTML) || (adverseOn && containsAdv(metarHTML));
       const isTriggerNow = !!(tafActive || metarActive);
 
-      // >>> NEW: In Drill Down (mode 2), also hide non-triggers <<<
+      // Filter / Drill Down: hide non-triggers completely
       if ((mode === 1 || mode === 2) && !isTriggerNow) continue;
 
-      // Build output
+      // Build output for this airport
       if (showM){
         if (metarAvailable && metarHTML) html += metarHTML + '\n';
         else html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>\n`;
       }
+
       if (showT){
         if (tafAvailable){
-          if (tafHTML.trim()) html += tafHTML + '\n'; // omit empty TAF after pruning
+          if (tafHTML.trim()) html += tafHTML + '\n'; // omit if empty after pruning
         } else {
           html += `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>\n`;
         }
       }
+
       html += '<br/>';
     }
 
@@ -267,7 +339,7 @@ window.addEventListener('error', (e) => {
         : '';
       if (summary){
         const modeNames = ['All','Filter','Drill Down'];
-        summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeNames[currentMode()] || 'All'}${cutoffDisp}`;
+        summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeNames[currentMode()] || 'All'}${cutoffDisp}${adverseEl?.checked ? ' • Adverse Wx: ON' : ''}`;
       }
     } catch(e){
       if (err){
