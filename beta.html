@@ -120,6 +120,9 @@
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111;color:#fff;
            padding:10px 14px;border-radius:8px;display:none;gap:12px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:1000}
     .toast button{background:transparent;border:1px solid #fff;color:#fff;padding:4px 8px;border-radius:6px;cursor:pointer}
+
+    /* NEW: gentle style for "not available" placeholders (used by JS) */
+    .not-found { color: var(--muted); font-style: italic; }
   </style>
 </head>
 <body class="theme-light">
@@ -197,9 +200,14 @@
     <span id="spin" style="display:none">⏳</span>
   </form>
 
-  <div id="summary" class="section">Ready.</div>
+  <div id="summary" class="section" aria-live="polite">Ready.</div>
   <div id="err" class="section" style="display:none;color:#ef4444;"></div>
-  <section id="board-body" class="section"></section>
+
+  <section id="board-body" class="section">
+    <!-- NEW: static sweep overlay, toggled by JS -->
+    <div id="sweep" class="refresh-sweep" hidden></div>
+    <!-- stations get injected here by app.v8b.js -->
+  </section>
 
   <div class="instructions">
     Drill Down shows METAR + only TAF lines with hits. Green = improved since last refresh (shown once). Red background = worsened/new trigger.
