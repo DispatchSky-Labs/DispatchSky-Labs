@@ -122,16 +122,15 @@ window.addEventListener('error', (e) => {
   // ===== Time filter helpers (TAF only) =====
   const pad2 = (n) => String(n).padStart(2,'0');
 
-  // Parse DDHH with +3h buffer (regex-based)
   function parseDDHHWithBuffer(s){
     if (!s) return null;
     const m = String(s).trim().match(/^(\d{2})(\d{2})$/);
     if (!m) return null;
     let day = parseInt(m[1],10), hour = parseInt(m[2],10);
     if (day < 1 || day > 31 || hour < 0 || hour > 23) return null;
-    hour += 3;                // +3h buffer
+    hour += 3;
     if (hour >= 24) { hour -= 24; day += 1; }
-    if (day > 31) day = 31;   // clamp
+    if (day > 31) day = 31;
     return { day, hour, disp: `${pad2(day)}${pad2(hour)}` };
   }
   function ddhhCompare(a, b){
@@ -140,56 +139,44 @@ window.addEventListener('error', (e) => {
     if (a.hour !== b.hour) return a.hour > b.hour ? 1 : (a.hour < b.hour ? -1 : 0);
     return 0;
   }
-  // Extract start DDHH from a single TAF line by regex tokens
   function extractStartDDHHFromLine(txt){
     if (!txt) return null;
-    // FMddhhmm
     let m = txt.match(/\bFM(\d{2})(\d{2})\d{2}\b/);
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
-    // TEMPO ddhh/ddhh | BECMG ddhh/ddhh | PROB30/40 ddhh/ddhh
     m = txt.match(/\b(?:TEMPO|BECMG|PROB(?:30|40))\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
     return null;
-    // (We intentionally ignore lines without explicit time tokens.)
   }
-
-  // Apply Shift End (TAF only): add 'after-shift' on lines that start after cutoff; do not alter METAR
   function applyShiftToTafHtml(tafHtml, cutoffDDHH, enabled){
     if (!enabled || !tafHtml || !cutoffDDHH) return tafHtml;
     return tafHtml.replace(
       /<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g,
       (_, rest, inner) => {
-        const plain = inner.replace(/<[^>]+>/g,''); // strip tags for token parse
+        const plain = inner.replace(/<[^>]+>/g,'');
         const start = extractStartDDHHFromLine(plain);
         const isAfter = start ? (ddhhCompare(start, cutoffDDHH) === 1) : false;
-
         let cls = `taf-line${rest}`;
         let content = inner;
         if (isAfter) {
           cls += ' after-shift';
-          // Make hits visually muted by removing hit spans in after-shift lines
           content = content.replace(/<span class="hit">/g,'').replace(/<\/span>/g,'');
         }
         return `<div class="${cls}">${content}</div>`;
       }
     );
   }
-
-  // Remove after-shift lines (used when assessing current triggers only)
   function stripAfterShiftLines(tafHtml){
     return tafHtml.replace(/<div class="taf-line[^"]*\bafter-shift\b[^"]*">[\s\S]*?<\/div>/g, '');
   }
-
   const containsHit = (html) => /class="hit"/.test(html || '');
 
-  // Determine current UI mode: 0=All, 1=Filter triggers, 2=Drill Down
   function currentMode(){
     if (modeEl) return parseInt(modeEl.value,10) || 0;
     if (filterEl && filterEl.checked) return 1;
     return 0;
   }
 
-  // ===== Render (robust; no false “not found”) =====
+  // ===== Render =====
   function renderPayload(data){
     const rows = (data && Array.isArray(data.results)) ? data.results : [];
     if (!rows.length) { board.innerHTML = `<div class="muted">No results.</div>`; return; }
@@ -205,54 +192,44 @@ window.addEventListener('error', (e) => {
     let html = '';
     for (const r of list){
       const icao = r.icao || '';
-
-      // Track availability from backend (do not rely on filtered HTML emptiness)
       const metarAvailable = !!r.metar;
       const tafAvailable   = !!r.taf;
 
-      // Use server-provided HTML (already escaped/highlighted)
       let metarHTML = metarAvailable ? (r.metar.html || '') : '';
       let tafHTML   = tafAvailable   ? (r.taf.html   || '') : '';
 
-      // Apply TAF time filter (adds 'after-shift' on future lines; METAR untouched)
+      // TAF shift application (TAF only)
       tafHTML = applyShiftToTafHtml(tafHTML, cutoff, !!(applyTimeEl?.checked));
 
-      // Drill Down: keep only TAF lines that contain hits; if none, show nothing (but not “not found”)
+      // Drill Down: keep only TAF lines with hits
       if (mode === 2 && tafAvailable && showT){
-        // remove non-hit lines
         tafHTML = tafHTML.replace(
           /<div class="taf-line[^"]*">([\s\S]*?)<\/div>/g,
           (full, inner) => /class="hit"/.test(inner) ? full : ''
         );
       }
 
-      // Compute “active trigger” only from METAR hits or TAF hits that are NOT after-shift
-      const tafActive = containsHit(stripAfterShiftLines(tafHTML));
+      // Trigger determination (METAR hits OR TAF hits before cutoff)
+      const tafActive   = containsHit(stripAfterShiftLines(tafHTML));
       const metarActive = containsHit(metarHTML);
       const isTriggerNow = !!(tafActive || metarActive);
 
-      // Filter mode (1): remove non-triggers entirely
-      if (mode === 1 && !isTriggerNow) continue;
+      // >>> NEW: In Drill Down (mode 2), also hide non-triggers <<<
+      if ((mode === 1 || mode === 2) && !isTriggerNow) continue;
 
-      // Build rows per airport (keep your existing simple flow)
+      // Build output
       if (showM){
-        if (metarAvailable && metarHTML) {
-          html += metarHTML + '\n';
-        } else {
-          html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>\n`;
-        }
+        if (metarAvailable && metarHTML) html += metarHTML + '\n';
+        else html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>\n`;
       }
-
       if (showT){
-        if (tafAvailable) {
-          // If TAF becomes empty due to drill-down or all lines after-shift, we just omit it (no “not found”)
-          if (tafHTML.trim()) html += tafHTML + '\n';
+        if (tafAvailable){
+          if (tafHTML.trim()) html += tafHTML + '\n'; // omit empty TAF after pruning
         } else {
           html += `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>\n`;
         }
       }
-
-      html += '<br/>'; // spacer between airports
+      html += '<br/>';
     }
 
     board.innerHTML = html || `<div class="muted">No results.</div>`;
@@ -270,7 +247,7 @@ window.addEventListener('error', (e) => {
       metar: showMetarEl?.checked ? '1' : '0',
       taf:   showTafEl?.checked   ? '1' : '0',
       alpha: alphaEl?.checked     ? '1' : '0',
-      filter: currentMode() === 1 ? 'trigger' : 'all',  // backend filter only in Filter mode
+      filter: currentMode() === 1 ? 'trigger' : 'all',
     });
 
     if (!quiet){ summary && (summary.textContent='Loading…'); spin && (spin.style.display='inline-block'); err && (err.style.display='none', err.textContent=''); }
@@ -302,7 +279,7 @@ window.addEventListener('error', (e) => {
     }
   }
 
-  // ===== Auto-refresh every 60s (no regressions) =====
+  // ===== Auto-refresh every 60s =====
   let refreshTimer = null;
   function startAutoRefresh(){
     if (refreshTimer) clearInterval(refreshTimer);
