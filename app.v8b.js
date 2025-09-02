@@ -99,11 +99,6 @@ window.addEventListener('error', (e) => {
     if (modeEl)      modeEl.value        = sp.get('mode') ?? localStorage.getItem('ct_mode') ?? '0';
     if (modeLabel && modeEl){
       modeLabel.textContent = ['All','Filter','Drill Down'][parseInt(modeEl.value,10) || 0];
-      modeEl.addEventListener('input', () => {
-        uiMode = parseInt(modeEl.value,10) || 0;                      // keep uiMode in sync
-        modeLabel.textContent = ['All','Filter','Drill Down'][uiMode];
-        savePrefs();
-      });
     }
   }
   loadPrefs();
@@ -116,15 +111,22 @@ window.addEventListener('error', (e) => {
       .replace(/^,|,$/g, '');
   }
 
-  // ===== Freeze the selected mode for all refreshes =====
+  // ===== Mode handling (stable on auto-refresh, instant on slider) =====
   function readModeFromDOM(){
     if (modeEl) return parseInt(modeEl.value,10) || 0;
     if (filterEl && filterEl.checked) return 1;
     return 0;
   }
-  let uiMode = readModeFromDOM(); // used by auto-refresh; only user input changes it
+  let uiMode = readModeFromDOM(); // used by auto-refresh
 
-  // ===== Add / Remove one (fixed) =====
+  modeEl?.addEventListener('input', () => {
+    uiMode = parseInt(modeEl.value,10) || 0;
+    if (modeLabel) modeLabel.textContent = ['All','Filter','Drill Down'][uiMode];
+    savePrefs();
+    fetchAndRender(true); // instant re-render
+  });
+
+  // ===== Add / Remove one =====
   function toast(msg, ms=1800){
     if (!inlineMsg) return;
     inlineMsg.textContent = msg;
@@ -153,10 +155,7 @@ window.addEventListener('error', (e) => {
 
   // ===== Debounced control reactions =====
   let debounceT = null;
-  function scheduleFetch(){
-    clearTimeout(debounceT);
-    debounceT = setTimeout(()=>fetchAndRender(), 120);
-  }
+  function scheduleFetch(){ clearTimeout(debounceT); debounceT = setTimeout(()=>fetchAndRender(), 120); }
   form?.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
@@ -188,7 +187,7 @@ window.addEventListener('error', (e) => {
     return 0;
   }
 
-  // --- FIXED: also parse plain header "DDHH/DDHH" periods ---
+  // Prefer FM/TEMPO/BECMG/PROB; then TAF validity “…Z DDHH/DDHH”; fallback to any DDHH/DDHH
   function extractStartDDHHFromLine(txt){
     if (!txt) return null;
 
@@ -200,7 +199,11 @@ window.addEventListener('error', (e) => {
     m = txt.match(/\b(?:TEMPO|BECMG|PROB(?:30|40))\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
 
-    // NEW: plain header or period token: DDHH/DDHH (e.g., "0200/0306")
+    // TAF header validity right after issue time (…Z DDHH/DDHH)
+    m = txt.match(/\bZ\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
+    if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
+
+    // Fallback: any DDHH/DDHH token
     m = txt.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
 
@@ -227,8 +230,8 @@ window.addEventListener('error', (e) => {
     );
   }
 
-  // ===== Adverse Wx detection =====
-  const ADV_TOKENS = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
+  // ===== Adverse Wx detection & underline (first-found per airport) =====
+  const ADV_TOKENS = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS']; // longest-first behavior via scan
   function findFirstAdverseToken(text){
     if (!text) return null;
     for (let i=0;i<ADV_TOKENS.length;i++){
@@ -243,7 +246,6 @@ window.addEventListener('error', (e) => {
     }
     return null;
   }
-  // underline only if we haven't underlined yet for this airport
   function underlineOnce(innerHTML, token, state){
     if (!token || state.done) return innerHTML;
     const re = new RegExp(`(^|[^A-Z0-9+])(${token.replace(/[+]/g,'\\+')})(?![A-Z0-9])`);
@@ -280,10 +282,9 @@ window.addEventListener('error', (e) => {
       if (adverseOn && !isAfter) {
         const tok = findFirstAdverseToken(text);
         if (tok) {
-          // underline only if we haven't underlined yet anywhere in this airport
+          // underline only if not already underlined anywhere in this airport
           hasAdv = underlineOnceInTafLine(line, tok, advMarkState);
-          // even if already underlined elsewhere, still treat as adverse (trigger),
-          // just no extra blue here
+          // Even if already underlined elsewhere, still treat as adverse (trigger)
           if (!hasAdv) hasAdv = true;
         }
       }
@@ -330,7 +331,7 @@ window.addEventListener('error', (e) => {
       // 1) TAF shift classification first
       tafHTML = applyShiftToTafHtml(tafHTML, cutoff, applyShift);
 
-      // 2) Airport-wide "first-find" underline state
+      // 2) Airport-wide "first-found" underline state
       let advMarkState = { done:false };
 
       // METAR trigger & underline (METAR is always current)
