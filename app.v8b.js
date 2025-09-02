@@ -24,7 +24,7 @@ window.addEventListener('error', (e) => {
   const visEl      = $('#vis');
   const shiftEndEl = $('#shiftEnd');
   const applyTimeEl= $('#applyTime');
-  const adverseEl  = $('#adverse');       // NEW
+  const adverseEl  = $('#adverse');
   const showMetarEl= $('#showMetar');
   const showTafEl  = $('#showTaf');
   const alphaEl    = $('#alpha');
@@ -36,7 +36,6 @@ window.addEventListener('error', (e) => {
   const ts         = $('#timestamp');
   const utcNow     = $('#utcNow');
 
-  // Slider (beta) or legacy checkbox (prod)
   const modeEl     = $('#mode');     // range 0..2 (All / Filter / Drill Down)
   const modeLabel  = $('#modeLabel');
   const filterEl   = $('#filter');   // optional legacy checkbox
@@ -53,7 +52,7 @@ window.addEventListener('error', (e) => {
     applyTheme(saved);
   })();
 
-  // ===== UTC clock (update every minute, aligned) =====
+  // ===== UTC clock (aligned to minute) =====
   function tickClock(){
     const d=new Date();
     const hh=String(d.getUTCHours()).padStart(2,'0');
@@ -78,7 +77,7 @@ window.addEventListener('error', (e) => {
     localStorage.setItem('ct_vis',  visEl?.value || '');
     localStorage.setItem('ct_shift', shiftEndEl?.value.trim() || '');
     localStorage.setItem('ct_applyTime', applyTimeEl?.checked ? '1' : '0');
-    localStorage.setItem('ct_adv', adverseEl?.checked ? '1' : '0'); // NEW
+    localStorage.setItem('ct_adv', adverseEl?.checked ? '1' : '0');
     localStorage.setItem('ct_m', showMetarEl?.checked ? '1' : '0');
     localStorage.setItem('ct_t', showTafEl?.checked   ? '1' : '0');
     localStorage.setItem('ct_a', alphaEl?.checked     ? '1' : '0');
@@ -142,10 +141,8 @@ window.addEventListener('error', (e) => {
     savePrefs(); fetchAndRender();
   });
 
-  // Submit on click/Enter
+  // Submit + reactive changes
   form?.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
-
-  // React to control changes
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
     if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#adverse,#showMetar,#showTaf,#alpha,#filter,#mode')){
@@ -164,8 +161,7 @@ window.addEventListener('error', (e) => {
     if (!m) return null;
     let day = parseInt(m[1],10), hour = parseInt(m[2],10);
     if (day < 1 || day > 31 || hour < 0 || hour > 23) return null;
-    hour += 3;
-    if (hour >= 24) { hour -= 24; day += 1; }
+    hour += 3; if (hour >= 24) { hour -= 24; day += 1; }
     if (day > 31) day = 31;
     return { day, hour, disp: `${pad2(day)}${pad2(hour)}` };
   }
@@ -183,6 +179,9 @@ window.addEventListener('error', (e) => {
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
     return null;
   }
+
+  // Add 'after-shift' class to TAF lines starting after cutoff;
+  // also strip <span class="hit"> in those lines to mute them.
   function applyShiftToTafHtml(tafHtml, cutoffDDHH, enabled){
     if (!enabled || !tafHtml || !cutoffDDHH) return tafHtml;
     return tafHtml.replace(
@@ -205,20 +204,32 @@ window.addEventListener('error', (e) => {
     return tafHtml.replace(/<div class="taf-line[^"]*\bafter-shift\b[^"]*">[\s\S]*?<\/div>/g, '');
   }
 
-  // ===== Adverse Wx detection/marking =====
-  // Ordered longest-first to avoid partial matches (e.g., TSRA before TS)
+  // ===== Adverse Wx detection =====
+  // Longest-first to avoid partial overlaps; matches as standalone tokens
   const ADV_TOKENS = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
-  const ADV_RE = new RegExp(
-    '(?<![A-Z0-9+])(' + ADV_TOKENS.map(t => t.replace(/[+]/g,'\\+')).join('|') + ')(?![A-Z0-9])',
-    'g'
-  );
+  const ADV_RE = new RegExp('(?<![A-Z0-9+])(' + ADV_TOKENS.map(t => t.replace(/[+]/g,'\\+')).join('|') + ')(?![A-Z0-9])','g');
 
-  function markAdverse(html){
+  // Mark adverse in METAR (always current)
+  function markAdverseInMetar(html){
     if (!html) return { html, hasAdv:false };
     const out = html.replace(ADV_RE, '<span class="adv">$1</span>');
-    const has = /class="adv"/.test(out);
+    return { html: out, hasAdv: /class="adv"/.test(out) };
+  }
+  // Mark adverse in TAF **only in non-after-shift lines**
+  function markAdverseInTaf(html){
+    if (!html) return { html, hasAdv:false };
+    let has = false;
+    const out = html.replace(
+      /<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g,
+      (full, rest, inner) => {
+        if (/\bafter-shift\b/.test(rest)) return full; // do not add blue inside grayed lines
+        const rep = inner.replace(ADV_RE, (m)=>{ has = true; return `<span class="adv">${m}</span>`; });
+        return `<div class="taf-line${rest}">${rep}</div>`;
+      }
+    );
     return { html: out, hasAdv: has };
   }
+
   const containsAdv = (html) => /class="adv"/.test(html || '');
   const containsHit = (html) => /class="hit"/.test(html || '');
 
@@ -252,55 +263,57 @@ window.addEventListener('error', (e) => {
       let metarHTML = metarAvailable ? (r.metar.html || '') : '';
       let tafHTML   = tafAvailable   ? (r.taf.html   || '') : '';
 
-      // Apply TAF shift filter (TAF only)
+      // 1) Apply TAF shift classification first
       tafHTML = applyShiftToTafHtml(tafHTML, cutoff, !!(applyTimeEl?.checked));
 
-      // Mark adverse tokens (both METAR & TAF) — visual underline + blue
+      // 2) Mark adverse tokens:
+      //    - METAR: whole (always current)
+      //    - TAF: only in non-after-shift lines
       let metarAdv = { html: metarHTML, hasAdv:false };
       let tafAdv   = { html: tafHTML,   hasAdv:false };
       if (adverseOn){
-        metarAdv = markAdverse(metarHTML);
-        tafAdv   = markAdverse(tafHTML);
+        metarAdv = markAdverseInMetar(metarHTML);
+        tafAdv   = markAdverseInTaf(tafHTML);
         metarHTML = metarAdv.html;
         tafHTML   = tafAdv.html;
       }
 
-      // For Drill Down keep only TAF lines with either server hits OR adverse tokens
+      // 3) Drill Down pruning:
+      //    keep only TAF lines that (have hit OR adverse) AND are not after-shift
       if (mode === 2 && tafAvailable && showT){
         tafHTML = tafHTML.replace(
-          /<div class="taf-line[^"]*">([\s\S]*?)<\/div>/g,
-          (full, inner) => {
+          /<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g,
+          (full, rest, inner) => {
+            if (/\bafter-shift\b/.test(rest)) return ''; // never keep grayed lines
             const keep = /class="hit"/.test(inner) || (adverseOn && /class="adv"/.test(inner));
             return keep ? full : '';
           }
         );
       }
 
-      // Trigger determination:
-      // - METAR: server hit OR adverse token (both always current)
-      // - TAF: server hit OR adverse token, but **not** after-shift
+      // Trigger determination (airport-level):
+      // - METAR: hit OR adverse
+      // - TAF:   hit OR adverse, but evaluated **before-cutoff** only
       const tafBeforeCut = stripAfterShiftLines(tafHTML);
-      const tafActive = containsHit(tafBeforeCut) || (adverseOn && containsAdv(tafBeforeCut));
-      const metarActive = containsHit(metarHTML) || (adverseOn && containsAdv(metarHTML));
+      const tafActive    = containsHit(tafBeforeCut) || (adverseOn && containsAdv(tafBeforeCut));
+      const metarActive  = containsHit(metarHTML)    || (adverseOn && containsAdv(metarHTML));
       const isTriggerNow = !!(tafActive || metarActive);
 
-      // Filter / Drill Down: hide non-triggers completely
+      // Filter / Drill Down: hide non-triggers entirely
       if ((mode === 1 || mode === 2) && !isTriggerNow) continue;
 
-      // Build output for this airport
+      // Output
       if (showM){
         if (metarAvailable && metarHTML) html += metarHTML + '\n';
         else html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>\n`;
       }
-
       if (showT){
         if (tafAvailable){
-          if (tafHTML.trim()) html += tafHTML + '\n'; // omit if empty after pruning
+          if (tafHTML.trim()) html += tafHTML + '\n';
         } else {
           html += `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>\n`;
         }
       }
-
       html += '<br/>';
     }
 
