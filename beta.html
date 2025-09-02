@@ -46,7 +46,6 @@
 
     .section { padding: 8px 16px; }
 
-    /* Board needs positioning for the sweep overlay */
     #board-body { position: relative; overflow: hidden; }
 
     pre.wx, .taf-line {
@@ -67,36 +66,22 @@
     .theme-dark .worse { background: rgba(239, 68, 68, 0.14); }
     .theme-dark .improved { color:#34d399; }
 
-    /* Minimal spacing for the dashed line (no extra top gap) */
     .drill-sep { border-bottom:1px dashed var(--muted); margin:0 0 6px; }
 
-    /* Optional refresh sweep overlay */
     .refresh-sweep {
-      position: absolute;
-      left: 0; top: 0; width: 100%; height: 100%;
-      pointer-events: none;
-      z-index: 1;
-      background: linear-gradient(
-        to bottom,
+      position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 1;
+      background: linear-gradient(to bottom,
         rgba(59,130,246,0) 0%,
         rgba(59,130,246,0.15) 15%,
         rgba(59,130,246,0.22) 25%,
         rgba(59,130,246,0.15) 35%,
         rgba(59,130,246,0) 50%,
-        rgba(59,130,246,0) 100%
-      );
-      filter: blur(6px);
-      opacity: 0;
-      transform: translateY(-20%);
+        rgba(59,130,246,0) 100%);
+      filter: blur(6px); opacity: 0; transform: translateY(-20%);
     }
     @media (prefers-reduced-motion: reduce) {
-      .refresh-sweep {
-        transition: opacity 120ms linear;
-        filter: none;
-        background: rgba(59,130,246,0.12);
-        transform: none;
-        opacity: .2;
-      }
+      .refresh-sweep { transition: opacity 120ms linear; filter: none; background: rgba(59,130,246,0.12); transform: none; opacity: .2; }
     }
 
     footer { margin-top:12px; padding:14px 16px; font-size:14px; color:var(--muted); }
@@ -105,7 +90,6 @@
 
     .instructions { padding: 14px 16px; font-size: 14px; color: var(--muted); line-height: 1.4; }
 
-    /* Station wrapper */
     .station { position: relative; border:1px solid var(--border); border-radius:8px; padding:8px 12px; margin:8px 0; background: #fff; }
     .theme-dark .station { background:#0d1218; }
     .rm-btn { position:absolute; top:8px; right:8px; width:28px; height:28px; border:1px solid var(--border); border-radius:6px; background:transparent; color:inherit; cursor:pointer; }
@@ -115,15 +99,13 @@
     .station.swiped { transform:translateX(-100%); opacity:0; transition:transform .2s ease, opacity .2s ease; }
     .row-inline { display:flex; gap:6px; align-items:center; }
 
-    /* Toast */
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111;color:#fff;
            padding:10px 14px;border-radius:8px;display:none;gap:12px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:1000}
     .toast button{background:transparent;border:1px solid #fff;color:#fff;padding:4px 8px;border-radius:6px;cursor:pointer}
 
-    /* Gentle style for "not available" placeholders (used by JS) */
     .not-found { color: var(--muted); font-style: italic; }
 
-    /* NEW: adverse token mark (blue + underline) */
+    /* Adverse token mark (blue + underline) */
     .adv { text-decoration: underline; color:#2563eb; font-weight:700; }
   </style>
 </head>
@@ -182,7 +164,7 @@
     </div>
 
     <label class="chk"><input type="checkbox" id="applyTime"> Apply Shift End</label>
-    <label class="chk"><input type="checkbox" id="adverse"> Adverse Wx</label><!-- NEW -->
+    <label class="chk"><input type="checkbox" id="adverse"> Adverse Wx</label>
     <label class="chk"><input type="checkbox" id="showMetar" checked> Show METAR</label>
     <label class="chk"><input type="checkbox" id="showTaf" checked> Show TAF</label>
     <label class="chk"><input type="checkbox" id="alpha"> Sort A→Z</label>
@@ -207,9 +189,7 @@
   <div id="err" class="section" style="display:none;color:#ef4444;"></div>
 
   <section id="board-body" class="section">
-    <!-- Optional sweep overlay, toggled by JS if desired -->
     <div id="sweep" class="refresh-sweep" hidden></div>
-    <!-- stations injected by app.v8b.js -->
   </section>
 
   <div class="instructions">
@@ -228,7 +208,7 @@
     <span id="toastMsg"></span><button id="undoBtn" type="button">Undo</button>
   </div>
 
-  <!-- App logic -->
-  <script defer src="app.v8b.js?v=2025-09-01-advwx-keep-mode"></script>
+  <!-- App logic (paired with the latest JS you just got) -->
+  <script defer src="app.v8b.js?v=2025-09-01-kphx-fix"></script>
 </body>
 </html>
