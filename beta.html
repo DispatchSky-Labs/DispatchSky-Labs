@@ -70,7 +70,7 @@
     /* Minimal spacing for the dashed line (no extra top gap) */
     .drill-sep { border-bottom:1px dashed var(--muted); margin:0 0 6px; }
 
-    /* Optional refresh sweep overlay (left for future use) */
+    /* Optional refresh sweep overlay */
     .refresh-sweep {
       position: absolute;
       left: 0; top: 0; width: 100%; height: 100%;
@@ -123,7 +123,7 @@
     /* Gentle style for "not available" placeholders (used by JS) */
     .not-found { color: var(--muted); font-style: italic; }
 
-    /* NEW: adverse token mark */
+    /* NEW: adverse token mark (blue + underline) */
     .adv { text-decoration: underline; color:#2563eb; font-weight:700; }
   </style>
 </head>
@@ -229,6 +229,6 @@
   </div>
 
   <!-- App logic -->
-  <script defer src="app.v8b.js?v=2025-09-01-advwx"></script>
+  <script defer src="app.v8b.js?v=2025-09-01-advwx-keep-mode"></script>
 </body>
 </html>
