@@ -100,7 +100,7 @@ window.addEventListener('error', (e) => {
     if (modeLabel && modeEl){
       modeLabel.textContent = ['All','Filter','Drill Down'][parseInt(modeEl.value,10) || 0];
       modeEl.addEventListener('input', () => {
-        uiMode = parseInt(modeEl.value,10) || 0;                      // keep uiMode in sync with slider
+        uiMode = parseInt(modeEl.value,10) || 0;                      // keep uiMode in sync
         modeLabel.textContent = ['All','Filter','Drill Down'][uiMode];
         savePrefs();
       });
@@ -122,7 +122,7 @@ window.addEventListener('error', (e) => {
     if (filterEl && filterEl.checked) return 1;
     return 0;
   }
-  let uiMode = readModeFromDOM();     // <— this value is used by auto-refresh; we only change it on user input
+  let uiMode = readModeFromDOM(); // used by auto-refresh; only user input changes it
 
   // ===== Add / Remove one (fixed) =====
   function toast(msg, ms=1800){
@@ -139,7 +139,7 @@ window.addEventListener('error', (e) => {
     set.add(v);
     if (idsEl) idsEl.value = Array.from(set).join(' ');
     toast(`${v} added`);
-    savePrefs(); fetchAndRender();       // uses current uiMode
+    savePrefs(); scheduleFetch();
   });
   remBtn?.addEventListener('click', (e)=>{
     e.preventDefault();
@@ -148,17 +148,21 @@ window.addEventListener('error', (e) => {
     const arr = normalizedIds().split(',').filter(Boolean).filter(x=>x!==v);
     if (idsEl) idsEl.value = arr.join(' ');
     toast(`${v} removed`);
-    savePrefs(); fetchAndRender();
+    savePrefs(); scheduleFetch();
   });
 
-  // Submit + reactive changes
+  // ===== Debounced control reactions =====
+  let debounceT = null;
+  function scheduleFetch(){
+    clearTimeout(debounceT);
+    debounceT = setTimeout(()=>fetchAndRender(), 120);
+  }
   form?.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
     if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#adverse,#showMetar,#showTaf,#alpha,#filter')){
-      // If legacy filter checkbox changes, update uiMode accordingly (1 if checked else 0)
       if (e.target.id === 'filter') uiMode = e.target.checked ? 1 : 0;
-      savePrefs(); fetchAndRender();
+      savePrefs(); scheduleFetch();
     }
   }
   document.addEventListener('change', controlsChanged);
@@ -183,16 +187,27 @@ window.addEventListener('error', (e) => {
     if (a.hour !== b.hour) return a.hour > b.hour ? 1 : (a.hour < b.hour ? -1 : 0);
     return 0;
   }
+
+  // --- FIXED: also parse plain header "DDHH/DDHH" periods ---
   function extractStartDDHHFromLine(txt){
     if (!txt) return null;
+
+    // FM group: FMDDHHMM
     let m = txt.match(/\bFM(\d{2})(\d{2})\d{2}\b/);
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
+
+    // TEMPO/BECMG/PROBxx DDHH/DDHH
     m = txt.match(/\b(?:TEMPO|BECMG|PROB(?:30|40))\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
     if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
+
+    // NEW: plain header or period token: DDHH/DDHH (e.g., "0200/0306")
+    m = txt.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
+    if (m) return { day: parseInt(m[1],10), hour: parseInt(m[2],10) };
+
     return null;
   }
 
-  // Add 'after-shift' class to TAF lines starting after cutoff; also strip <span class="hit"> in those lines
+  // Classify TAF lines (adds 'after-shift' and mutes red hits in those lines)
   function applyShiftToTafHtml(tafHtml, cutoffDDHH, enabled){
     if (!enabled || !tafHtml || !cutoffDDHH) return tafHtml;
     return tafHtml.replace(
@@ -211,37 +226,84 @@ window.addEventListener('error', (e) => {
       }
     );
   }
-  function stripAfterShiftLines(tafHtml){
-    return tafHtml.replace(/<div class="taf-line[^"]*\bafter-shift\b[^"]*">[\s\S]*?<\/div>/g, '');
-  }
 
   // ===== Adverse Wx detection =====
-  const ADV_TOKENS = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];  // longest-first logic in regex
-  const ADV_RE = new RegExp('(?<![A-Z0-9+])(' + ADV_TOKENS.map(t => t.replace(/[+]/g,'\\+')).join('|') + ')(?![A-Z0-9])','g');
+  const ADV_TOKENS = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
+  function findFirstAdverseToken(text){
+    if (!text) return null;
+    for (let i=0;i<ADV_TOKENS.length;i++){
+      const tok = ADV_TOKENS[i];
+      const idx = text.indexOf(tok);
+      if (idx === -1) continue;
+      const left  = idx === 0 ? '' : text[idx-1];
+      const right = text[idx + tok.length] || '';
+      const leftOK  = !/[A-Z0-9+]/.test(left);
+      const rightOK = !/[A-Z0-9]/.test(right);
+      if (leftOK && rightOK) return tok;
+    }
+    return null;
+  }
+  // underline only if we haven't underlined yet for this airport
+  function underlineOnce(innerHTML, token, state){
+    if (!token || state.done) return innerHTML;
+    const re = new RegExp(`(^|[^A-Z0-9+])(${token.replace(/[+]/g,'\\+')})(?![A-Z0-9])`);
+    const out = innerHTML.replace(re, (m, g1, g2) => {
+      state.done = true;
+      return `${g1}<span class="adv">${g2}</span>`;
+    });
+    return out;
+  }
+  function underlineOnceInTafLine(lineEl, token, state){
+    if (!token || state.done || lineEl.classList.contains('after-shift')) return false;
+    const before = lineEl.innerHTML;
+    lineEl.innerHTML = underlineOnce(before, token, state);
+    return before !== lineEl.innerHTML;
+  }
 
-  function markAdverseInMetar(html){
-    if (!html) return { html, hasAdv:false };
-    const out = html.replace(ADV_RE, '<span class="adv">$1</span>');
-    return { html: out, hasAdv: /class="adv"/.test(out) };
-  }
-  function markAdverseInTaf(html){
-    if (!html) return { html, hasAdv:false };
-    let has = false;
-    const out = html.replace(
-      /<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g,
-      (full, rest, inner) => {
-        if (/\bafter-shift\b/.test(rest)) return full; // never mark inside grayed lines
-        const rep = inner.replace(ADV_RE, (m)=>{ has = true; return `<span class="adv">${m}</span>`; });
-        return `<div class="taf-line${rest}">${rep}</div>`;
-      }
-    );
-    return { html: out, hasAdv: has };
-  }
-  const containsAdv = (html) => /class="adv"/.test(html || '');
   const containsHit = (html) => /class="hit"/.test(html || '');
 
-  // ===== Render =====
-  function renderPayload(data, mode){
+  // Build filtered TAF fragment fast (DOM-based)
+  function buildTafFragmentWithUnderlineOnce(tafHTML, {mode, adverseOn, advMarkState}){
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = tafHTML;
+    const lines = wrapper.querySelectorAll('.taf-line');
+
+    let keptAny = false;
+    let hadTrigger = false;
+
+    lines.forEach(line => {
+      const isAfter = line.classList.contains('after-shift');
+      const text = line.textContent || '';
+      const hasHit = line.querySelector('.hit') !== null;
+
+      let hasAdv = false;
+      if (adverseOn && !isAfter) {
+        const tok = findFirstAdverseToken(text);
+        if (tok) {
+          // underline only if we haven't underlined yet anywhere in this airport
+          hasAdv = underlineOnceInTafLine(line, tok, advMarkState);
+          // even if already underlined elsewhere, still treat as adverse (trigger),
+          // just no extra blue here
+          if (!hasAdv) hasAdv = true;
+        }
+      }
+
+      const keep = (mode !== 2) || (!isAfter && (hasHit || hasAdv));
+      if (!keep) { line.remove(); return; }
+
+      if (!isAfter && (hasHit || hasAdv)) hadTrigger = true;
+      keptAny = true;
+    });
+
+    const frag = document.createDocumentFragment();
+    Array.from(wrapper.childNodes).forEach(n => frag.appendChild(n));
+    return { frag, keptAny, hadTrigger };
+  }
+
+  function currentMode(){ return uiMode; }
+
+  // ===== Render (optimized) =====
+  function renderPayload(data){
     const rows = (data && Array.isArray(data.results)) ? data.results : [];
     if (!rows.length) { board.innerHTML = `<div class="muted">No results.</div>`; return; }
 
@@ -250,10 +312,13 @@ window.addEventListener('error', (e) => {
 
     const showM = !!(showMetarEl?.checked);
     const showT = !!(showTafEl?.checked);
+    const mode  = currentMode();
     const cutoff = parseDDHHWithBuffer(shiftEndEl?.value);
     const adverseOn = !!(adverseEl?.checked);
+    const applyShift = !!(applyTimeEl?.checked);
 
-    let html = '';
+    const pageFrag = document.createDocumentFragment();
+
     for (const r of list){
       const icao = r.icao || '';
       const metarAvailable = !!r.metar;
@@ -262,67 +327,90 @@ window.addEventListener('error', (e) => {
       let metarHTML = metarAvailable ? (r.metar.html || '') : '';
       let tafHTML   = tafAvailable   ? (r.taf.html   || '') : '';
 
-      // 1) TAF shift classification
-      tafHTML = applyShiftToTafHtml(tafHTML, cutoff, !!(applyTimeEl?.checked));
+      // 1) TAF shift classification first
+      tafHTML = applyShiftToTafHtml(tafHTML, cutoff, applyShift);
 
-      // 2) Mark adverse
-      let metarAdv = { html: metarHTML, hasAdv:false };
-      let tafAdv   = { html: tafHTML,   hasAdv:false };
-      if (adverseOn){
-        metarAdv = markAdverseInMetar(metarHTML);  // METAR always current
-        tafAdv   = markAdverseInTaf(tafHTML);      // only non-after-shift lines
-        metarHTML = metarAdv.html;
-        tafHTML   = tafAdv.html;
-      }
+      // 2) Airport-wide "first-find" underline state
+      let advMarkState = { done:false };
 
-      // 3) Drill Down pruning (mode 2):
-      //    keep only TAF lines with (hit OR adverse) AND not after-shift
-      if (mode === 2 && tafAvailable && showT){
-        tafHTML = tafHTML.replace(
-          /<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g,
-          (full, rest, inner) => {
-            if (/\bafter-shift\b/.test(rest)) return '';
-            const keep = /class="hit"/.test(inner) || (adverseOn && /class="adv"/.test(inner));
-            return keep ? full : '';
+      // METAR trigger & underline (METAR is always current)
+      let metarTrigger = false;
+      if (metarAvailable) {
+        metarTrigger = containsHit(metarHTML);
+        if (adverseOn && !metarTrigger) {
+          const tok = findFirstAdverseToken((r.metar?.raw || r.metar?.html || '').toString());
+          if (tok) {
+            metarHTML = underlineOnce(metarHTML, tok, advMarkState);
+            metarTrigger = true;
           }
-        );
-      }
-
-      // 4) Trigger determination:
-      //    METAR: hit OR adverse
-      //    TAF  : hit OR adverse (but not after-shift)
-      const tafBeforeCut = stripAfterShiftLines(tafHTML);
-      const tafActive    = containsHit(tafBeforeCut) || (adverseOn && containsAdv(tafBeforeCut));
-      const metarActive  = containsHit(metarHTML)    || (adverseOn && containsAdv(metarHTML));
-      const isTriggerNow = !!(tafActive || metarActive);
-
-      // In Filter or Drill Down modes, hide non-triggers entirely
-      if ((mode === 1 || mode === 2) && !isTriggerNow) continue;
-
-      // Output
-      if (showM){
-        if (metarAvailable && metarHTML) html += metarHTML + '\n';
-        else html += `<div class="muted">No METARs found for ${escapeHtml(icao)}</div>\n`;
-      }
-      if (showT){
-        if (tafAvailable){
-          if (tafHTML.trim()) html += tafHTML + '\n'; // omit if empty after pruning
-        } else {
-          html += `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>\n`;
         }
       }
-      html += '<br/>';
+
+      // 3) Build TAF (DOM) and determine TAF trigger
+      let tafFrag = null, tafKept = false, tafTrigger = false;
+      if (tafAvailable) {
+        const { frag, keptAny, hadTrigger } = buildTafFragmentWithUnderlineOnce(
+          tafHTML, { mode, adverseOn, advMarkState }
+        );
+        tafFrag = frag; tafKept = keptAny; tafTrigger = hadTrigger;
+      }
+
+      const airportIsTrigger = !!(metarTrigger || tafTrigger);
+
+      // Filter/Drill Down: hide non-triggers
+      if ((mode === 1 || mode === 2) && !airportIsTrigger) continue;
+
+      // ---- Render this airport ----
+      const station = document.createElement('div');
+      station.className = 'station';
+
+      if (showM){
+        if (metarAvailable && metarHTML) {
+          const d = document.createElement('div');
+          d.innerHTML = metarHTML;
+          station.appendChild(d.firstElementChild || d);
+        } else {
+          const d = document.createElement('div');
+          d.className = 'muted not-found';
+          d.textContent = `No METARs found for ${icao}`;
+          station.appendChild(d);
+        }
+      }
+
+      if (showT){
+        if (tafAvailable){
+          if (mode === 2 && !tafKept) {
+            // In drill-down, if nothing kept after pruning, omit TAF block
+          } else if (tafFrag) {
+            if (showM && metarAvailable) {
+              const sep = document.createElement('div');
+              sep.className = 'drill-sep';
+              sep.style.marginTop='6px';
+              station.appendChild(sep);
+            }
+            const block = document.createElement('div');
+            block.appendChild(tafFrag);
+            station.appendChild(block);
+          }
+        } else {
+          const d = document.createElement('div');
+          d.className = 'muted not-found';
+          d.textContent = `No TAFs found for ${icao}`;
+          station.appendChild(d);
+        }
+      }
+
+      pageFrag.appendChild(station);
     }
 
-    board.innerHTML = html || `<div class="muted">No results.</div>`;
+    board.innerHTML = '';
+    board.appendChild(pageFrag);
   }
-
-  const escapeHtml = (s) => String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
   // ===== Fetch + render =====
   async function fetchAndRender(quiet=false){
     const ids = normalizedIds();
-    const mode = uiMode; // <— use frozen UI mode, so auto-refresh never flips it
+    const mode = currentMode();
     const params = new URLSearchParams({
       ids,
       ceil: ceilEl?.value || '700',
@@ -330,7 +418,7 @@ window.addEventListener('error', (e) => {
       metar: showMetarEl?.checked ? '1' : '0',
       taf:   showTafEl?.checked   ? '1' : '0',
       alpha: alphaEl?.checked     ? '1' : '0',
-      filter: mode === 1 ? 'trigger' : 'all',   // backend filter only for Filter mode
+      filter: mode === 1 ? 'trigger' : 'all',   // backend filter for Filter mode only
     });
 
     if (!quiet){ summary && (summary.textContent='Loading…'); spin && (spin.style.display='inline-block'); err && (err.style.display='none', err.textContent=''); }
@@ -339,14 +427,15 @@ window.addEventListener('error', (e) => {
       if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
       const data = await res.json();
 
-      renderPayload(data, mode);
+      requestAnimationFrame(() => renderPayload(data));
 
       const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
       if (ts) ts.textContent = `Updated: ${hh}:${mm} UTC`;
 
       const count = ids ? ids.split(',').filter(Boolean).length : 0;
+      const cutoff = parseDDHHWithBuffer(shiftEndEl?.value);
       const cutoffDisp = (applyTimeEl?.checked && shiftEndEl?.value)
-        ? ` • Shift cutoff +3h: ${parseDDHHWithBuffer(shiftEndEl.value)?.disp ?? ''}`
+        ? ` • Shift cutoff +3h: ${cutoff?.disp ?? ''}`
         : '';
       if (summary){
         const modeNames = ['All','Filter','Drill Down'];
