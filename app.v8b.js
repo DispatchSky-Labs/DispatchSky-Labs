@@ -36,7 +36,7 @@ window.addEventListener('error', (e) => {
   const ts         = $('#timestamp');
   const utcNow     = $('#utcNow');
 
-  const modeEl     = $('#mode');     // range 0..2 (All / Filter / Drill Down)
+  const modeEl     = $('#mode');     // 0..2 (All / Filter / Drill Down)
   const modeLabel  = $('#modeLabel');
   const filterEl   = $('#filter');   // optional legacy checkbox
 
@@ -100,7 +100,9 @@ window.addEventListener('error', (e) => {
     if (modeLabel && modeEl){
       modeLabel.textContent = ['All','Filter','Drill Down'][parseInt(modeEl.value,10) || 0];
       modeEl.addEventListener('input', () => {
-        modeLabel.textContent = ['All','Filter','Drill Down'][parseInt(modeEl.value,10) || 0];
+        uiMode = parseInt(modeEl.value,10) || 0;                      // keep uiMode in sync with slider
+        modeLabel.textContent = ['All','Filter','Drill Down'][uiMode];
+        savePrefs();
       });
     }
   }
@@ -113,6 +115,14 @@ window.addEventListener('error', (e) => {
       .replace(/,+/g, ',')
       .replace(/^,|,$/g, '');
   }
+
+  // ===== Freeze the selected mode for all refreshes =====
+  function readModeFromDOM(){
+    if (modeEl) return parseInt(modeEl.value,10) || 0;
+    if (filterEl && filterEl.checked) return 1;
+    return 0;
+  }
+  let uiMode = readModeFromDOM();     // <— this value is used by auto-refresh; we only change it on user input
 
   // ===== Add / Remove one (fixed) =====
   function toast(msg, ms=1800){
@@ -129,7 +139,7 @@ window.addEventListener('error', (e) => {
     set.add(v);
     if (idsEl) idsEl.value = Array.from(set).join(' ');
     toast(`${v} added`);
-    savePrefs(); fetchAndRender();
+    savePrefs(); fetchAndRender();       // uses current uiMode
   });
   remBtn?.addEventListener('click', (e)=>{
     e.preventDefault();
@@ -145,7 +155,9 @@ window.addEventListener('error', (e) => {
   form?.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
-    if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#adverse,#showMetar,#showTaf,#alpha,#filter,#mode')){
+    if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#adverse,#showMetar,#showTaf,#alpha,#filter')){
+      // If legacy filter checkbox changes, update uiMode accordingly (1 if checked else 0)
+      if (e.target.id === 'filter') uiMode = e.target.checked ? 1 : 0;
       savePrefs(); fetchAndRender();
     }
   }
@@ -180,8 +192,7 @@ window.addEventListener('error', (e) => {
     return null;
   }
 
-  // Add 'after-shift' class to TAF lines starting after cutoff;
-  // also strip <span class="hit"> in those lines to mute them.
+  // Add 'after-shift' class to TAF lines starting after cutoff; also strip <span class="hit"> in those lines
   function applyShiftToTafHtml(tafHtml, cutoffDDHH, enabled){
     if (!enabled || !tafHtml || !cutoffDDHH) return tafHtml;
     return tafHtml.replace(
@@ -205,43 +216,32 @@ window.addEventListener('error', (e) => {
   }
 
   // ===== Adverse Wx detection =====
-  // Longest-first to avoid partial overlaps; matches as standalone tokens
-  const ADV_TOKENS = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
+  const ADV_TOKENS = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];  // longest-first logic in regex
   const ADV_RE = new RegExp('(?<![A-Z0-9+])(' + ADV_TOKENS.map(t => t.replace(/[+]/g,'\\+')).join('|') + ')(?![A-Z0-9])','g');
 
-  // Mark adverse in METAR (always current)
   function markAdverseInMetar(html){
     if (!html) return { html, hasAdv:false };
     const out = html.replace(ADV_RE, '<span class="adv">$1</span>');
     return { html: out, hasAdv: /class="adv"/.test(out) };
   }
-  // Mark adverse in TAF **only in non-after-shift lines**
   function markAdverseInTaf(html){
     if (!html) return { html, hasAdv:false };
     let has = false;
     const out = html.replace(
       /<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g,
       (full, rest, inner) => {
-        if (/\bafter-shift\b/.test(rest)) return full; // do not add blue inside grayed lines
+        if (/\bafter-shift\b/.test(rest)) return full; // never mark inside grayed lines
         const rep = inner.replace(ADV_RE, (m)=>{ has = true; return `<span class="adv">${m}</span>`; });
         return `<div class="taf-line${rest}">${rep}</div>`;
       }
     );
     return { html: out, hasAdv: has };
   }
-
   const containsAdv = (html) => /class="adv"/.test(html || '');
   const containsHit = (html) => /class="hit"/.test(html || '');
 
-  // Mode: 0=All, 1=Filter triggers, 2=Drill Down
-  function currentMode(){
-    if (modeEl) return parseInt(modeEl.value,10) || 0;
-    if (filterEl && filterEl.checked) return 1;
-    return 0;
-  }
-
   // ===== Render =====
-  function renderPayload(data){
+  function renderPayload(data, mode){
     const rows = (data && Array.isArray(data.results)) ? data.results : [];
     if (!rows.length) { board.innerHTML = `<div class="muted">No results.</div>`; return; }
 
@@ -250,7 +250,6 @@ window.addEventListener('error', (e) => {
 
     const showM = !!(showMetarEl?.checked);
     const showT = !!(showTafEl?.checked);
-    const mode  = currentMode();
     const cutoff = parseDDHHWithBuffer(shiftEndEl?.value);
     const adverseOn = !!(adverseEl?.checked);
 
@@ -263,43 +262,41 @@ window.addEventListener('error', (e) => {
       let metarHTML = metarAvailable ? (r.metar.html || '') : '';
       let tafHTML   = tafAvailable   ? (r.taf.html   || '') : '';
 
-      // 1) Apply TAF shift classification first
+      // 1) TAF shift classification
       tafHTML = applyShiftToTafHtml(tafHTML, cutoff, !!(applyTimeEl?.checked));
 
-      // 2) Mark adverse tokens:
-      //    - METAR: whole (always current)
-      //    - TAF: only in non-after-shift lines
+      // 2) Mark adverse
       let metarAdv = { html: metarHTML, hasAdv:false };
       let tafAdv   = { html: tafHTML,   hasAdv:false };
       if (adverseOn){
-        metarAdv = markAdverseInMetar(metarHTML);
-        tafAdv   = markAdverseInTaf(tafHTML);
+        metarAdv = markAdverseInMetar(metarHTML);  // METAR always current
+        tafAdv   = markAdverseInTaf(tafHTML);      // only non-after-shift lines
         metarHTML = metarAdv.html;
         tafHTML   = tafAdv.html;
       }
 
-      // 3) Drill Down pruning:
-      //    keep only TAF lines that (have hit OR adverse) AND are not after-shift
+      // 3) Drill Down pruning (mode 2):
+      //    keep only TAF lines with (hit OR adverse) AND not after-shift
       if (mode === 2 && tafAvailable && showT){
         tafHTML = tafHTML.replace(
           /<div class="taf-line([^"]*)">([\s\S]*?)<\/div>/g,
           (full, rest, inner) => {
-            if (/\bafter-shift\b/.test(rest)) return ''; // never keep grayed lines
+            if (/\bafter-shift\b/.test(rest)) return '';
             const keep = /class="hit"/.test(inner) || (adverseOn && /class="adv"/.test(inner));
             return keep ? full : '';
           }
         );
       }
 
-      // Trigger determination (airport-level):
-      // - METAR: hit OR adverse
-      // - TAF:   hit OR adverse, but evaluated **before-cutoff** only
+      // 4) Trigger determination:
+      //    METAR: hit OR adverse
+      //    TAF  : hit OR adverse (but not after-shift)
       const tafBeforeCut = stripAfterShiftLines(tafHTML);
       const tafActive    = containsHit(tafBeforeCut) || (adverseOn && containsAdv(tafBeforeCut));
       const metarActive  = containsHit(metarHTML)    || (adverseOn && containsAdv(metarHTML));
       const isTriggerNow = !!(tafActive || metarActive);
 
-      // Filter / Drill Down: hide non-triggers entirely
+      // In Filter or Drill Down modes, hide non-triggers entirely
       if ((mode === 1 || mode === 2) && !isTriggerNow) continue;
 
       // Output
@@ -309,7 +306,7 @@ window.addEventListener('error', (e) => {
       }
       if (showT){
         if (tafAvailable){
-          if (tafHTML.trim()) html += tafHTML + '\n';
+          if (tafHTML.trim()) html += tafHTML + '\n'; // omit if empty after pruning
         } else {
           html += `<div class="muted">No TAFs found for ${escapeHtml(icao)}</div>\n`;
         }
@@ -323,8 +320,9 @@ window.addEventListener('error', (e) => {
   const escapeHtml = (s) => String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
   // ===== Fetch + render =====
-  async function fetchAndRender(quiet){
+  async function fetchAndRender(quiet=false){
     const ids = normalizedIds();
+    const mode = uiMode; // <— use frozen UI mode, so auto-refresh never flips it
     const params = new URLSearchParams({
       ids,
       ceil: ceilEl?.value || '700',
@@ -332,7 +330,7 @@ window.addEventListener('error', (e) => {
       metar: showMetarEl?.checked ? '1' : '0',
       taf:   showTafEl?.checked   ? '1' : '0',
       alpha: alphaEl?.checked     ? '1' : '0',
-      filter: currentMode() === 1 ? 'trigger' : 'all',
+      filter: mode === 1 ? 'trigger' : 'all',   // backend filter only for Filter mode
     });
 
     if (!quiet){ summary && (summary.textContent='Loading…'); spin && (spin.style.display='inline-block'); err && (err.style.display='none', err.textContent=''); }
@@ -341,7 +339,7 @@ window.addEventListener('error', (e) => {
       if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
       const data = await res.json();
 
-      renderPayload(data);
+      renderPayload(data, mode);
 
       const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
       if (ts) ts.textContent = `Updated: ${hh}:${mm} UTC`;
@@ -352,7 +350,7 @@ window.addEventListener('error', (e) => {
         : '';
       if (summary){
         const modeNames = ['All','Filter','Drill Down'];
-        summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeNames[currentMode()] || 'All'}${cutoffDisp}${adverseEl?.checked ? ' • Adverse Wx: ON' : ''}`;
+        summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeNames[mode] || 'All'}${cutoffDisp}${adverseEl?.checked ? ' • Adverse Wx: ON' : ''}`;
       }
     } catch(e){
       if (err){
