@@ -40,6 +40,156 @@ window.addEventListener('error', (e) => {
   const modeLabel  = $('#modeLabel');
   const filterEl   = $('#filter');   // optional legacy checkbox
 
+  // ===== Matrix Rain Animation =====
+  function createMatrixRainAnimation() {
+    // Add CSS for matrix effect if not already present
+    if (!document.getElementById('matrix-rain-styles')) {
+      const style = document.createElement('style');
+      style.id = 'matrix-rain-styles';
+      style.textContent = `
+        @keyframes matrix-fall {
+          0% {
+            transform: translateY(-100%);
+            opacity: 0;
+          }
+          10% {
+            opacity: 1;
+          }
+          90% {
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(100vh);
+            opacity: 0;
+          }
+        }
+
+        .matrix-rain-container {
+          position: relative;
+          overflow: hidden;
+        }
+
+        .matrix-rain-char {
+          position: absolute;
+          color: #00ff00;
+          font-family: monospace;
+          font-size: 14px;
+          text-shadow: 0 0 5px #00ff00;
+          animation: matrix-fall linear;
+          pointer-events: none;
+          z-index: 1000;
+        }
+
+        .matrix-transitioning {
+          position: relative;
+        }
+
+        .matrix-transitioning > * {
+          transition: opacity 0.3s ease-in-out;
+        }
+
+        .matrix-fade-out {
+          opacity: 0 !important;
+        }
+
+        .matrix-fade-in {
+          opacity: 0;
+          animation: matrixFadeIn 0.5s ease-in-out forwards;
+          animation-delay: 0.8s;
+        }
+
+        @keyframes matrixFadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+
+  function runMatrixRainEffect(container, newContent, callback) {
+    createMatrixRainAnimation();
+
+    // Characters to use in the rain
+    const matrixChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?/~`';
+    const rainDuration = 1500; // Total animation duration in ms
+    const charCount = 80; // Number of falling characters
+
+    // Add transitioning class
+    container.classList.add('matrix-transitioning');
+
+    // Fade out existing content
+    Array.from(container.children).forEach(child => {
+      child.classList.add('matrix-fade-out');
+    });
+
+    // Create falling characters
+    const rainContainer = document.createElement('div');
+    rainContainer.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 999;
+      overflow: hidden;
+    `;
+    container.style.position = 'relative';
+    container.appendChild(rainContainer);
+
+    // Generate random falling characters
+    for (let i = 0; i < charCount; i++) {
+      setTimeout(() => {
+        const char = document.createElement('span');
+        char.className = 'matrix-rain-char';
+        char.textContent = matrixChars[Math.floor(Math.random() * matrixChars.length)];
+        char.style.left = Math.random() * 100 + '%';
+        char.style.animationDuration = (Math.random() * 1 + 0.5) + 's';
+        char.style.animationDelay = Math.random() * 0.5 + 's';
+        char.style.fontSize = (Math.random() * 10 + 12) + 'px';
+
+        // Vary the green shade slightly
+        const greenShade = Math.floor(Math.random() * 55 + 200);
+        char.style.color = `rgb(0, ${greenShade}, 0)`;
+
+        rainContainer.appendChild(char);
+
+        // Remove character after animation
+        setTimeout(() => {
+          if (char.parentNode) char.remove();
+        }, 2000);
+      }, i * 15); // Stagger character creation
+    }
+
+    // Replace content after a delay
+    setTimeout(() => {
+      // Clear old content
+      Array.from(container.children).forEach(child => {
+        if (child !== rainContainer) child.remove();
+      });
+
+      // Add new content with fade-in animation
+      const wrapper = document.createElement('div');
+      wrapper.className = 'matrix-fade-in';
+      wrapper.innerHTML = newContent;
+      container.appendChild(wrapper);
+
+      // Clean up after animation completes
+      setTimeout(() => {
+        // Move children out of wrapper
+        while (wrapper.firstChild) {
+          container.insertBefore(wrapper.firstChild, wrapper);
+        }
+        wrapper.remove();
+        rainContainer.remove();
+        container.classList.remove('matrix-transitioning');
+
+        if (callback) callback();
+      }, 1000);
+    }, 800);
+  }
+
   // ===== Popup Dialog System =====
   let previousTriggerAirports = new Set();
   let isManualAction = false;
@@ -465,9 +615,14 @@ window.addEventListener('error', (e) => {
   function currentMode(){ return uiMode; }
 
   // ===== Render (optimized) =====
+  let pendingNewContent = null;
+
   function renderPayload(data, isAutoRefresh = false){
     const rows = (data && Array.isArray(data.results)) ? data.results : [];
-    if (!rows.length) { board.innerHTML = `<div class="muted">No results.</div>`; return; }
+    if (!rows.length) { 
+      board.innerHTML = `<div class="muted">No results.</div>`; 
+      return; 
+    }
 
     let list = rows.slice();
     if (alphaEl?.checked) list.sort((a,b)=>(a.icao||'').localeCompare(b.icao||''));
@@ -609,12 +764,25 @@ window.addEventListener('error', (e) => {
       pageFrag.appendChild(station);
     }
 
-    board.innerHTML = '';
-    board.appendChild(pageFrag);
+    // Create HTML string for the new content
+    const tempContainer = document.createElement('div');
+    tempContainer.appendChild(pageFrag);
+    const newContentHTML = tempContainer.innerHTML;
 
-    // Check for trigger changes only on auto-refresh
-    if (isAutoRefresh) {
-      checkForTriggerChanges(currentTriggerAirports);
+    // If this is an auto-refresh and not manual, do the matrix animation
+    if (isAutoRefresh && !isManualAction) {
+      runMatrixRainEffect(board, newContentHTML, () => {
+        // Check for trigger changes after animation completes
+        checkForTriggerChanges(currentTriggerAirports);
+      });
+    } else {
+      // Manual action or first load - just replace content normally
+      board.innerHTML = newContentHTML;
+
+      // Check for trigger changes only on auto-refresh
+      if (isAutoRefresh) {
+        checkForTriggerChanges(currentTriggerAirports);
+      }
     }
   }
 
