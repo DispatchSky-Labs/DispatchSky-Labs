@@ -262,6 +262,41 @@ window.addEventListener('error', (e) => {
     return before !== lineEl.innerHTML;
   }
 
+  // Check if METAR is older than 1 hour
+  function isMetarExpired(rawMetar) {
+    if (!rawMetar) return false;
+    const match = rawMetar.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+    if (!match) return false;
+    const day = parseInt(match[1], 10);
+    const hour = parseInt(match[2], 10);
+    const minute = parseInt(match[3], 10);
+    const now = new Date();
+    const metarTime = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, hour, minute));
+    // Adjust for day rollover if metar day is less than current day
+    if (metarTime > now) {
+      metarTime.setUTCDate(metarTime.getUTCDate() - 1);
+    }
+    const diffMs = now - metarTime;
+    return diffMs > 60 * 60 * 1000; // 1 hour in milliseconds
+  }
+
+  // Check for missing required METAR elements
+  function checkMissingMetarElements(rawMetar) {
+    if (!rawMetar) return true; // No METAR data is considered missing elements
+    const windRegex = /\b(\d{3}\d{2}(G\d{2})?KT|CALM)\b/;
+    const visRegex = /\b(P?M?\d+\/?\d*SM|[0-9]+SM)\b/;
+    const skyRegex = /\b(BKN|OVC|FEW|SCT|CLR)\b/;
+    const tempRegex = /\b(M?\d{2}\/(M?\d{2})?)\b/;
+    const altimeterRegex = /\bA\d{4}\b/;
+    return !(
+      windRegex.test(rawMetar) &&
+      visRegex.test(rawMetar) &&
+      skyRegex.test(rawMetar) &&
+      tempRegex.test(rawMetar) &&
+      altimeterRegex.test(rawMetar)
+    );
+  }
+
   const containsHit = (html) => /class="hit"/.test(html || '');
 
   // Build filtered TAF fragment fast (DOM-based)
@@ -336,8 +371,22 @@ window.addEventListener('error', (e) => {
 
       // METAR trigger & underline (METAR is always current)
       let metarTrigger = false;
+      let expired = false;
+      let missingElements = false;
       if (metarAvailable) {
         metarTrigger = containsHit(metarHTML);
+        // Check for expired METAR
+        expired = isMetarExpired(r.metar.raw);
+        if (expired) {
+          metarHTML = `<span style="color:white;font-weight:bold;background-color:red;">Expired</span> ${metarHTML}`;
+          metarTrigger = true;
+        }
+        // Check for missing METAR elements
+        missingElements = checkMissingMetarElements(r.metar.raw);
+        if (missingElements) {
+          metarHTML = `<span style="color:white;font-weight:bold;background-color:red;">Missing Element</span> ${metarHTML}`;
+          metarTrigger = true;
+        }
         if (adverseOn && !metarTrigger) {
           const tok = findFirstAdverseToken((r.metar?.raw || r.metar?.html || '').toString());
           if (tok) {
@@ -345,6 +394,9 @@ window.addEventListener('error', (e) => {
             metarTrigger = true;
           }
         }
+      } else {
+        // NEW: No METARs found is a trigger condition
+        metarTrigger = true;
       }
 
       // 3) Build TAF (DOM) and determine TAF trigger
@@ -374,101 +426,3 @@ window.addEventListener('error', (e) => {
           const d = document.createElement('div');
           d.className = 'muted not-found';
           d.textContent = `No METARs found for ${icao}`;
-          station.appendChild(d);
-        }
-      }
-
-      if (showT){
-        if (tafAvailable){
-          if (mode === 2 && !tafKept) {
-            // In drill-down, if nothing kept after pruning, omit TAF block
-          } else if (tafFrag) {
-            if (showM && metarAvailable) {
-              const sep = document.createElement('div');
-              sep.className = 'drill-sep';
-              sep.style.marginTop='6px';
-              station.appendChild(sep);
-            }
-            const block = document.createElement('div');
-            block.appendChild(tafFrag);
-            station.appendChild(block);
-          }
-        } else {
-          const d = document.createElement('div');
-          d.className = 'muted not-found';
-          d.textContent = `No TAFs found for ${icao}`;
-          station.appendChild(d);
-        }
-      }
-
-      pageFrag.appendChild(station);
-    }
-
-    board.innerHTML = '';
-    board.appendChild(pageFrag);
-  }
-
-  // ===== Fetch + render =====
-  async function fetchAndRender(quiet=false){
-    const ids = normalizedIds();
-    const mode = currentMode();
-    const params = new URLSearchParams({
-      ids,
-      ceil: ceilEl?.value || '700',
-      vis:  visEl?.value  || '2',
-      metar: showMetarEl?.checked ? '1' : '0',
-      taf:   showTafEl?.checked   ? '1' : '0',
-      alpha: alphaEl?.checked     ? '1' : '0',
-      filter: mode === 1 ? 'trigger' : 'all',   // backend filter for Filter mode only
-    });
-
-    if (!quiet){ summary && (summary.textContent='Loading…'); spin && (spin.style.display='inline-block'); err && (err.style.display='none', err.textContent=''); }
-    try{
-      const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' });
-      if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
-      const data = await res.json();
-
-      requestAnimationFrame(() => renderPayload(data));
-
-      const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
-      if (ts) ts.textContent = `Updated: ${hh}:${mm} UTC`;
-
-      const count = ids ? ids.split(',').filter(Boolean).length : 0;
-      const cutoff = parseDDHHWithBuffer(shiftEndEl?.value);
-      const cutoffDisp = (applyTimeEl?.checked && shiftEndEl?.value)
-        ? ` • Shift cutoff +3h: ${cutoff?.disp ?? ''}`
-        : '';
-      if (summary){
-        const modeNames = ['All','Filter','Drill Down'];
-        summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeNames[mode] || 'All'}${cutoffDisp}${adverseEl?.checked ? ' • Adverse Wx: ON' : ''}`;
-      }
-    } catch(e){
-      if (err){
-        err.style.display='block';
-        err.textContent = e && e.message ? e.message : String(e);
-      }
-    } finally{
-      if (spin) spin.style.display='none';
-    }
-  }
-
-  // ===== Auto-refresh every 60s =====
-  let refreshTimer = null;
-  function startAutoRefresh(){
-    if (refreshTimer) clearInterval(refreshTimer);
-    refreshTimer = setInterval(() => fetchAndRender(true), 60_000);
-  }
-  function stopAutoRefresh(){
-    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-  }
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopAutoRefresh();
-    else { fetchAndRender(true); startAutoRefresh(); }
-  });
-  window.addEventListener('online',  () => { fetchAndRender(true); startAutoRefresh(); });
-  window.addEventListener('offline', () => { stopAutoRefresh(); });
-
-  // ===== Init =====
-  fetchAndRender();
-  startAutoRefresh();
-})();
