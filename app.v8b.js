@@ -40,6 +40,96 @@ window.addEventListener('error', (e) => {
   const modeLabel  = $('#modeLabel');
   const filterEl   = $('#filter');   // optional legacy checkbox
 
+  // ===== Popup Dialog System =====
+  let previousTriggerAirports = new Set();
+  let isManualAction = false;
+  let isFirstLoad = true;
+
+  function createPopupDialog(message, buttonText, callback) {
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    `;
+
+    // Create dialog box
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      min-width: 250px;
+    `;
+
+    // Add message
+    const messageEl = document.createElement('p');
+    messageEl.textContent = message;
+    messageEl.style.cssText = `
+      margin: 0 0 20px 0;
+      font-size: 16px;
+      color: #333;
+    `;
+    dialog.appendChild(messageEl);
+
+    // Add button
+    const button = document.createElement('button');
+    button.textContent = buttonText;
+    button.style.cssText = `
+      padding: 8px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    `;
+    button.onclick = () => {
+      document.body.removeChild(overlay);
+      if (callback) callback();
+    };
+    dialog.appendChild(button);
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+  }
+
+  function checkForTriggerChanges(currentTriggerAirports) {
+    if (isManualAction || isFirstLoad) {
+      previousTriggerAirports = currentTriggerAirports;
+      isFirstLoad = false;
+      return;
+    }
+
+    // Check for new triggers
+    for (const icao of currentTriggerAirports) {
+      if (!previousTriggerAirports.has(icao)) {
+        createPopupDialog(`Check ${icao}`, 'Acknowledge');
+        break; // Only show one popup at a time
+      }
+    }
+
+    // Check for cleared triggers
+    for (const icao of previousTriggerAirports) {
+      if (!currentTriggerAirports.has(icao)) {
+        createPopupDialog(`${icao} cleared`, 'Nice');
+        break; // Only show one popup at a time
+      }
+    }
+
+    previousTriggerAirports = currentTriggerAirports;
+  }
+
   // ===== Theme =====
   function applyTheme(mode){
     document.body.classList.toggle('theme-dark', mode === 'dark');
@@ -120,6 +210,7 @@ window.addEventListener('error', (e) => {
   let uiMode = readModeFromDOM(); // used by auto-refresh
 
   modeEl?.addEventListener('input', () => {
+    isManualAction = true;
     uiMode = parseInt(modeEl.value,10) || 0;
     if (modeLabel) modeLabel.textContent = ['All','Filter','Drill Down'][uiMode];
     savePrefs();
@@ -135,6 +226,7 @@ window.addEventListener('error', (e) => {
   }
   addBtn?.addEventListener('click', (e)=>{
     e.preventDefault();
+    isManualAction = true;
     const v = (addOneEl?.value || '').toUpperCase().trim();
     if (!/^[A-Z0-9]{3,4}$/.test(v)) { toast('Enter a valid ICAO (3–4 chars)'); return; }
     const set = new Set(normalizedIds().split(',').filter(Boolean));
@@ -145,6 +237,7 @@ window.addEventListener('error', (e) => {
   });
   remBtn?.addEventListener('click', (e)=>{
     e.preventDefault();
+    isManualAction = true;
     const v = (remOneEl?.value || '').toUpperCase().trim();
     if (!v) { toast('Enter ICAO to remove'); return; }
     const arr = normalizedIds().split(',').filter(Boolean).filter(x=>x!==v);
@@ -156,10 +249,16 @@ window.addEventListener('error', (e) => {
   // ===== Debounced control reactions =====
   let debounceT = null;
   function scheduleFetch(){ clearTimeout(debounceT); debounceT = setTimeout(()=>fetchAndRender(), 120); }
-  form?.addEventListener('submit', (e) => { e.preventDefault(); savePrefs(); fetchAndRender(); });
+  form?.addEventListener('submit', (e) => { 
+    e.preventDefault(); 
+    isManualAction = true;
+    savePrefs(); 
+    fetchAndRender(); 
+  });
   function controlsChanged(e){
     if (!e.target || !e.target.matches) return;
     if (e.target.matches('#theme,#ceil,#vis,#shiftEnd,#applyTime,#adverse,#showMetar,#showTaf,#alpha,#filter')){
+      isManualAction = true;
       if (e.target.id === 'filter') uiMode = e.target.checked ? 1 : 0;
       savePrefs(); scheduleFetch();
     }
@@ -366,7 +465,7 @@ window.addEventListener('error', (e) => {
   function currentMode(){ return uiMode; }
 
   // ===== Render (optimized) =====
-  function renderPayload(data){
+  function renderPayload(data, isAutoRefresh = false){
     const rows = (data && Array.isArray(data.results)) ? data.results : [];
     if (!rows.length) { board.innerHTML = `<div class="muted">No results.</div>`; return; }
 
@@ -381,6 +480,7 @@ window.addEventListener('error', (e) => {
     const applyShift = !!(applyTimeEl?.checked);
 
     const pageFrag = document.createDocumentFragment();
+    const currentTriggerAirports = new Set();
 
     for (const r of list){
       const icao = r.icao || '';
@@ -453,6 +553,11 @@ window.addEventListener('error', (e) => {
 
       const airportIsTrigger = !!(metarTrigger || tafTrigger);
 
+      // Track trigger airports for popup notifications
+      if (airportIsTrigger) {
+        currentTriggerAirports.add(icao);
+      }
+
       // Filter/Drill Down: hide non-triggers
       if ((mode === 1 || mode === 2) && !airportIsTrigger) continue;
 
@@ -506,6 +611,11 @@ window.addEventListener('error', (e) => {
 
     board.innerHTML = '';
     board.appendChild(pageFrag);
+
+    // Check for trigger changes only on auto-refresh
+    if (isAutoRefresh) {
+      checkForTriggerChanges(currentTriggerAirports);
+    }
   }
 
   // ===== Fetch + render =====
@@ -519,8 +629,10 @@ window.addEventListener('error', (e) => {
       metar: showMetarEl?.checked ? '1' : '0',
       taf:   showTafEl?.checked   ? '1' : '0',
       alpha: alphaEl?.checked     ? '1' : '0',
-      filter: mode === 1 ? 'trigger' : 'all',   // backend filter for Filter mode only
+      filter: 'all',   // Always get all data, filter client-side
     });
+
+    const isAutoRefresh = quiet && !isManualAction;
 
     if (!quiet){ summary && (summary.textContent='Loading…'); spin && (spin.style.display='inline-block'); err && (err.style.display='none', err.textContent=''); }
     try{
@@ -528,7 +640,7 @@ window.addEventListener('error', (e) => {
       if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
       const data = await res.json();
 
-      requestAnimationFrame(() => renderPayload(data));
+      requestAnimationFrame(() => renderPayload(data, isAutoRefresh));
 
       const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
       if (ts) ts.textContent = `Updated: ${hh}:${mm} UTC`;
@@ -542,11 +654,15 @@ window.addEventListener('error', (e) => {
         const modeNames = ['All','Filter','Drill Down'];
         summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeNames[mode] || 'All'}${cutoffDisp}${adverseEl?.checked ? ' • Adverse Wx: ON' : ''}`;
       }
+
+      // Reset manual action flag after processing
+      isManualAction = false;
     } catch(e){
       if (err){
         err.style.display='block';
         err.textContent = e && e.message ? e.message : String(e);
       }
+      isManualAction = false;
     } finally{
       if (spin) spin.style.display='none';
     }
