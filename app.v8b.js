@@ -272,10 +272,11 @@ window.addEventListener('error', (e) => {
   function checkMissingMetarElements(metarText) {
     if (!metarText) return true; // If no text, consider it missing elements
 
-    const hasWinds = /\b(\d{3}|VRB)\d{2}(G\d{2})?KT\b|CALM/.test(metarText);
+    // Fixed regex patterns to properly match METAR elements
+    const hasWinds = /\b(\d{3}|VRB)\d{2}(G\d{2})?KT\b|\bCALM\b/.test(metarText);
     const hasVisibility = /\b(P?\d+SM|\d+\/\d+SM)\b/.test(metarText);
-    const hasSkyConditions = /\b(FEW|SCT|BKN|OVC|CLR|SKC|VV|CAVOK)\b/.test(metarText);
-    const hasTemperature = /\bM?\d{2}\/M?\d{2}\b|\bM?\d{2}\/\b/.test(metarText);
+    const hasSkyConditions = /\b(FEW|SCT|BKN|OVC|CLR|CLEAR|SKC|VV|CAVOK)\d*\b/.test(metarText);
+    const hasTemperature = /\b(M?\d{2})\/(M?\d{2})?\b/.test(metarText);
     const hasAltimeter = /\bA\d{4}\b/.test(metarText);
 
     return !(hasWinds && hasVisibility && hasSkyConditions && hasTemperature && hasAltimeter);
@@ -461,9 +462,14 @@ window.addEventListener('error', (e) => {
           d.innerHTML = metarHTML;
           station.appendChild(d.firstElementChild || d);
         } else {
+          // NEW: Highlight "No METARs found" in Drill Down mode
           const d = document.createElement('div');
           d.className = 'muted not-found';
-          d.textContent = `No METARs found for ${icao}`;
+          if (mode === 2) {
+            d.innerHTML = `<span style="color:white;font-weight:bold;background-color:red;">No METARs found for ${icao}</span>`;
+          } else {
+            d.textContent = `No METARs found for ${icao}`;
+          }
           station.appendChild(d);
         }
       }
