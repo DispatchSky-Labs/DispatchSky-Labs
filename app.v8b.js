@@ -398,8 +398,10 @@ window.addEventListener('error', (e) => {
 
       // METAR trigger & underline (METAR is always current)
       let metarTrigger = false;
+      let hasExpired = false;
+      let hasMissingElements = false;
 
-      // NEW: Check for expired METAR and missing elements
+      // NEW: Check for expired METAR and missing elements (ALWAYS, regardless of mode)
       if (metarAvailable) {
         const metarRaw = r.metar?.raw || r.metar?.html || '';
         const metarText = metarRaw.toString();
@@ -407,15 +409,17 @@ window.addEventListener('error', (e) => {
         // Check if METAR is expired
         if (isMetarExpired(metarText)) {
           metarHTML = prependMetarLabel(metarHTML, 'Expired');
+          hasExpired = true;
           metarTrigger = true;
         }
 
         // Check for missing elements
         if (checkMissingMetarElements(metarText)) {
           // Only add "Missing Element" if not already marked as "Expired"
-          if (!metarTrigger) {
+          if (!hasExpired) {
             metarHTML = prependMetarLabel(metarHTML, 'Missing Element');
           }
+          hasMissingElements = true;
           metarTrigger = true;
         }
 
@@ -432,8 +436,8 @@ window.addEventListener('error', (e) => {
           }
         }
       } else {
-        // NEW: No METAR available is a trigger in Drill Down mode
-        if (mode === 2) {
+        // NEW: No METAR available is a trigger in Filter and Drill Down modes
+        if (mode === 1 || mode === 2) {
           metarTrigger = true;
         }
       }
@@ -462,10 +466,10 @@ window.addEventListener('error', (e) => {
           d.innerHTML = metarHTML;
           station.appendChild(d.firstElementChild || d);
         } else {
-          // NEW: Highlight "No METARs found" in Drill Down mode
+          // NEW: Highlight "No METARs found" in Filter and Drill Down modes
           const d = document.createElement('div');
           d.className = 'muted not-found';
-          if (mode === 2) {
+          if (mode === 1 || mode === 2) {
             d.innerHTML = `<span style="color:white;font-weight:bold;background-color:red;">No METARs found for ${icao}</span>`;
           } else {
             d.textContent = `No METARs found for ${icao}`;
