@@ -818,7 +818,12 @@ window.addEventListener('error', (e) => {
 
     const isAutoRefresh = quiet && !isManualAction;
 
-    if (!quiet){ summary && (summary.textContent='Loading…'); spin && (spin.style.display='inline-block'); err && (err.style.display='none', err.textContent=''); }
+    if (!quiet){ 
+      summary && (summary.textContent='Loading…'); 
+      spin && (spin.style.display='inline-block'); 
+      err && (err.style.display='none', err.textContent=''); 
+    }
+
     try{
       const res = await fetch(`${DATA_URL}?${params}`, { method:'GET', mode:'cors' });
       if (!res.ok) throw new Error(`Data API ${res.status} ${res.statusText}`);
@@ -826,7 +831,9 @@ window.addEventListener('error', (e) => {
 
       requestAnimationFrame(() => renderPayload(data, isAutoRefresh));
 
-      const d=new Date(); const hh=String(d.getUTCHours()).padStart(2,'0'); const mm=String(d.getUTCMinutes()).padStart(2,'0');
+      const d=new Date(); 
+      const hh=String(d.getUTCHours()).padStart(2,'0'); 
+      const mm=String(d.getUTCMinutes()).padStart(2,'0');
       if (ts) ts.textContent = `Updated: ${hh}:${mm} UTC`;
 
       const count = ids ? ids.split(',').filter(Boolean).length : 0;
@@ -837,6 +844,12 @@ window.addEventListener('error', (e) => {
       if (summary){
         const modeNames = ['All','Filter','Drill Down'];
         summary.textContent = `${count} airport(s) • Theme: ${document.body.classList.contains('theme-dark') ? 'dark' : 'light'} • Mode: ${modeNames[mode] || 'All'}${cutoffDisp}${adverseEl?.checked ? ' • Adverse Wx: ON' : ''}`;
+      }
+
+      // IMPORTANT: Clear any existing error on successful fetch
+      if (err) {
+        err.style.display = 'none';
+        err.textContent = '';
       }
 
       // Reset manual action flag after processing
