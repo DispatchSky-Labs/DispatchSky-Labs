@@ -479,26 +479,24 @@ window.addEventListener('error', (e) => {
     );
   }
 
-  // ===== NEW: METAR validation helpers =====
-  function isMetarExpired(metarText) {
-    if (!metarText) return false;
+  // ===== NEW: METAR validation helpers with buffer =====
+  function checkMetarExpiredStatus(metarText) {
+    if (!metarText) return { expired: false, critical: false };
 
     // Extract DDHHMM from METAR (e.g., "KDEN 191953Z" -> "191953")
     const match = metarText.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
-    if (!match) return false;
+    if (!match) return { expired: false, critical: false };
 
     const day = parseInt(match[1], 10);
     const hour = parseInt(match[2], 10);
     const minute = parseInt(match[3], 10);
 
-    if (day < 1 || day > 31 || hour > 23 || minute > 59) return false;
+    if (day < 1 || day > 31 || hour > 23 || minute > 59) return { expired: false, critical: false };
 
     const now = new Date();
     const currentYear = now.getUTCFullYear();
     const currentMonth = now.getUTCMonth();
     const currentDay = now.getUTCDate();
-    const currentHour = now.getUTCHours();
-    const currentMinute = now.getUTCMinutes();
 
     // Construct METAR date (assume current month)
     let metarDate = new Date(Date.UTC(currentYear, currentMonth, day, hour, minute));
@@ -513,9 +511,15 @@ window.addEventListener('error', (e) => {
     }
 
     const ageInMs = now - metarDate;
-    const ageInHours = ageInMs / (1000 * 60 * 60);
+    const ageInMinutes = ageInMs / (1000 * 60);
 
-    return ageInHours > 1;
+    // Check if expired (> 60 minutes)
+    const expired = ageInMinutes > 60;
+
+    // Check if critically expired (> 75 minutes, i.e., 1:16+ late)
+    const critical = ageInMinutes > 75;
+
+    return { expired, critical };
   }
 
   function checkMissingMetarElements(metarText) {
@@ -531,8 +535,10 @@ window.addEventListener('error', (e) => {
     return !(hasWinds && hasVisibility && hasSkyConditions && hasTemperature && hasAltimeter);
   }
 
-  function prependMetarLabel(metarHTML, label) {
-    const labelHTML = `<span style="color:white;font-weight:bold;background-color:red;">${label}</span> `;
+  function prependMetarLabel(metarHTML, label, useRedBackground) {
+    const labelHTML = useRedBackground 
+      ? `<span style="color:white;font-weight:bold;background-color:red;">${label}</span> `
+      : `<span style="font-weight:bold;">${label}</span> `;
 
     // Find the <pre class="wx"> element and prepend inside it
     return metarHTML.replace(
@@ -654,25 +660,32 @@ window.addEventListener('error', (e) => {
       // METAR trigger & underline (METAR is always current)
       let metarTrigger = false;
       let hasExpired = false;
+      let hasCriticalExpired = false;
       let hasMissingElements = false;
 
-      // NEW: Check for expired METAR and missing elements (ALWAYS, regardless of mode)
+      // NEW: Check for expired METAR with buffer (ALWAYS, regardless of mode)
       if (metarAvailable) {
         const metarRaw = r.metar?.raw || r.metar?.html || '';
         const metarText = metarRaw.toString();
 
-        // Check if METAR is expired
-        if (isMetarExpired(metarText)) {
-          metarHTML = prependMetarLabel(metarHTML, 'Expired');
+        // Check if METAR is expired with buffer
+        const expiredStatus = checkMetarExpiredStatus(metarText);
+        if (expiredStatus.expired) {
+          // Show "Expired" label - with red background only if critical
+          metarHTML = prependMetarLabel(metarHTML, 'Expired', expiredStatus.critical);
           hasExpired = true;
-          metarTrigger = true;
+          hasCriticalExpired = expiredStatus.critical;
+          // Only trigger if critically expired (for popup purposes)
+          if (expiredStatus.critical) {
+            metarTrigger = true;
+          }
         }
 
         // Check for missing elements
         if (checkMissingMetarElements(metarText)) {
           // Only add "Missing Element" if not already marked as "Expired"
           if (!hasExpired) {
-            metarHTML = prependMetarLabel(metarHTML, 'Missing Element');
+            metarHTML = prependMetarLabel(metarHTML, 'Missing Element', true);
           }
           hasMissingElements = true;
           metarTrigger = true;
@@ -709,12 +722,15 @@ window.addEventListener('error', (e) => {
       const airportIsTrigger = !!(metarTrigger || tafTrigger);
 
       // Track trigger airports for popup notifications
+      // Only add to trigger set if it's a "real" trigger (not just expired in buffer period)
       if (airportIsTrigger) {
         currentTriggerAirports.add(icao);
       }
 
       // Filter/Drill Down: hide non-triggers
-      if ((mode === 1 || mode === 2) && !airportIsTrigger) continue;
+      // For filter purposes, consider both expired and critically expired as triggers
+      const filterTrigger = !!(metarTrigger || tafTrigger || hasExpired);
+      if ((mode === 1 || mode === 2) && !filterTrigger) continue;
 
       // ---- Render this airport ----
       const station = document.createElement('div');
