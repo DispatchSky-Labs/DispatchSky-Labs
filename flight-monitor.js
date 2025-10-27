@@ -1,6 +1,6 @@
 (function() {
   // ===== Config =====
-  const BACKEND_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-flight-data";
+  const BACKEND_URL = "https://process-flight-data-752k4ah3ra-uc.a.run.app";
   const REFRESH_INTERVAL = 60_000; // 1 minute
 
   // ===== DOM =====
