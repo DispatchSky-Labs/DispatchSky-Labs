@@ -5,7 +5,7 @@
 
   // ===== DOM =====
   const $ = (s) => document.querySelector(s);
-const BACKEND_URL = "https://process-flight-data-752k4ah3ra-uc.a.run.app";
+  const BACKEND_URL = "https://process-flight-data-752k4ah3ra-uc.a.run.app";
   const loadBtn = $('#loadBtn');
   const flightTable = $('#flightTable');
   const flightBody = $('#flightBody');
