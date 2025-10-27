@@ -81,14 +81,57 @@
             50% { opacity: 0.5; }
         }
 
-        .controls {
+        .input-section {
             background: #f8f9fa;
-            padding: 20px 30px;
+            padding: 25px 30px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-label {
+            display: block;
+            font-weight: 700;
+            color: #2d3436;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .input-hint {
+            display: block;
+            font-size: 12px;
+            color: #636e72;
+            margin-bottom: 8px;
+            margin-top: -5px;
+            font-style: italic;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            resize: vertical;
+            min-height: 150px;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .input-buttons {
             display: flex;
-            gap: 15px;
-            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
             flex-wrap: wrap;
-            border-bottom: 1px solid #e9ecef;
         }
 
         button {
@@ -124,6 +167,27 @@
         .btn-secondary:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #229954;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4);
+        }
+
+        .controls {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #e9ecef;
         }
 
         .refresh-timer {
@@ -365,6 +429,15 @@
             border-left: 4px solid #e74c3c;
         }
 
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin: 20px 30px;
+            border-left: 4px solid #27ae60;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 30px;
@@ -423,6 +496,14 @@
             .table-wrapper {
                 padding: 15px;
             }
+
+            .input-buttons {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -438,7 +519,7 @@
                     <span class="info-label">Status</span>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <div class="status-indicator"></div>
-                        <span class="info-value" id="systemStatus">Live</span>
+                        <span class="info-value" id="systemStatus">Ready</span>
                     </div>
                 </div>
                 <div class="info-item">
@@ -452,15 +533,33 @@
             </div>
         </div>
 
+        <!-- Input Section -->
+        <div class="input-section">
+            <div class="input-group">
+                <label class="input-label">📋 Enter Flight Data</label>
+                <span class="input-hint">Format: Flight# [TAB] Origin [TAB] Destination (one per line)</span>
+                <textarea id="flightInput" placeholder="4779	ORD	CHA
+3248	SNA	SFO
+4117	ATL	FWA
+5688	SFO	TUS
+5048	ORD	LAF"></textarea>
+            </div>
+
+            <div class="input-buttons">
+                <button class="btn-success" onclick="loadFlightsFromInput()">✓ Load Flights</button>
+                <button class="btn-secondary" onclick="clearFlightInput()">🗑 Clear</button>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="messageContainer"></div>
+
         <!-- Controls -->
-        <div class="controls">
+        <div class="controls" id="controlsSection" style="display: none;">
             <button class="btn-primary" id="refreshBtn" onclick="refreshFlights()">🔄 Refresh Now</button>
             <button class="btn-secondary" id="toggleAutoRefresh" onclick="toggleAutoRefresh()">⏸ Pause Auto-Refresh</button>
             <span class="refresh-timer">Next refresh in: <span id="refreshCountdown">60</span>s</span>
         </div>
-
-        <!-- Error Message -->
-        <div id="errorMessage" style="display: none;"></div>
 
         <!-- Table -->
         <div class="table-wrapper">
@@ -495,7 +594,7 @@
             <div id="emptyState" class="empty-state">
                 <div class="empty-state-icon">📭</div>
                 <h3>No flights loaded</h3>
-                <p>Click "Refresh Now" to fetch flight data</p>
+                <p>Enter flight data above and click "Load Flights" to begin monitoring</p>
             </div>
         </div>
     </div>
@@ -519,18 +618,113 @@
         let autoRefreshTimeout;
         let refreshCountdownInterval;
         let currentFlights = [];
+        let loadedFlights = [];
 
         // ===== Initialization =====
         document.addEventListener('DOMContentLoaded', () => {
             console.log("Dashboard initialized");
             updateLastUpdatedTime();
-            startRefreshCountdown();
-            // Load sample flights on startup (replace with real data)
-            loadSampleFlights();
         });
+
+        // ===== Load Flights from Input =====
+        function loadFlightsFromInput() {
+            const textarea = document.getElementById('flightInput');
+            const input = textarea.value.trim();
+
+            if (!input) {
+                showMessage("Please enter flight data", 'error');
+                return;
+            }
+
+            try {
+                const flights = parseFlightInput(input);
+
+                if (flights.length === 0) {
+                    showMessage("No valid flights found. Check your formatting.", 'error');
+                    return;
+                }
+
+                loadedFlights = flights;
+                document.getElementById('flightCount').textContent = flights.length;
+                document.getElementById('controlsSection').style.display = 'flex';
+
+                showMessage(`✓ Loaded ${flights.length} flights. Click "Refresh Now" to fetch data.`, 'success');
+
+                // Start auto-refresh countdown
+                startRefreshCountdown();
+
+                // Auto-fetch data
+                setTimeout(() => {
+                    refreshFlights();
+                }, 500);
+
+            } catch (error) {
+                showMessage(`Error parsing flights: ${error.message}`, 'error');
+            }
+        }
+
+        function parseFlightInput(input) {
+            const lines = input.split('\n');
+            const flights = [];
+
+            lines.forEach((line, index) => {
+                line = line.trim();
+                if (!line) return; // Skip empty lines
+
+                // Split by tab or multiple spaces
+                const parts = line.split(/[\t\s]+/).filter(p => p);
+
+                if (parts.length < 3) {
+                    console.warn(`Line ${index + 1}: Insufficient fields (expected 3, got ${parts.length})`);
+                    return;
+                }
+
+                const flightNumber = parts[0].toUpperCase();
+                const origin = parts[1].toUpperCase();
+                const destination = parts[2].toUpperCase();
+
+                // Validate
+                if (flightNumber && origin && destination) {
+                    // Add "OO" prefix if it's a number only
+                    const finalFlightNumber = /^\d+$/.test(flightNumber) ? `OO${flightNumber}` : flightNumber;
+
+                    flights.push({
+                        flightNumber: finalFlightNumber,
+                        origin: origin,
+                        destination: destination
+                    });
+                }
+            });
+
+            return flights;
+        }
+
+        function clearFlightInput() {
+            document.getElementById('flightInput').value = '';
+            loadedFlights = [];
+            currentFlights = [];
+            document.getElementById('flightsTable').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('controlsSection').style.display = 'none';
+            document.getElementById('flightCount').textContent = '0';
+            clearMessage();
+        }
+
+        // ===== Message Display =====
+        function showMessage(message, type = 'error') {
+            const container = document.getElementById('messageContainer');
+            const className = type === 'error' ? 'error-message' : 'success-message';
+            container.innerHTML = `<div class="${className}">${message}</div>`;
+        }
+
+        function clearMessage() {
+            document.getElementById('messageContainer').innerHTML = '';
+        }
 
         // ===== Auto Refresh Logic =====
         function startRefreshCountdown() {
+            if (refreshCountdownInterval) clearInterval(refreshCountdownInterval);
+
             let countdown = AUTO_REFRESH_INTERVAL / 1000;
 
             refreshCountdownInterval = setInterval(() => {
@@ -538,7 +732,7 @@
                 document.getElementById('refreshCountdown').textContent = countdown;
 
                 if (countdown <= 0) {
-                    if (autoRefreshEnabled) {
+                    if (autoRefreshEnabled && loadedFlights.length > 0) {
                         refreshFlights();
                     }
                     countdown = AUTO_REFRESH_INTERVAL / 1000;
@@ -566,24 +760,20 @@
 
         // ===== Fetch & Refresh =====
         async function refreshFlights() {
+            if (loadedFlights.length === 0) {
+                showMessage("No flights loaded. Please enter flight data first.", 'error');
+                return;
+            }
+
             showLoading(true);
-            clearErrorMessage();
+            clearMessage();
 
             try {
-                // Get flight list (replace with your actual source)
-                const flightList = await getFlightList();
-
-                if (!flightList || flightList.length === 0) {
-                    showErrorMessage("No flights available");
-                    showLoading(false);
-                    return;
-                }
-
-                // Call Cloud Function
+                // Call Cloud Function with loaded flights
                 const response = await fetch(CLOUD_FUNCTION_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ flights: flightList })
+                    body: JSON.stringify({ flights: loadedFlights })
                 });
 
                 if (!response.ok) {
@@ -599,33 +789,13 @@
                 currentFlights = Object.values(data.results || {});
                 renderFlightsTable(currentFlights);
                 updateLastUpdatedTime();
-                document.getElementById('flightCount').textContent = currentFlights.length;
 
             } catch (error) {
                 console.error("Refresh error:", error);
-                showErrorMessage(`Error refreshing flights: ${error.message}`);
+                showMessage(`Error refreshing flights: ${error.message}`, 'error');
             } finally {
                 showLoading(false);
             }
-        }
-
-        // ===== Sample Flight Data (REPLACE WITH REAL DATA) =====
-        async function getFlightList() {
-            // TODO: Replace with real flight data source (SWIM, database, API, etc.)
-            return [
-                { flightNumber: "OO101", origin: "KDEN", destination: "KJFK" },
-                { flightNumber: "OO102", origin: "KDEN", destination: "KORD" },
-                { flightNumber: "OO103", origin: "KSFO", destination: "KDEN" },
-                { flightNumber: "OO104", origin: "KLAX", destination: "KBOS" },
-                { flightNumber: "OO105", origin: "KDFW", destination: "KDEN" },
-            ];
-        }
-
-        function loadSampleFlights() {
-            // Load sample data on startup
-            getFlightList().then(flights => {
-                document.getElementById('flightCount').textContent = flights.length;
-            });
         }
 
         // ===== Render Table =====
@@ -761,21 +931,9 @@
             }
         }
 
-        // ===== Error Handling =====
-        function showErrorMessage(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            errorDiv.innerHTML = `<div class="error-message">⚠️ ${message}</div>`;
-            errorDiv.style.display = 'block';
-        }
-
-        function clearErrorMessage() {
-            document.getElementById('errorMessage').style.display = 'none';
-        }
-
         // ===== Loading Indicator =====
         function showLoading(show) {
             document.getElementById('loadingIndicator').style.display = show ? 'flex' : 'none';
-            document.getElementById('flightsTable').style.display = show ? 'none' : 'table';
         }
 
         // ===== Modal Close on Background Click =====
