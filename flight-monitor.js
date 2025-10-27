@@ -5,8 +5,8 @@
 
   // ===== DOM =====
   const $ = (s) => document.querySelector(s);
-  const BACKEND_URL = "https://process-flight-data-752k4ah3ra-uc.a.run.app";
   const loadBtn = $('#loadBtn');
+  const flightInput = $('#flightInput');  // ← ADDED
   const flightTable = $('#flightTable');
   const flightBody = $('#flightBody');
   const summary = $('#summary');
@@ -50,13 +50,13 @@
   }
   startMinuteClock();
 
-  // ===== Parse Flights from CSV =====
+  // ===== Parse Flights from TAB-separated text =====
   function parseFlights(text) {
     const lines = text.trim().split('\n').filter(line => line.trim());
     const parsed = [];
     for (const line of lines) {
       if (parsed.length >= 46) break; // Limit to 46
-      const parts = line.split(',').map(p => p.trim().toUpperCase());
+      const parts = line.split('\t').map(p => p.trim().toUpperCase());  // ← TAB separator
       if (parts.length >= 3) {
         parsed.push({
           flightNumber: parts[0],
@@ -75,7 +75,7 @@
 
     if (!flights.length) {
       err.style.display = 'block';
-      err.textContent = 'No valid flights found. Enter FlightNum,OriginICAO,DestICAO per line.';
+      err.textContent = 'No valid flights found. Enter FlightNum[TAB]OriginICAO[TAB]DestICAO per line.';
       return;
     }
 
@@ -96,8 +96,8 @@
     if (saved) {
       try {
         flights = JSON.parse(saved);
-        if (flights.length) {
-          flightInput.value = flights.map(f => `${f.flightNumber},${f.origin},${f.destination}`).join('\n');
+        if (flights.length && flightInput) {
+          flightInput.value = flights.map(f => `${f.flightNumber}\t${f.origin}\t${f.destination}`).join('\n');
           fetchAndRender();
           if (refreshTimer) clearInterval(refreshTimer);
           refreshTimer = setInterval(fetchAndRender, REFRESH_INTERVAL);
@@ -156,6 +156,7 @@
       err.style.display = 'block';
       err.textContent = e.message || 'Fetch error';
       summary.textContent = 'Error loading data';
+      console.error('Fetch error:', e);
     }
   }
 
