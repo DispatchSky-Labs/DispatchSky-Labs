@@ -512,7 +512,7 @@
         <!-- Header -->
         <div class="header">
             <div>
-                <h1>✈️ SkyWest Flight Monitor</h1>
+                <h1>SkyWest Flight Monitor</h1>
             </div>
             <div class="header-info">
                 <div class="info-item">
@@ -536,73 +536,70 @@
         <!-- Input Section -->
         <div class="input-section">
             <div class="input-group">
-                <label class="input-label">📋 Enter Flight Data</label>
-                <span class="input-hint">Format: Flight# [TAB] Origin [TAB] Destination (one per line)</span>
-                <textarea id="flightInput" placeholder="4779	ORD	CHA
-3248	SNA	SFO
-4117	ATL	FWA
-5688	SFO	TUS
-5048	ORD	LAF"></textarea>
+                <label class="input-label">Enter Flight Data</label>
+                <span class="input-hint">Format: Flight# [TAB or SPACE] Origin [TAB or SPACE] Destination (one per line)</span>
+                <textarea id="flightInput" placeholder="SKW5824 KDEN KLNK
+4779 ORD CHA
+3248 SNA SFO"></textarea>
             </div>
 
             <div class="input-buttons">
-                <button class="btn-success" onclick="loadFlightsFromInput()">✓ Load Flights</button>
-                <button class="btn-secondary" onclick="clearFlightInput()">🗑 Clear</button>
+                <button class="btn-success" id="loadBtn">Load Flights</button>
+                <button class="btn-secondary" id="clearBtn">Clear</button>
             </div>
+            <div id="messageContainer"></div>
         </div>
-
-        <!-- Messages -->
-        <div id="messageContainer"></div>
 
         <!-- Controls -->
         <div class="controls" id="controlsSection" style="display: none;">
-            <button class="btn-primary" id="refreshBtn" onclick="refreshFlights()">🔄 Refresh Now</button>
-            <button class="btn-secondary" id="toggleAutoRefresh" onclick="toggleAutoRefresh()">⏸ Pause Auto-Refresh</button>
-            <span class="refresh-timer">Next refresh in: <span id="refreshCountdown">60</span>s</span>
+            <button class="btn-primary" id="refreshBtn">Refresh Now</button>
+            <button class="btn-secondary" id="toggleAutoRefresh">Pause Auto-Refresh</button>
+            <span class="refresh-timer">Next refresh in <span id="refreshCountdown">60</span>s</span>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loadingIndicator" style="display: none;">
+            <div class="spinner"></div>
+            <div class="spinner"></div>
+            <div class="spinner"></div>
+            <span>Loading flight data...</span>
         </div>
 
         <!-- Table -->
         <div class="table-wrapper">
-            <div id="loadingIndicator" class="loading" style="display: none;">
-                <div class="spinner"></div>
-                <div class="spinner"></div>
-                <div class="spinner"></div>
-            </div>
-
             <table id="flightsTable" style="display: none;">
                 <thead>
                     <tr>
-                        <th>Flight #</th>
+                        <th>Flight</th>
                         <th>Origin</th>
                         <th>Dest</th>
-                        <th>Alternate</th>
+                        <th>Alt</th>
                         <th>Est Dep</th>
                         <th>Out</th>
                         <th>Off</th>
                         <th>ETA</th>
                         <th>In</th>
-                        <th>Origin Wx</th>
-                        <th>Dest Wx</th>
-                        <th>ETA Wx</th>
-                        <th>Alt Wx</th>
+                        <th>Origin WX</th>
+                        <th>Dest WX</th>
+                        <th>ETA WX</th>
+                        <th>Alt WX</th>
                     </tr>
                 </thead>
-                <tbody id="flightsTableBody">
-                </tbody>
+                <tbody id="flightsTableBody"></tbody>
             </table>
 
             <div id="emptyState" class="empty-state">
-                <div class="empty-state-icon">📭</div>
+                <div class="empty-state-icon">No flights loaded</div>
                 <h3>No flights loaded</h3>
                 <p>Enter flight data above and click "Load Flights" to begin monitoring</p>
             </div>
         </div>
     </div>
 
-    <!-- Weather Check Modal -->
+    <!-- Weather Modal -->
     <div id="weatherModal" class="modal">
         <div class="modal-content">
-            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <span class="close-modal" id="closeModal">×</span>
             <div class="modal-header" id="modalTitle">Weather Check Details</div>
             <div id="modalBody"></div>
         </div>
@@ -611,7 +608,7 @@
     <script>
         // ===== Configuration =====
         const CLOUD_FUNCTION_URL = "https://process-flight-data-752k4ah3ra-uc.a.run.app";
-        const AUTO_REFRESH_INTERVAL = 60000; // 60 seconds
+        const AUTO_REFRESH_INTERVAL = 60000;
 
         // ===== Global State =====
         let autoRefreshEnabled = true;
@@ -620,130 +617,127 @@
         let currentFlights = [];
         let loadedFlights = [];
 
+        // ===== DOM Elements =====
+        const flightInput = document.getElementById('flightInput');
+        const loadBtn = document.getElementById('loadBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const toggleAutoRefresh = document.getElementById('toggleAutoRefresh');
+        const controlsSection = document.getElementById('controlsSection');
+        const flightsTable = document.getElementById('flightsTable');
+        const flightsTableBody = document.getElementById('flightsTableBody');
+        const emptyState = document.getElementById('emptyState');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const messageContainer = document.getElementById('messageContainer');
+        const flightCount = document.getElementById('flightCount');
+        const lastUpdated = document.getElementById('lastUpdated');
+        const refreshCountdown = document.getElementById('refreshCountdown');
+        const weatherModal = document.getElementById('weatherModal');
+        const closeModal = document.getElementById('closeModal');
+
         // ===== Initialization =====
         document.addEventListener('DOMContentLoaded', () => {
-            console.log("Dashboard initialized");
+            loadBtn.addEventListener('click', loadFlightsFromInput);
+            clearBtn.addEventListener('click', clearFlightInput);
+            refreshBtn.addEventListener('click', refreshFlights);
+            toggleAutoRefresh.addEventListener('click', toggleAutoRefreshFunc);
+            closeModal.addEventListener('click', () => weatherModal.style.display = 'none');
+            window.addEventListener('click', (e) => { if (e.target === weatherModal) weatherModal.style.display = 'none'; });
             updateLastUpdatedTime();
         });
 
-        // ===== Load Flights from Input =====
-        function loadFlightsFromInput() {
-            const textarea = document.getElementById('flightInput');
-            const input = textarea.value.trim();
-
-            if (!input) {
-                showMessage("Please enter flight data", 'error');
-                return;
-            }
-
-            try {
-                const flights = parseFlightInput(input);
-
-                if (flights.length === 0) {
-                    showMessage("No valid flights found. Check your formatting.", 'error');
-                    return;
-                }
-
-                loadedFlights = flights;
-                document.getElementById('flightCount').textContent = flights.length;
-                document.getElementById('controlsSection').style.display = 'flex';
-
-                showMessage(`✓ Loaded ${flights.length} flights. Click "Refresh Now" to fetch data.`, 'success');
-
-                // Start auto-refresh countdown
-                startRefreshCountdown();
-
-                // Auto-fetch data
-                setTimeout(() => {
-                    refreshFlights();
-                }, 500);
-
-            } catch (error) {
-                showMessage(`Error parsing flights: ${error.message}`, 'error');
-            }
-        }
-
+        // ===== Parse Input =====
         function parseFlightInput(input) {
             const lines = input.split('\n');
             const flights = [];
 
             lines.forEach((line, index) => {
                 line = line.trim();
-                if (!line) return; // Skip empty lines
+                if (!line) return;
 
-                // Split by tab or multiple spaces
                 const parts = line.split(/[\t\s]+/).filter(p => p);
-
                 if (parts.length < 3) {
-                    console.warn(`Line ${index + 1}: Insufficient fields (expected 3, got ${parts.length})`);
+                    console.warn(`Line ${index + 1}: Not enough fields`);
                     return;
                 }
 
-                const flightNumber = parts[0].toUpperCase();
+                let flightNumber = parts[0].toUpperCase();
                 const origin = parts[1].toUpperCase();
                 const destination = parts[2].toUpperCase();
 
-                // Validate
-                if (flightNumber && origin && destination) {
-                    // Add "OO" prefix if it's a number only
-                    const finalFlightNumber = /^\d+$/.test(flightNumber) ? `OO${flightNumber}` : flightNumber;
-
-                    flights.push({
-                        flightNumber: finalFlightNumber,
-                        origin: origin,
-                        destination: destination
-                    });
+                if (/^\d+$/.test(flightNumber)) {
+                    flightNumber = `OO${flightNumber}`;
                 }
+
+                flights.push({ flightNumber, origin, destination });
             });
 
             return flights;
         }
 
+        // ===== Load Flights =====
+        function loadFlightsFromInput() {
+            const input = flightInput.value.trim();
+            if (!input) {
+                showMessage("Please enter flight data", 'error');
+                return;
+            }
+
+            try {
+                loadedFlights = parseFlightInput(input);
+                if (loadedFlights.length === 0) {
+                    showMessage("No valid flights found.", 'error');
+                    return;
+                }
+
+                flightCount.textContent = loadedFlights.length;
+                controlsSection.style.display = 'flex';
+                showMessage(`Loaded ${loadedFlights.length} flights.`, 'success');
+                startRefreshCountdown();
+                setTimeout(refreshFlights, 500);
+            } catch (error) {
+                showMessage(`Error: ${error.message}`, 'error');
+            }
+        }
+
         function clearFlightInput() {
-            document.getElementById('flightInput').value = '';
+            flightInput.value = '';
             loadedFlights = [];
             currentFlights = [];
-            document.getElementById('flightsTable').style.display = 'none';
-            document.getElementById('emptyState').style.display = 'block';
-            document.getElementById('controlsSection').style.display = 'none';
-            document.getElementById('flightCount').textContent = '0';
+            flightsTable.style.display = 'none';
+            emptyState.style.display = 'block';
+            controlsSection.style.display = 'none';
+            flightCount.textContent = '0';
             clearMessage();
         }
 
-        // ===== Message Display =====
-        function showMessage(message, type = 'error') {
-            const container = document.getElementById('messageContainer');
+        // ===== Message =====
+        function showMessage(message, type) {
             const className = type === 'error' ? 'error-message' : 'success-message';
-            container.innerHTML = `<div class="${className}">${message}</div>`;
+            messageContainer.innerHTML = `<div class="${className}">${message}</div>`;
         }
 
         function clearMessage() {
-            document.getElementById('messageContainer').innerHTML = '';
+            messageContainer.innerHTML = '';
         }
 
-        // ===== Auto Refresh Logic =====
+        // ===== Auto Refresh =====
         function startRefreshCountdown() {
             if (refreshCountdownInterval) clearInterval(refreshCountdownInterval);
-
             let countdown = AUTO_REFRESH_INTERVAL / 1000;
-
             refreshCountdownInterval = setInterval(() => {
                 countdown--;
-                document.getElementById('refreshCountdown').textContent = countdown;
-
-                if (countdown <= 0) {
-                    if (autoRefreshEnabled && loadedFlights.length > 0) {
-                        refreshFlights();
-                    }
+                refreshCountdown.textContent = countdown;
+                if (countdown <= 0 && autoRefreshEnabled && loadedFlights.length > 0) {
+                    refreshFlights();
                     countdown = AUTO_REFRESH_INTERVAL / 1000;
                 }
             }, 1000);
         }
 
-        function toggleAutoRefresh() {
+        function toggleAutoRefreshFunc() {
             autoRefreshEnabled = !autoRefreshEnabled;
-            const btn = document.getElementById('toggleAutoRefresh');
-            btn.textContent = autoRefreshEnabled ? '⏸ Pause Auto-Refresh' : '▶ Resume Auto-Refresh';
+            toggleAutoRefresh.textContent = autoRefreshEnabled ? 'Pause Auto-Refresh' : 'Resume Auto-Refresh';
         }
 
         function updateLastUpdatedTime() {
@@ -755,44 +749,31 @@
                 minute: '2-digit',
                 second: '2-digit'
             });
-            document.getElementById('lastUpdated').textContent = timeStr + ' UTC';
+            lastUpdated.textContent = timeStr + ' UTC';
         }
 
-        // ===== Fetch & Refresh =====
+        // ===== Fetch Data =====
         async function refreshFlights() {
-            if (loadedFlights.length === 0) {
-                showMessage("No flights loaded. Please enter flight data first.", 'error');
-                return;
-            }
-
+            if (loadedFlights.length === 0) return;
             showLoading(true);
             clearMessage();
 
             try {
-                // Call Cloud Function with loaded flights
                 const response = await fetch(CLOUD_FUNCTION_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ flights: loadedFlights })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
-
-                if (data.error) {
-                    throw new Error(data.error);
-                }
+                if (data.error) throw new Error(data.error);
 
                 currentFlights = Object.values(data.results || {});
                 renderFlightsTable(currentFlights);
                 updateLastUpdatedTime();
-
             } catch (error) {
-                console.error("Refresh error:", error);
-                showMessage(`Error refreshing flights: ${error.message}`, 'error');
+                showMessage(`Error: ${error.message}`, 'error');
             } finally {
                 showLoading(false);
             }
@@ -800,27 +781,20 @@
 
         // ===== Render Table =====
         function renderFlightsTable(flights) {
-            const tbody = document.getElementById('flightsTableBody');
-            const table = document.getElementById('flightsTable');
-            const emptyState = document.getElementById('emptyState');
-
             if (!flights || flights.length === 0) {
-                table.style.display = 'none';
+                flightsTable.style.display = 'none';
                 emptyState.style.display = 'block';
                 return;
             }
 
-            tbody.innerHTML = '';
-            table.style.display = 'table';
+            flightsTableBody.innerHTML = '';
+            flightsTable.style.display = 'table';
             emptyState.style.display = 'none';
 
             flights.forEach(flight => {
                 const row = document.createElement('tr');
                 const isInFlight = flight.inTime && flight.inTime !== '-';
-
-                if (isInFlight) {
-                    row.classList.add('in-flight');
-                }
+                if (isInFlight) row.classList.add('in-flight');
 
                 row.innerHTML = `
                     <td class="flight-number">${flight.flightNumber}</td>
@@ -837,21 +811,15 @@
                     <td>${renderWeatherStatus(flight.etaWeatherCheck, 'eta')}</td>
                     <td>${renderWeatherStatus(flight.alternateCheck, 'alt')}</td>
                 `;
-
-                tbody.appendChild(row);
+                flightsTableBody.appendChild(row);
             });
         }
 
         function formatTime(timeString) {
             if (!timeString || timeString === '-') return '—';
-
             try {
                 const date = new Date(timeString);
-                return date.toLocaleTimeString('en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    hour12: false 
-                });
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
             } catch {
                 return '—';
             }
@@ -867,16 +835,14 @@
             const dotClass = `dot-${status === 'ok' ? 'ok' : status === 'warning' ? 'warning' : 'alert'}`;
 
             return `
-                <span class="weather-status ${className}" onclick="showWeatherModal('${checkType}', ${JSON.stringify(checkData).replace(/'/g, '&#39;')})">
-                    <span class="status-dot ${dotClass}"></span>
+                <span class="weather-status ${className}" onclick="showWeatherModal('${checkType}', ${JSON.stringify(checkData).replace(/'/g, '\\&#39;')})">
+                    <span class="status-dot ${dotClass}</span>
                     ${status.toUpperCase()}
                 </span>
             `;
         }
 
-        // ===== Modal Functions =====
         function showWeatherModal(checkType, checkData) {
-            const modal = document.getElementById('weatherModal');
             const title = document.getElementById('modalTitle');
             const body = document.getElementById('modalBody');
 
@@ -887,27 +853,20 @@
                 'alt': 'Alternate Airport Check'
             };
 
-            title.textContent = typeLabels[checkType] || 'Weather Check Details';
+            title.textContent = typeLabels[checkType] || 'Weather Check';
 
-            let html = `
-                <div style="margin-bottom: 15px;">
-                    <strong>Overall Status:</strong> 
-                    <span style="color: ${getStatusColor(checkData.overallStatus)}; font-weight: 700;">
-                        ${checkData.overallStatus.toUpperCase()}
-                    </span>
-                </div>
-            `;
+            let html = `<div style="margin-bottom:15px;"><strong>Status:</strong> <span style="color:${getStatusColor(checkData.overallStatus)};">${checkData.overallStatus.toUpperCase()}</span></div>`;
 
-            if (checkData.checks && Array.isArray(checkData.checks)) {
+            if (checkData.checks) {
                 checkData.checks.forEach(check => {
-                    const icon = check.pass ? '✓' : '✗';
+                    const icon = check.pass ? 'Success' : 'Failed';
                     const iconClass = check.pass ? 'check-pass' : 'check-fail';
                     html += `
                         <div class="check-item">
                             <div class="check-label">
                                 <span class="check-icon ${iconClass}">${icon}</span>
                                 ${check.label}
-                                ${check.critical ? '<span style="color: #e74c3c; font-size: 10px; margin-left: auto;">CRITICAL</span>' : ''}
+                                ${check.critical ? '<span style="color:#e74c3c;font-size:10px;margin-left:auto;">CRITICAL</span>' : ''}
                             </div>
                         </div>
                     `;
@@ -915,33 +874,15 @@
             }
 
             body.innerHTML = html;
-            modal.style.display = 'block';
-        }
-
-        function closeModal() {
-            document.getElementById('weatherModal').style.display = 'none';
+            weatherModal.style.display = 'block';
         }
 
         function getStatusColor(status) {
-            switch(status) {
-                case 'ok': return '#27ae60';
-                case 'warning': return '#f39c12';
-                case 'alert': return '#e74c3c';
-                default: return '#636e72';
-            }
+            return status === 'ok' ? '#27ae60' : status === 'warning' ? '#f39c12' : '#e74c3c';
         }
 
-        // ===== Loading Indicator =====
         function showLoading(show) {
-            document.getElementById('loadingIndicator').style.display = show ? 'flex' : 'none';
-        }
-
-        // ===== Modal Close on Background Click =====
-        window.onclick = function(event) {
-            const modal = document.getElementById('weatherModal');
-            if (event.target === modal) {
-                closeModal();
-            }
+            loadingIndicator.style.display = show ? 'flex' : 'none';
         }
     </script>
 </body>
