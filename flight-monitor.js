@@ -1,12 +1,13 @@
+<script>
 (function() {
   // ===== Config =====
   const BACKEND_URL = "https://process-flight-data-752k4ah3ra-uc.a.run.app";
   const REFRESH_INTERVAL = 60_000; // 1 minute
 
-  // ===== DOM =====
+  // ===== DOM Elements =====
   const $ = (s) => document.querySelector(s);
   const loadBtn = $('#loadBtn');
-  const flightInput = $('#flightInput');  // ← ADDED
+  const flightInput = $('#flightInput');
   const flightTable = $('#flightTable');
   const flightBody = $('#flightBody');
   const summary = $('#summary');
@@ -20,7 +21,7 @@
   let flightResults = {};
   let refreshTimer = null;
 
-  // ===== Theme =====
+  // ===== Theme Support =====
   function applyTheme(mode) {
     document.body.classList.toggle('theme-dark', mode === 'dark');
     localStorage.setItem('fm_theme', mode);
@@ -32,7 +33,7 @@
     applyTheme(saved);
   })();
 
-  // ===== UTC Clock =====
+  // ===== UTC Clock (updates every minute) =====
   function tickClock() {
     const d = new Date();
     const hh = String(d.getUTCHours()).padStart(2, '0');
@@ -50,53 +51,85 @@
   }
   startMinuteClock();
 
-  // ===== Parse Flights from TAB-separated text =====
+  // ===== Parse Flights: Tabs OR Spaces, Auto OO prefix =====
   function parseFlights(text) {
     const lines = text.trim().split('\n').filter(line => line.trim());
     const parsed = [];
-    for (const line of lines) {
-      if (parsed.length >= 46) break; // Limit to 46
-      const parts = line.split('\t').map(p => p.trim().toUpperCase());  // ← TAB separator
-      if (parts.length >= 3) {
-        parsed.push({
-          flightNumber: parts[0],
-          origin: parts[1],
-          destination: parts[2],
-        });
+    const warnings = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // Split on any whitespace (spaces, tabs) and filter empty
+      const parts = line.split(/[\t\s]+/).map(p => p.trim().toUpperCase()).filter(p => p);
+
+      if (parts.length < 3) {
+        warnings.push(`Line ${i + 1}: Not enough fields (need 3: Flight, Origin, Dest)`);
+        continue;
       }
+
+      let flightNumber = parts[0];
+      const origin = parts[1];
+      const destination = parts[2];
+
+      // Auto-add "OO" prefix if flight number is digits only
+      if (/^\d+$/.test(flightNumber)) {
+        flightNumber = `OO${flightNumber}`;
+      }
+
+      // Validate ICAO codes (basic: 3-4 letters)
+      if (!/^[A-Z]{3,4}$/.test(origin) || !/^[A-Z]{3,4}$/.test(destination)) {
+        warnings.push(`Line ${i + 1}: Invalid ICAO code(s): ${origin} → ${destination}`);
+        continue;
+      }
+
+      parsed.push({ flightNumber, origin, destination });
     }
+
+    // Show warnings if any
+    if (warnings.length > 0 && err) {
+      err.style.display = 'block';
+      err.innerHTML = warnings.slice(0, 3).join('<br>') + (warnings.length > 3 ? `<br>...and ${warnings.length - 3} more` : '');
+    }
+
     return parsed;
   }
 
-  // ===== Load Flights =====
+  // ===== Load Flights Button =====
   loadBtn?.addEventListener('click', () => {
     const text = flightInput?.value || '';
-    flights = parseFlights(text);
-
-    if (!flights.length) {
-      err.style.display = 'block';
-      err.textContent = 'No valid flights found. Enter FlightNum[TAB]OriginICAO[TAB]DestICAO per line.';
+    if (!text.trim()) {
+      showError('Please enter flight data (Flight# Origin Dest per line)');
       return;
     }
 
-    err.style.display = 'none';
-    err.textContent = '';
+    flights = parseFlights(text);
+
+    if (!flights.length) {
+      showError('No valid flights found. Check format and ICAO codes.');
+      return;
+    }
+
+    hideError();
     summary.textContent = `Loaded ${flights.length} flight(s). Fetching data...`;
 
     localStorage.setItem('fm_flights', JSON.stringify(flights));
     fetchAndRender();
 
+    // Restart auto-refresh
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(fetchAndRender, REFRESH_INTERVAL);
   });
 
-  // ===== Load Saved Flights on Init =====
+  // ===== Auto-load saved flights on page load =====
   (function initFlights() {
     const saved = localStorage.getItem('fm_flights');
-    if (saved) {
+    if (saved && flightInput) {
       try {
-        flights = JSON.parse(saved);
-        if (flights.length && flightInput) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          flights = parsed;
           flightInput.value = flights.map(f => `${f.flightNumber}\t${f.origin}\t${f.destination}`).join('\n');
           fetchAndRender();
           if (refreshTimer) clearInterval(refreshTimer);
@@ -115,13 +148,7 @@
     summary.textContent = 'Fetching...';
 
     try {
-      const payload = {
-        flights: flights.map(f => ({
-          flightNumber: f.flightNumber,
-          origin: f.origin,
-          destination: f.destination,
-        }))
-      };
+      const payload = { flights: flights.map(f => ({ flightNumber: f.flightNumber, origin: f.origin, destination: f.destination })) };
 
       const res = await fetch(BACKEND_URL, {
         method: 'POST',
@@ -130,37 +157,30 @@
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error(`Backend ${res.status} ${res.statusText}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
-
-      if (data.error) {
-        err.style.display = 'block';
-        err.textContent = `Backend error: ${data.error}`;
-        return;
-      }
+      if (data.error) throw new Error(data.error);
 
       flightResults = data.results || {};
       renderTable();
 
-      const d = new Date();
-      const hh = String(d.getUTCHours()).padStart(2, '0');
-      const mm = String(d.getUTCMinutes()).padStart(2, '0');
+      const now = new Date();
+      const hh = String(now.getUTCHours()).padStart(2, '0');
+      const mm = String(now.getUTCMinutes()).padStart(2, '0');
       lastUpdate.textContent = `Updated: ${hh}:${mm} UTC`;
       summary.textContent = `${flights.length} flight(s) • Auto-refresh every minute`;
 
-      err.style.display = 'none';
-      err.textContent = '';
+      hideError();
 
     } catch (e) {
-      err.style.display = 'block';
-      err.textContent = e.message || 'Fetch error';
-      summary.textContent = 'Error loading data';
+      showError(e.message || 'Network error');
+      summary.textContent = 'Failed to load data';
       console.error('Fetch error:', e);
     }
   }
 
-  // ===== Render Table =====
+  // ===== Render Flight Table =====
   function renderTable() {
     if (!flights.length) {
       flightBody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--muted);">No flights loaded</td></tr>';
@@ -168,14 +188,12 @@
     }
 
     const rows = flights.map(flight => {
-      const key = `${flight.flightNumber}`;
+      const key = flight.flightNumber;
       const result = flightResults[key] || {};
 
-      // Check if "IN" (greyed out)
       const isIn = result.inTime && result.inTime !== '-';
       const rowClass = isIn ? 'flight-in' : '';
 
-      // Build status indicators
       const originMetarStatus = buildStatus(result.originMetarCheck);
       const destMetarStatus = buildStatus(result.destMetarCheck);
       const etaWeatherStatus = buildStatus(result.etaWeatherCheck);
@@ -186,12 +204,12 @@
           <td><strong>${escape(flight.flightNumber)}</strong></td>
           <td>${escape(flight.origin)}</td>
           <td>${escape(flight.destination)}</td>
-          <td>${escape(result.alternate || '-')}</td>
-          <td>${escape(result.estimatedDeparture || '-')}</td>
-          <td>${escape(result.outTime || '-')}</td>
-          <td>${escape(result.offTime || '-')}</td>
-          <td>${escape(result.inTime || '-')}</td>
-          <td>${escape(result.eta || '-')}</td>
+          <td>${escape(result.alternate || '—')}</td>
+          <td>${formatTime(result.estimatedDeparture)}</td>
+          <td>${formatTime(result.outTime)}</td>
+          <td>${formatTime(result.offTime)}</td>
+          <td>${formatTime(result.inTime)}</td>
+          <td>${formatTime(result.eta)}</td>
           <td>${originMetarStatus}</td>
           <td>${destMetarStatus}</td>
           <td>${etaWeatherStatus}</td>
@@ -203,32 +221,47 @@
     flightBody.innerHTML = rows;
   }
 
-  // ===== Build Status Indicator HTML =====
+  // ===== Format ISO Time to HH:MM =====
+  function formatTime(timeStr) {
+    if (!timeStr || timeStr === '-' || timeStr === '—') return '—';
+    try {
+      const d = new Date(timeStr);
+      return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch {
+      return '—';
+    }
+  }
+
+  // ===== Build Weather Status Badge + Tooltip =====
   function buildStatus(check) {
     if (!check) return '<span class="status status-grey">–</span>';
 
-    const { overallStatus, checks: checkItems } = check;
-    let statusClass = 'status-ok';
-    let statusText = 'OK';
+    const { overallStatus = 'unknown', checks = [] } = check;
+    let statusClass = 'status-ok', statusText = 'OK';
 
     if (overallStatus === 'alert') {
       statusClass = 'status-alert';
-      statusText = '⚠ Alert';
+      statusText = 'Alert';
     } else if (overallStatus === 'warning') {
       statusClass = 'status-warn';
-      statusText = '⚡ Warn';
+      statusText = 'Warn';
     }
 
-    const checksHtml = (checkItems || []).map(item => {
+    const checksHtml = checks.map(item => {
       const itemClass = item.pass ? 'check-ok' : (item.critical ? 'check-alert' : 'check-warn');
-      const icon = item.pass ? '✓' : (item.critical ? '✕' : '!');
+      const icon = item.pass ? 'Success' : (item.critical ? 'Failed' : 'Warning');
       return `<div class="check-item ${itemClass}"><div class="check-icon">${icon}</div>${escape(item.label)}</div>`;
     }).join('');
 
-    return `<div class="status ${statusClass}">${statusText}</div><div class="checks">${checksHtml}</div>`;
+    return `
+      <div class="status ${statusClass}" title="${statusText}">
+        ${statusText}
+      </div>
+      <div class="checks">${checksHtml}</div>
+    `;
   }
 
-  // ===== Escape HTML =====
+  // ===== HTML Escape =====
   function escape(str) {
     if (!str) return '';
     const div = document.createElement('div');
@@ -236,8 +269,21 @@
     return div.innerHTML;
   }
 
-  // ===== Cleanup =====
+  // ===== Error Helpers =====
+  function showError(msg) {
+    if (err) {
+      err.style.display = 'block';
+      err.innerHTML = msg;
+    }
+  }
+  function hideError() {
+    if (err) err.style.display = 'none';
+  }
+
+  // ===== Cleanup on unload =====
   window.addEventListener('beforeunload', () => {
     if (refreshTimer) clearInterval(refreshTimer);
   });
+
 })();
+</script>
