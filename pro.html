@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CieloTracker Pro – Flight Weather Monitor</title>
+
+  <style>
+    :root { 
+      --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --border:#e5e7eb; 
+      --brand:#0f5fff; --danger:#ef4444; --success:#10b981; --warning:#f59e0b;
+      --trigger-bg:#fee; --trigger-text:#fff;
+    }
+
+    body { 
+      margin:0; 
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; 
+      background:var(--bg); 
+      color:var(--fg); 
+      font-size:14px;
+    }
+
+    .theme-dark { 
+      --bg:#0b0f14; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; 
+      --trigger-bg:#7f1d1d; --trigger-text:#fff;
+    }
+
+    /* Header */
+    header { 
+      display:flex; 
+      align-items:center; 
+      justify-content:space-between; 
+      padding:12px 16px; 
+      border-bottom:1px solid var(--border);
+    }
+
+    .header-left { font-size:18px; font-weight:600; }
+    .header-center { display:flex; gap:16px; font-size:14px; color:var(--muted); }
+    .header-right { display:flex; align-items:center; gap:8px; }
+
+    /* Paste Area */
+    .paste-section { 
+      padding:16px; 
+      border-bottom:1px solid var(--border); 
+    }
+
+    .paste-label { 
+      font-size:13px; 
+      color:var(--muted); 
+      margin-bottom:6px; 
+      font-weight:500;
+    }
+
+    #pasteArea { 
+      width:100%; 
+      min-height:80px; 
+      padding:10px; 
+      border:2px dashed var(--border); 
+      border-radius:8px; 
+      font-family:monospace; 
+      font-size:13px;
+      background:#fff;
+      resize:vertical;
+    }
+
+    .theme-dark #pasteArea { background:#111827; border-color:#374151; color:#e5e7eb; }
+
+    .paste-buttons { 
+      display:flex; 
+      gap:8px; 
+      margin-top:8px; 
+    }
+
+    /* Controls */
+    .controls { 
+      display:flex; 
+      flex-wrap:wrap; 
+      gap:10px; 
+      padding:12px 16px; 
+      border-bottom:1px solid var(--border); 
+      align-items:center;
+    }
+
+    .btn { 
+      height:32px; 
+      padding:0 16px; 
+      border:none; 
+      border-radius:6px; 
+      background:var(--brand); 
+      color:#fff; 
+      font-weight:600; 
+      cursor:pointer; 
+      font-size:13px;
+      transition:opacity 0.2s;
+    }
+
+    .btn:hover { opacity:0.9; }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+    .btn-secondary { background:var(--muted); }
+    .btn-danger { background:var(--danger); }
+    .btn-success { background:var(--success); }
+
+    /* Table */
+    .table-container { 
+      padding:16px; 
+      overflow-x:auto; 
+    }
+
+    table { 
+      width:100%; 
+      border-collapse:collapse; 
+      background:#fff;
+      border-radius:8px;
+      overflow:hidden;
+    }
+
+    .theme-dark table { background:#0d1218; }
+
+    th { 
+      background:#f3f4f6; 
+      padding:10px 8px; 
+      text-align:left; 
+      font-weight:600; 
+      font-size:12px;
+      border-bottom:2px solid var(--border);
+      position:sticky;
+      top:0;
+      z-index:10;
+    }
+
+    .theme-dark th { background:#1f2937; }
+
+    td { 
+      padding:8px; 
+      border-bottom:1px solid var(--border); 
+      vertical-align:top;
+    }
+
+    tr:hover { background:rgba(0,0,0,0.02); }
+    .theme-dark tr:hover { background:rgba(255,255,255,0.02); }
+
+    /* Editable cells */
+    .editable { 
+      cursor:text; 
+      min-width:40px;
+      padding:4px 6px;
+      border-radius:4px;
+    }
+
+    .editable:hover { background:rgba(0,0,0,0.04); }
+    .theme-dark .editable:hover { background:rgba(255,255,255,0.06); }
+
+    .editable input { 
+      width:100%; 
+      border:none; 
+      background:transparent; 
+      font:inherit; 
+      color:inherit;
+      padding:0;
+    }
+
+    .editable input:focus { outline:2px solid var(--brand); border-radius:2px; }
+
+    /* ICAO cells - weather triggers */
+    .icao-cell { 
+      position:relative; 
+      font-weight:600; 
+      cursor:help;
+      font-family:monospace;
+    }
+
+    .icao-trigger { 
+      background:var(--trigger-bg); 
+      color:var(--trigger-text); 
+      font-weight:700;
+      padding:2px 4px;
+      border-radius:3px;
+    }
+
+    .icao-bold { font-weight:700; }
+
+    .icao-toast-green {
+      animation:toastGreen 1s ease-out;
+    }
+
+    @keyframes toastGreen {
+      0%, 100% { background:transparent; }
+      50% { background:#d1fae5; }
+    }
+
+    /* Phase indicators */
+    .phase-planned { color:var(--muted); font-style:italic; }
+    .phase-sent { color:var(--brand); font-weight:600; }
+    .phase-out { color:var(--warning); font-weight:600; }
+    .phase-in { color:var(--success); font-weight:600; }
+    .phase-done { opacity:0.4; text-decoration:line-through; }
+
+    /* Weather popup */
+    .wx-popup { 
+      position:absolute; 
+      background:#fff; 
+      border:1px solid var(--border); 
+      border-radius:8px; 
+      padding:12px; 
+      box-shadow:0 4px 12px rgba(0,0,0,0.15); 
+      z-index:1000;
+      max-width:600px;
+      font-family:monospace;
+      font-size:12px;
+      white-space:pre-wrap;
+      line-height:1.4;
+    }
+
+    .theme-dark .wx-popup { background:#1f2937; border-color:#374151; }
+
+    /* Statistics */
+    .stats { 
+      padding:12px 16px; 
+      display:flex; 
+      gap:20px; 
+      font-size:13px;
+      border-bottom:1px solid var(--border);
+    }
+
+    .stat { display:flex; align-items:center; gap:6px; }
+    .stat-label { color:var(--muted); }
+    .stat-value { font-weight:600; }
+
+    /* Animations */
+    .pulse-update {
+      animation:pulseWave 1.5s ease-out;
+    }
+
+    @keyframes pulseWave {
+      0% { background:rgba(59,130,246,0); }
+      50% { background:rgba(59,130,246,0.1); }
+      100% { background:rgba(59,130,246,0); }
+    }
+
+    /* Toast notifications */
+    .toast {
+      position:fixed;
+      top:20px;
+      right:20px;
+      background:#111;
+      color:#fff;
+      padding:12px 16px;
+      border-radius:8px;
+      box-shadow:0 4px 12px rgba(0,0,0,0.3);
+      z-index:2000;
+      animation:slideIn 0.3s ease-out;
+      max-width:400px;
+    }
+
+    @keyframes slideIn {
+      from { transform:translateX(400px); opacity:0; }
+      to { transform:translateX(0); opacity:1; }
+    }
+
+    .toast-success { background:var(--success); }
+    .toast-error { background:var(--danger); }
+    .toast-warning { background:var(--warning); }
+
+    /* Loading */
+    .loading { 
+      text-align:center; 
+      padding:40px; 
+      color:var(--muted); 
+    }
+
+    /* Error (only shown after 5min) */
+    .error-critical { 
+      padding:12px 16px; 
+      background:#fef2f2; 
+      color:var(--danger); 
+      border-left:4px solid var(--danger);
+      margin:16px;
+      border-radius:4px;
+    }
+
+    .theme-dark .error-critical { background:#7f1d1d; color:#fca5a5; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      header { flex-direction:column; gap:12px; }
+      .header-center { flex-direction:column; gap:4px; }
+      .controls { flex-direction:column; align-items:stretch; }
+      table { font-size:12px; }
+      td, th { padding:6px 4px; }
+    }
+
+    /* Utility */
+    .hidden { display:none !important; }
+    .muted { color:var(--muted); }
+  </style>
+</head>
+<body class="theme-light">
+
+  <header>
+    <div class="header-left">CieloTracker <strong>Pro</strong></div>
+    <div class="header-center">
+      <span id="currentTime">--:-- UTC</span>
+      <span id="lastUpdate">Updated: --:-- UTC</span>
+    </div>
+    <div class="header-right">
+      <label for="theme" style="font-size:13px; color:var(--muted);">Theme</label>
+      <select id="theme" class="btn" style="padding:0 8px;">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="paste-section">
+    <div class="paste-label">Paste Flight List (FLT ORG ETD DST ETA) – one flight per line:</div>
+    <textarea id="pasteArea" placeholder="Example:
+DL123 DEN 2230 ATL 0330
+UA456 ORD 1445 LAX 1715"></textarea>
+    <div class="paste-buttons">
+      <button id="parseBtn" class="btn">Parse Flights</button>
+      <button id="clearBtn" class="btn btn-secondary">Clear</button>
+      <button id="exportBtn" class="btn btn-secondary">Export to Excel</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="refreshBtn" class="btn btn-secondary">Refresh Weather</button>
+    <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
+      <input type="checkbox" id="autoRefresh" checked> Auto-refresh (60s)
+    </label>
+    <button id="markAllSentBtn" class="btn btn-secondary">Mark All as Sent</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <span class="stat-label">Total:</span>
+      <span class="stat-value" id="statTotal">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Planned:</span>
+      <span class="stat-value" id="statPlanned">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Sent:</span>
+      <span class="stat-value" id="statSent">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Out:</span>
+      <span class="stat-value" id="statOut">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Triggers:</span>
+      <span class="stat-value" id="statTriggers">0</span>
+    </div>
+  </div>
+
+  <div id="errorDisplay" class="error-critical hidden">
+    Weather data unavailable for 5+ minutes. Last update: <span id="errorTime">--:--</span> UTC
+  </div>
+
+  <div class="table-container">
+    <table id="flightTable">
+      <thead>
+        <tr>
+          <th>FLT</th>
+          <th>ORG</th>
+          <th>DEST</th>
+          <th>T/ALT</th>
+          <th>ALT1</th>
+          <th>ALT2</th>
+          <th>ETD</th>
+          <th>BURN</th>
+          <th>TAXI</th>
+          <th>DUR</th>
+          <th>ETA</th>
+          <th>OUT</th>
+          <th>Phase</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="flightTableBody">
+        <tr>
+          <td colspan="14" class="loading">Paste flight list above to begin</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+(function() {
+  'use strict';
+
+  // ===== Configuration =====
+  const API_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
+  const ADVERSE_WX = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
+  const ERROR_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+  // ===== State =====
+  let flights = [];
+  let weatherData = {};
+  let lastSuccessfulUpdate = null;
+  let autoRefreshInterval = null;
+  let lastApiError = null;
+
+  // ===== DOM Elements =====
+  const $ = (sel) => document.querySelector(sel);
+  const pasteArea = $('#pasteArea');
+  const parseBtn = $('#parseBtn');
+  const clearBtn = $('#clearBtn');
+  const exportBtn = $('#exportBtn');
+  const refreshBtn = $('#refreshBtn');
+  const autoRefreshChk = $('#autoRefresh');
+  const markAllSentBtn = $('#markAllSentBtn');
+  const flightTableBody = $('#flightTableBody');
+  const currentTimeEl = $('#currentTime');
+  const lastUpdateEl = $('#lastUpdate');
+  const themeSelect = $('#theme');
+  const errorDisplay = $('#errorDisplay');
+  const errorTimeEl = $('#errorTime');
+
+  // Stats
+  const statTotal = $('#statTotal');
+  const statPlanned = $('#statPlanned');
+  const statSent = $('#statSent');
+  const statOut = $('#statOut');
+  const statTriggers = $('#statTriggers');
+
+  // ===== Utility Functions =====
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  function getCurrentZulu() {
+    const now = new Date();
+    return `${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}`;
+  }
+
+  function formatZuluTime(hhmm) {
+    if (!hhmm || hhmm.length !== 4) return hhmm;
+    return `${hhmm.slice(0,2)}:${hhmm.slice(2)}`;
+  }
+
+  function addMinutesToZulu(hhmm, minutes) {
+    if (!hhmm || hhmm.length !== 4) return '';
+    let h = parseInt(hhmm.slice(0,2), 10);
+    let m = parseInt(hhmm.slice(2), 10);
+    m += minutes;
+    while (m >= 60) { m -= 60; h++; }
+    while (m < 0) { m += 60; h--; }
+    while (h >= 24) h -= 24;
+    while (h < 0) h += 24;
+    return pad2(h) + pad2(m);
+  }
+
+  function decimalHoursToMinutes(decimal) {
+    // 1.21 = 81 minutes
+    const hours = Math.floor(decimal);
+    const minutes = Math.round((decimal - hours) * 100);
+    return hours * 60 + minutes;
+  }
+
+  function normalizeICAO(iata) {
+    if (!iata || iata.length < 3) return iata;
+    const clean = iata.trim().toUpperCase();
+    if (clean.length === 4) return clean; // Already ICAO
+    if (clean[0] === 'Y') return 'C' + clean;
+    return 'K' + clean;
+  }
+
+  function showToast(message, type = 'info', duration = 3000) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), duration);
+  }
+
+  // ===== Clock =====
+  function updateClock() {
+    const now = new Date();
+    const hh = pad2(now.getUTCHours());
+    const mm = pad2(now.getUTCMinutes());
+    currentTimeEl.textContent = `${hh}:${mm} UTC`;
+  }
+
+  function startClock() {
+    updateClock();
+    const now = new Date();
+    const msToNextMinute = (60 - now.getUTCSeconds()) * 1000 - now.getUTCMilliseconds();
+    setTimeout(() => {
+      updateClock();
+      setInterval(updateClock, 60000);
+    }, msToNextMinute);
+  }
+
+  // ===== Theme =====
+  function applyTheme(theme) {
+    document.body.className = theme === 'dark' ? 'theme-dark' : 'theme-light';
+    localStorage.setItem('ct_pro_theme', theme);
+  }
+
+  themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
+
+  // Load saved theme
+  const savedTheme = localStorage.getItem('ct_pro_theme') || 'light';
+  themeSelect.value = savedTheme;
+  applyTheme(savedTheme);
+
+  // ===== Flight Data Management =====
+  function parsePastedFlights(text) {
+    const lines = text.trim().split('\n');
+    const newFlights = [];
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      // Parse: FLT ORG ETD DST ETA (space or tab separated)
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 5) continue;
+
+      const [flt, org, etd, dst, eta] = parts;
+
+      newFlights.push({
+        id: Date.now() + Math.random(), // Unique ID
+        flight: flt,
+        origin: normalizeICAO(org),
+        dest: normalizeICAO(dst),
+        takeoffAlt: '',
+        alt1: '',
+        alt2: '',
+        etd: etd,
+        burnoff: '',
+        taxiOut: '',
+        duration: '',
+        eta: eta,
+        outTime: '',
+        phase: 'planned', // planned, sent, out, in
+        triggers: new Set()
+      });
+    }
+
+    return newFlights;
+  }
+
+  function saveFlight() {
+    localStorage.setItem('ct_pro_flights', JSON.stringify(flights));
+  }
+
+  function loadFlights() {
+    const saved = localStorage.getItem('ct_pro_flights');
+    if (saved) {
+      try {
+        flights = JSON.parse(saved);
+        // Convert triggers back to Set
+        flights.forEach(f => f.triggers = new Set(f.triggers || []));
+      } catch(e) {
+        console.error('Failed to load flights:', e);
+      }
+    }
+  }
+
+  function getTaxiOutSuggestion(origin) {
+    // Get last 5 taxi out times for this origin
+    const history = flights
+      .filter(f => f.origin === origin && f.taxiOut && f.phase !== 'planned')
+      .map(f => parseInt(f.taxiOut, 10))
+      .filter(n => !isNaN(n))
+      .slice(-5);
+
+    if (history.length < 3) return ''; // Need at least 3 data points
+
+    // Return average
+    const avg = Math.round(history.reduce((a,b) => a+b, 0) / history.length);
+    return String(avg);
+  }
+
+  function calculateDurationAndETA(flight) {
+    if (!flight.taxiOut || !flight.burnoff) {
+      flight.duration = '';
+      return;
+    }
+
+    const taxiMin = parseInt(flight.taxiOut, 10) || 0;
+    const burnMin = decimalHoursToMinutes(parseFloat(flight.burnoff) || 0);
+    const totalMin = taxiMin + burnMin;
+
+    flight.duration = String(totalMin);
+
+    // Calculate ETA
+    if (flight.etd) {
+      flight.eta = addMinutesToZulu(flight.etd, totalMin);
+    }
+  }
+
+  // ===== Weather API =====
+  async function fetchWeather(icaoList) {
+    if (!icaoList || icaoList.length === 0) return {};
+
+    const params = new URLSearchParams({
+      ids: icaoList.join(','),
+      ceil: '700',
+      vis: '3',
+      metar: '1',
+      taf: '1',
+      alpha: '0',
+      filter: 'all'
+    });
+
+    try {
+      const res = await fetch(`${API_URL}?${params}`, { 
+        method: 'GET', 
+        mode: 'cors' 
+      });
+
+      if (!res.ok) {
+        throw new Error(`API ${res.status}`);
+      }
+
+      const data = await res.json();
+      lastSuccessfulUpdate = new Date();
+      lastApiError = null;
+      errorDisplay.classList.add('hidden');
+
+      // Update last update time
+      const hh = pad2(lastSuccessfulUpdate.getUTCHours());
+      const mm = pad2(lastSuccessfulUpdate.getUTCMinutes());
+      lastUpdateEl.textContent = `Updated: ${hh}:${mm} UTC`;
+
+      // Convert to lookup object
+      const lookup = {};
+      if (data.results) {
+        data.results.forEach(r => {
+          lookup[r.icao] = r;
+        });
+      }
+
+      return lookup;
+    } catch(err) {
+      lastApiError = err;
+
+      // Only show error if >5 minutes since last success
+      if (lastSuccessfulUpdate) {
+        const timeSinceUpdate = Date.now() - lastSuccessfulUpdate.getTime();
+        if (timeSinceUpdate > ERROR_THRESHOLD_MS) {
+          errorDisplay.classList.remove('hidden');
+          const hh = pad2(lastSuccessfulUpdate.getUTCHours());
+          const mm = pad2(lastSuccessfulUpdate.getUTCMinutes());
+          errorTimeEl.textContent = `${hh}:${mm}`;
+        }
+      }
+
+      return weatherData; // Return cached data
+    }
+  }
+
+  async function refreshWeather() {
+    // Collect all unique ICAOs
+    const icaos = new Set();
+    flights.forEach(f => {
+      if (f.phase !== 'in') {
+        icaos.add(f.origin);
+        icaos.add(f.dest);
+        if (f.takeoffAlt) icaos.add(f.takeoffAlt);
+        if (f.alt1) icaos.add(f.alt1);
+        if (f.alt2) icaos.add(f.alt2);
+      }
+    });
+
+    if (icaos.size === 0) return;
+
+    weatherData = await fetchWeather(Array.from(icaos));
+    checkWeatherTriggers();
+    renderTable();
+  }
+
+  // ===== Weather Trigger Logic =====
+  function checkWeatherTriggers() {
+    flights.forEach(flight => {
+      flight.triggers.clear();
+
+      if (flight.phase === 'in') return;
+
+      const originWx = weatherData[flight.origin];
+      const destWx = weatherData[flight.dest];
+      const taltWx = flight.takeoffAlt ? weatherData[flight.takeoffAlt] : null;
+      const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
+      const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
+
+      // ORIGIN: Check visibility <1/2SM in METAR
+      if (flight.phase === 'planned') {
+        if (checkOriginTrigger(originWx, !!flight.takeoffAlt)) {
+          flight.triggers.add(`${flight.origin}:origin`);
+        }
+
+        // Check expiration (all fields) only in planned phase
+        if (checkMetarExpired(originWx, 'critical')) flight.triggers.add(`${flight.origin}:exp`);
+        if (checkMetarExpired(destWx, 'critical')) flight.triggers.add(`${flight.dest}:exp`);
+        if (taltWx && checkMetarExpired(taltWx, 'critical')) flight.triggers.add(`${flight.takeoffAlt}:exp`);
+        if (alt1Wx && checkMetarExpired(alt1Wx, 'critical')) flight.triggers.add(`${flight.alt1}:exp`);
+        if (alt2Wx && checkMetarExpired(alt2Wx, 'critical')) flight.triggers.add(`${flight.alt2}:exp`);
+      }
+
+      // DESTINATION: Check at ETA ±1 hour for TAF (BKN/OVC <2000' or VIS <3SM)
+      if (checkDestTrigger(destWx, flight)) {
+        flight.triggers.add(`${flight.dest}:dest`);
+      }
+
+      // ALTERNATES: Check at ETA for TAF (BKN/OVC <600' or VIS <1.5SM)
+      if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) {
+        flight.triggers.add(`${flight.alt1}:alt`);
+      }
+      if (alt2Wx && checkAlternateTrigger(alt2Wx, flight)) {
+        flight.triggers.add(`${flight.alt2}:alt`);
+      }
+
+      // TAKEOFF ALTERNATE: Always check METAR
+      if (taltWx && checkTakeoffAltTrigger(taltWx)) {
+        flight.triggers.add(`${flight.takeoffAlt}:talt`);
+      }
+    });
+  }
+
+  function checkOriginTrigger(wx, hasTakeoffAlt) {
+    if (!wx || !wx.metar) return false;
+    const metarText = wx.metar.raw || '';
+    // Check for <1/2SM
+    const visMatch = metarText.match(/\b(\d+\/\d+)SM\b/);
+    if (visMatch) {
+      const [num, denom] = visMatch[1].split('/').map(Number);
+      if (num / denom < 0.5) return true;
+    }
+    return false;
+  }
+
+  function checkDestTrigger(wx, flight) {
+    if (!wx || !wx.taf || !flight.eta) return false;
+
+    const tafText = wx.taf.raw || '';
+    const eta = parseInt(flight.eta, 10);
+    const duration = parseInt(flight.duration, 10) || 999;
+
+    // Get ETA hour and ±1 hour windows (whole hours)
+    const etaHour = Math.floor(eta / 100);
+    const checkHours = [etaHour - 1, etaHour, etaHour + 1].map(h => {
+      while (h < 0) h += 24;
+      while (h >= 24) h -= 24;
+      return h;
+    });
+
+    // Parse TAF for these hours
+    // Look for BKN/OVC <2000 or VIS <3SM
+    // Simplified: check if TAF contains triggers
+    const hasCeilingTrigger = /\b(BKN|OVC)(\d{3})\b/.test(tafText) && 
+      parseInt(RegExp.$2, 10) < 20;
+    const hasVisTrigger = /\b(\d+)SM\b/.test(tafText) && 
+      parseInt(RegExp.$1, 10) < 3;
+
+    // If duration <60min, also check METAR
+    if (duration < 60 && wx.metar) {
+      const metarText = wx.metar.raw || '';
+      if (/\b(BKN|OVC)(\d{3})\b/.test(metarText) && parseInt(RegExp.$2, 10) < 20) return true;
+      if (/\b(\d+)SM\b/.test(metarText) && parseInt(RegExp.$1, 10) < 3) return true;
+    }
+
+    return hasCeilingTrigger || hasVisTrigger;
+  }
+
+  function checkAlternateTrigger(wx, flight) {
+    if (!wx || !wx.taf) return false;
+    const tafText = wx.taf.raw || '';
+
+    // BKN/OVC <600' or VIS <1.5SM
+    const hasCeilingTrigger = /\b(BKN|OVC)(\d{3})\b/.test(tafText) && 
+      parseInt(RegExp.$2, 10) < 6;
+    const hasVisTrigger = /\b(\d+\/\d+|\d+)SM\b/.test(tafText);
+
+    if (hasVisTrigger) {
+      const visStr = RegExp.$1;
+      const vis = visStr.includes('/') 
+        ? eval(visStr) 
+        : parseFloat(visStr);
+      if (vis < 1.5) return true;
+    }
+
+    const duration = parseInt(flight.duration, 10) || 999;
+    if (duration < 60 && wx.metar) {
+      const metarText = wx.metar.raw || '';
+      if (/\b(BKN|OVC)(\d{3})\b/.test(metarText) && parseInt(RegExp.$2, 10) < 6) return true;
+      if (/\b(\d+\/\d+|\d+)SM\b/.test(metarText)) {
+        const vis = RegExp.$1.includes('/') ? eval(RegExp.$1) : parseFloat(RegExp.$1);
+        if (vis < 1.5) return true;
+      }
+    }
+
+    return hasCeilingTrigger;
+  }
+
+  function checkTakeoffAltTrigger(wx) {
+    if (!wx || !wx.metar) return false;
+    const metarText = wx.metar.raw || '';
+    // Same as alternate triggers for METAR
+    if (/\b(BKN|OVC)(\d{3})\b/.test(metarText) && parseInt(RegExp.$2, 10) < 6) return true;
+    if (/\b(\d+\/\d+|\d+)SM\b/.test(metarText)) {
+      const visStr = RegExp.$1;
+      const vis = visStr.includes('/') ? eval(visStr) : parseFloat(visStr);
+      if (vis < 1.5) return true;
+    }
+    return false;
+  }
+
+  function checkMetarExpired(wx, level = 'warning') {
+    if (!wx || !wx.metar) return false;
+    const metarText = wx.metar.raw || '';
+    const match = metarText.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+    if (!match) return false;
+
+    const day = parseInt(match[1], 10);
+    const hour = parseInt(match[2], 10);
+    const minute = parseInt(match[3], 10);
+
+    const now = new Date();
+    const metarDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      day, hour, minute
+    ));
+
+    // Handle month rollover
+    if (day > now.getUTCDate() + 15) {
+      metarDate.setUTCMonth(metarDate.getUTCMonth() - 1);
+    }
+
+    const ageMin = (now - metarDate) / 60000;
+
+    if (level === 'warning') return ageMin > 60;
+    if (level === 'critical') return ageMin > 75;
+    return false;
+  }
+
+  // ===== Table Rendering =====
+  function renderTable() {
+    if (flights.length === 0) {
+      flightTableBody.innerHTML = '<tr><td colspan="14" class="loading">No flights loaded</td></tr>';
+      updateStats();
+      return;
+    }
+
+    flightTableBody.innerHTML = '';
+
+    flights.forEach((flight, idx) => {
+      const row = document.createElement('tr');
+      if (flight.phase === 'in') row.classList.add('phase-done');
+
+      row.innerHTML = `
+        <td>${flight.flight}</td>
+        <td class="icao-cell" data-icao="${flight.origin}" data-field="origin">${renderICAO(flight, 'origin')}</td>
+        <td class="icao-cell" data-icao="${flight.dest}" data-field="dest">${renderICAO(flight, 'dest')}</td>
+        <td class="editable" data-idx="${idx}" data-field="takeoffAlt">${flight.takeoffAlt}</td>
+        <td class="editable" data-idx="${idx}" data-field="alt1">${flight.alt1}</td>
+        <td class="editable" data-idx="${idx}" data-field="alt2">${flight.alt2}</td>
+        <td class="editable" data-idx="${idx}" data-field="etd">${flight.etd}</td>
+        <td class="editable" data-idx="${idx}" data-field="burnoff">${flight.burnoff}</td>
+        <td class="editable" data-idx="${idx}" data-field="taxiOut">${flight.taxiOut}</td>
+        <td>${flight.duration}</td>
+        <td>${formatZuluTime(flight.eta)}</td>
+        <td class="editable" data-idx="${idx}" data-field="outTime">${flight.outTime ? formatZuluTime(flight.outTime) : ''}</td>
+        <td class="phase-${flight.phase}">${flight.phase.toUpperCase()}</td>
+        <td>
+          <button class="btn btn-secondary" style="padding:4px 8px; height:auto; font-size:11px;" onclick="window.flightActions.markSent(${idx})">Sent</button>
+          <button class="btn btn-secondary" style="padding:4px 8px; height:auto; font-size:11px;" onclick="window.flightActions.markOut(${idx})">Out</button>
+          <button class="btn btn-success" style="padding:4px 8px; height:auto; font-size:11px;" onclick="window.flightActions.markIn(${idx})">In</button>
+          <button class="btn btn-danger" style="padding:4px 8px; height:auto; font-size:11px;" onclick="window.flightActions.remove(${idx})">×</button>
+        </td>
+      `;
+
+      flightTableBody.appendChild(row);
+    });
+
+    attachEditListeners();
+    attachWeatherHoverListeners();
+    updateStats();
+    saveFlight();
+  }
+
+  function renderICAO(flight, field) {
+    const icao = flight[field];
+    if (!icao) return '';
+
+    const triggerKey = `${icao}:${field === 'origin' ? 'origin' : 'dest'}`;
+    const expKey = `${icao}:exp`;
+    const hasTrigger = flight.triggers.has(triggerKey);
+    const hasExp = flight.triggers.has(expKey);
+
+    let html = icao;
+    let classes = [];
+
+    if (flight.phase === 'planned') {
+      if (hasTrigger) {
+        classes.push('icao-trigger');
+      } else if (hasExp) {
+        html = '⏰ ' + html;
+        classes.push('icao-bold');
+      }
+    } else {
+      // Sent/Out: only bold
+      if (hasTrigger) classes.push('icao-bold');
+    }
+
+    if (classes.length) {
+      html = `<span class="${classes.join(' ')}">${html}</span>`;
+    }
+
+    return html;
+  }
+
+  function attachEditListeners() {
+    flightTableBody.querySelectorAll('.editable').forEach(cell => {
+      cell.addEventListener('click', function() {
+        if (this.querySelector('input')) return; // Already editing
+
+        const idx = parseInt(this.dataset.idx, 10);
+        const field = this.dataset.field;
+        const currentValue = flights[idx][field];
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentValue;
+        input.style.width = '100%';
+
+        const save = () => {
+          let newValue = input.value.trim();
+
+          // Special handling for ICAO fields
+          if (['takeoffAlt', 'alt1', 'alt2'].includes(field) && newValue) {
+            newValue = normalizeICAO(newValue);
+          }
+
+          flights[idx][field] = newValue;
+
+          // Auto-suggest taxi out
+          if (field === 'taxiOut' && !newValue) {
+            const suggestion = getTaxiOutSuggestion(flights[idx].origin);
+            if (suggestion) {
+              flights[idx].taxiOut = suggestion;
+            }
+          }
+
+          // Recalculate duration/ETA
+          if (['taxiOut', 'burnoff', 'etd'].includes(field)) {
+            calculateDurationAndETA(flights[idx]);
+          }
+
+          // Update phase if burnoff and taxiOut filled
+          if (field === 'burnoff' || field === 'taxiOut') {
+            if (flights[idx].burnoff && flights[idx].taxiOut && flights[idx].phase === 'planned') {
+              flights[idx].phase = 'sent';
+            }
+          }
+
+          renderTable();
+          refreshWeather();
+        };
+
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') save();
+          if (e.key === 'Escape') renderTable();
+        });
+
+        this.innerHTML = '';
+        this.appendChild(input);
+        input.focus();
+      });
+    });
+  }
+
+  function attachWeatherHoverListeners() {
+    flightTableBody.querySelectorAll('.icao-cell').forEach(cell => {
+      cell.addEventListener('mouseenter', function(e) {
+        const icao = this.dataset.icao;
+        if (!icao) return;
+
+        const wx = weatherData[icao];
+        if (!wx) return;
+
+        const popup = document.createElement('div');
+        popup.className = 'wx-popup';
+        popup.innerHTML = `
+          <strong>${icao}</strong><br><br>
+          ${wx.metar ? `METAR:<br>${wx.metar.raw || 'N/A'}<br><br>` : ''}
+          ${wx.taf ? `TAF:<br>${wx.taf.raw || 'N/A'}` : ''}
+        `;
+
+        document.body.appendChild(popup);
+
+        const rect = this.getBoundingClientRect();
+        popup.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+        popup.style.left = (rect.left + window.scrollX) + 'px';
+
+        this.addEventListener('mouseleave', () => popup.remove(), { once: true });
+      });
+    });
+  }
+
+  function updateStats() {
+    statTotal.textContent = flights.length;
+    statPlanned.textContent = flights.filter(f => f.phase === 'planned').length;
+    statSent.textContent = flights.filter(f => f.phase === 'sent').length;
+    statOut.textContent = flights.filter(f => f.phase === 'out').length;
+
+    let triggerCount = 0;
+    flights.forEach(f => {
+      if (f.phase !== 'in' && f.triggers.size > 0) triggerCount++;
+    });
+    statTriggers.textContent = triggerCount;
+  }
+
+  // ===== Flight Actions =====
+  window.flightActions = {
+    markSent(idx) {
+      flights[idx].phase = 'sent';
+      renderTable();
+      showToast(`${flights[idx].flight} marked as SENT`, 'success');
+    },
+
+    markOut(idx) {
+      flights[idx].phase = 'out';
+      flights[idx].outTime = getCurrentZulu();
+      renderTable();
+      showToast(`${flights[idx].flight} marked as OUT`, 'success');
+    },
+
+    markIn(idx) {
+      const flight = flights[idx];
+      flight.phase = 'in';
+      renderTable();
+      showToast(`${flight.flight} marked as IN - removing in 60s`, 'success');
+
+      setTimeout(() => {
+        flights = flights.filter((f, i) => i !== idx);
+        renderTable();
+        refreshWeather();
+      }, 60000);
+    },
+
+    remove(idx) {
+      if (confirm(`Remove flight ${flights[idx].flight}?`)) {
+        flights.splice(idx, 1);
+        renderTable();
+        refreshWeather();
+        showToast('Flight removed', 'info');
+      }
+    }
+  };
+
+  // ===== Button Handlers =====
+  parseBtn.addEventListener('click', () => {
+    const text = pasteArea.value;
+    if (!text.trim()) {
+      showToast('Paste flight list first', 'warning');
+      return;
+    }
+
+    const newFlights = parsePastedFlights(text);
+    if (newFlights.length === 0) {
+      showToast('No valid flights found', 'error');
+      return;
+    }
+
+    flights = [...flights, ...newFlights];
+    pasteArea.value = '';
+    renderTable();
+    refreshWeather();
+    showToast(`${newFlights.length} flights added`, 'success');
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (confirm('Clear all flights?')) {
+      flights = [];
+      renderTable();
+      showToast('All flights cleared', 'info');
+    }
+  });
+
+  exportBtn.addEventListener('click', () => {
+    let csv = 'FLT,ORG,DEST,TALT,ALT1,ALT2,ETD,BURN,TAXI,DUR,ETA,OUT,PHASE\n';
+    flights.forEach(f => {
+      csv += `${f.flight},${f.origin},${f.dest},${f.takeoffAlt},${f.alt1},${f.alt2},${f.etd},${f.burnoff},${f.taxiOut},${f.duration},${f.eta},${f.outTime},${f.phase}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `flights_${getCurrentZulu()}.csv`;
+    a.click();
+    showToast('Exported to CSV', 'success');
+  });
+
+  refreshBtn.addEventListener('click', () => {
+    refreshWeather();
+    showToast('Weather refreshed', 'info');
+  });
+
+  markAllSentBtn.addEventListener('click', () => {
+    let count = 0;
+    flights.forEach(f => {
+      if (f.phase === 'planned' && f.burnoff && f.taxiOut) {
+        f.phase = 'sent';
+        count++;
+      }
+    });
+    renderTable();
+    showToast(`${count} flights marked as SENT`, 'success');
+  });
+
+  // ===== Auto-refresh =====
+  function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(() => {
+      if (autoRefreshChk.checked) {
+        refreshWeather();
+      }
+    }, 60000);
+  }
+
+  autoRefreshChk.addEventListener('change', () => {
+    if (autoRefreshChk.checked) {
+      startAutoRefresh();
+      showToast('Auto-refresh enabled', 'info');
+    } else {
+      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+      showToast('Auto-refresh disabled', 'info');
+    }
+  });
+
+  // ===== Init =====
+  startClock();
+  loadFlights();
+  renderTable();
+  if (flights.length > 0) {
+    refreshWeather();
+  }
+  startAutoRefresh();
+
+})();
+  </script>
+</body>
+</html>
