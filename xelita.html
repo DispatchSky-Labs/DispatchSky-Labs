@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>For Xelita</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Playfair+Display:wght@400;700&display=swap');
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      height: 100vh;
+      background: radial-gradient(circle at center, #ff9a9e 0%, #fad0c4 50%, #fad0c4 100%);
+      overflow: hidden;
+      font-family: 'Playfair Display', serif;
+      color: #5d4037;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+    /* Floating hearts */
+    .heart {
+      position: absolute;
+      font-size: 1.5rem;
+      color: rgba(255,105,180,0.6);
+      pointer-events: none;
+      animation: float 12s infinite linear;
+    }
+    @keyframes float {
+      0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { transform: translateY(-100px) rotate(360deg); opacity: 0; }
+    }
+    /* Main card */
+    .card {
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 24px;
+      padding: 3rem 2rem;
+      max-width: 640px;
+      width: 90%;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+      text-align: center;
+      animation: fadeIn 2s ease-out;
+      position: relative;
+      z-index: 10;
+    }
+    @keyframes fadeIn {
+      from { opacity:0; transform:scale(0.8); }
+      to   { opacity:1; transform:scale(1); }
+    }
+    h1 {
+      font-family: 'Dancing Script', cursive;
+      font-size: 4.5rem;
+      background: linear-gradient(45deg, #ff6b6b, #f06292);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+      animation: glow 3s infinite alternate;
+    }
+    @keyframes glow {
+      from { filter: drop-shadow(0 0 10px #ff6b6b); }
+      to   { filter: drop-shadow(0 0 20px #f06292); }
+    }
+    .subtitle {
+      font-size: 1.4rem;
+      margin: 1rem 0 2.5rem;
+      color: #8d6e63;
+      letter-spacing: 1px;
+    }
+    .moment {
+      background: #fff;
+      border-radius: 16px;
+      padding: 1.8rem;
+      margin: 1.8rem 0;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+      transition: all 0.4s;
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    .moment.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .label {
+      font-family: 'Dancing Script', cursive;
+      font-size: 2rem;
+      color: #e91e63;
+      margin-bottom: 0.6rem;
+    }
+    p {
+      font-size: 1.25rem;
+      line-height: 1.7;
+    }
+    .signature {
+      margin-top: 3rem;
+      font-family: 'Dancing Script', cursive;
+      font-size: 2rem;
+      color: #ff4081;
+    }
+    footer {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      color: #aaa;
+    }
+    @media (max-width: 480px) {
+      h1 { font-size: 3.5rem; }
+      .card { padding: 2rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>For Xelita</h1>
+    <p class="subtitle">My yesterday, my today, my forever</p>
+
+    <div class="moment" id="m1">
+      <div class="label">Back then</div>
+      <p>I fell for your positive attitude — you turned every gray day into sunshine.</p>
+    </div>
+
+    <div class="moment" id="m2">
+      <div class="label">Through the storms</div>
+      <p>I loved your resilience. We bent, we never broke.</p>
+    </div>
+
+    <div class="moment" id="m3">
+      <div class="label">Right now</div>
+      <p>I love how you build our home and wrap our family in love. It’s my favorite place on earth.</p>
+    </div>
+
+    <div class="signature">Forever yours</div>
+    <footer>Made with every beat of my heart</footer>
+  </div>
+
+  <script>
+    // Floating hearts
+    setInterval(() => {
+      const h = document.createElement('div');
+      h.className = 'heart';
+      h.innerText = '♡';
+      h.style.left = Math.random() * 100 + 'vw';
+      h.style.animationDuration = 8 + Math.random() * 6 + 's';
+      document.body.appendChild(h);
+      setTimeout(() => h.remove(), 14000);
+    }, 800);
+
+    // Reveal moments one by one
+    const moments = document.querySelectorAll('.moment');
+    moments.forEach((m, i) => {
+      setTimeout(() => m.classList.add('show'), 800 + i * 900);
+    });
+  </script>
+</body>
+</html>
