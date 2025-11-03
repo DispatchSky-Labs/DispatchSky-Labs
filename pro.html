@@ -413,9 +413,9 @@
     </div>
     <div class="paste-content">
       <div class="paste-label">Paste Flight List (FLT ORG ETD DST ETA) – one flight per line:</div>
-      <textarea id="pasteArea" placeholder="Example:
-DL123 DEN 2230 ATL 0330
-UA456 ORD 1445 LAX 1715"></textarea>
+      <textarea id="pasteArea" placeholder="5002 ORD 2218 LEX 2345
+5004 DEN 345 ATL 715
+5006 LAX 1915 JFK 345"></textarea>
       <div class="paste-buttons">
         <button id="parseBtn" class="btn">Parse Flights</button>
         <button id="clearBtn" class="btn btn-secondary">Clear All</button>
@@ -552,6 +552,17 @@ UA456 ORD 1445 LAX 1715"></textarea>
     return `${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}`;
   }
 
+  function normalizeTime(time) {
+    // Convert times like "205" to "0205", "45" to "0045", etc.
+    if (!time) return '';
+    const cleaned = time.replace(/[^\d]/g, '');
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 2) return pad2(parseInt(cleaned, 10)) + '00'; // "2" -> "0200"
+    if (cleaned.length === 3) return '0' + cleaned; // "205" -> "0205"
+    if (cleaned.length >= 4) return cleaned.slice(0, 4); // "2205" -> "2205"
+    return cleaned.padStart(4, '0');
+  }
+
   function formatZuluTime(hhmm) {
     if (!hhmm || hhmm.length !== 4) return hhmm;
     return `${hhmm.slice(0,2)}:${hhmm.slice(2)}`;
@@ -645,14 +656,14 @@ UA456 ORD 1445 LAX 1715"></textarea>
         takeoffAlt: '',
         alt1: '',
         alt2: '',
-        etd: etd,
+        etd: normalizeTime(etd),
         burnoff: '',
         taxiOut: '',
         duration: '',
-        eta: eta,
+        eta: normalizeTime(eta),
         outTime: '',
         phase: 'planned', // planned, sent, out, in
-        triggers: []
+        triggers: new Set()
       });
     }
 
@@ -1114,9 +1125,9 @@ UA456 ORD 1445 LAX 1715"></textarea>
         <td>${flight.flight}</td>
         <td class="icao-cell" data-icao="${flight.origin}">${renderICAO(flight, 'origin')}</td>
         <td class="icao-cell" data-icao="${flight.dest}">${renderICAO(flight, 'dest')}</td>
-        <td class="icao-cell" data-icao="${flight.takeoffAlt || ''}">${renderICAO(flight, 'takeoffAlt')}</td>
-        <td class="icao-cell" data-icao="${flight.alt1 || ''}">${renderICAO(flight, 'alt1')}</td>
-        <td class="icao-cell" data-icao="${flight.alt2 || ''}">${renderICAO(flight, 'alt2')}</td>
+        <td class="icao-cell editable" data-idx="${idx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt || ''}">${renderICAO(flight, 'takeoffAlt')}</td>
+        <td class="icao-cell editable" data-idx="${idx}" data-field="alt1" data-icao="${flight.alt1 || ''}">${renderICAO(flight, 'alt1')}</td>
+        <td class="icao-cell editable" data-idx="${idx}" data-field="alt2" data-icao="${flight.alt2 || ''}">${renderICAO(flight, 'alt2')}</td>
         <td class="editable" data-idx="${idx}" data-field="etd">${flight.etd}</td>
         <td class="editable" data-idx="${idx}" data-field="burnoff">${flight.burnoff}</td>
         <td class="editable" data-idx="${idx}" data-field="taxiOut">${flight.taxiOut}</td>
@@ -1143,7 +1154,13 @@ UA456 ORD 1445 LAX 1715"></textarea>
 
   function renderICAO(flight, field) {
     const icao = flight[field];
-    if (!icao) return '<span class="editable" data-idx="' + flights.indexOf(flight) + '" data-field="' + field + '">—</span>';
+    if (!icao) {
+      // For editable alternate fields, show dash
+      if (['takeoffAlt', 'alt1', 'alt2'].includes(field)) {
+        return '—';
+      }
+      return '';
+    }
 
     let triggerType = null;
 
@@ -1161,8 +1178,10 @@ UA456 ORD 1445 LAX 1715"></textarea>
       if (flight.triggers.has(`${icao}:talt`)) {
         triggerType = flight.phase === 'planned' ? 'red' : 'bold';
       }
+      else if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     } else if (field === 'alt1' || field === 'alt2') {
       if (flight.triggers.has(`${icao}:alt`)) triggerType = 'yellow';
+      else if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     }
 
     let html = icao;
@@ -1183,13 +1202,22 @@ UA456 ORD 1445 LAX 1715"></textarea>
   function attachEditListeners() {
     flightTableBody.querySelectorAll('.editable').forEach(cell => {
       cell.addEventListener('click', function(e) {
-        // Don't edit if clicking on ICAO cell (those are for weather modal)
-        if (this.classList.contains('icao-cell')) return;
         if (this.querySelector('input')) return; // Already editing
 
         const idx = parseInt(this.dataset.idx, 10);
         const field = this.dataset.field;
         const currentValue = flights[idx][field];
+
+        // Special handling for ICAO cells - click on text opens weather, click on empty opens edit
+        if (this.classList.contains('icao-cell')) {
+          const icao = this.dataset.icao;
+          // If there's an ICAO and clicking on it, show weather
+          if (icao && icao !== '—' && e.target.tagName !== 'INPUT') {
+            showWeatherModal(icao);
+            return;
+          }
+          // Otherwise fall through to edit mode
+        }
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -1201,6 +1229,11 @@ UA456 ORD 1445 LAX 1715"></textarea>
           // Special handling for ICAO fields
           if (['takeoffAlt', 'alt1', 'alt2'].includes(field) && newValue) {
             newValue = normalizeICAO(newValue);
+          }
+
+          // Special handling for time fields
+          if (['etd', 'outTime'].includes(field) && newValue) {
+            newValue = normalizeTime(newValue);
           }
 
           flights[idx][field] = newValue;
@@ -1244,14 +1277,7 @@ UA456 ORD 1445 LAX 1715"></textarea>
   }
 
   function attachWeatherClickListeners() {
-    flightTableBody.querySelectorAll('.icao-cell').forEach(cell => {
-      cell.addEventListener('click', function(e) {
-        const icao = this.dataset.icao;
-        if (icao && icao !== '—') {
-          showWeatherModal(icao);
-        }
-      });
-    });
+    // Already handled in attachEditListeners for ICAO cells
   }
 
   function updateStats() {
