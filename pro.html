@@ -178,9 +178,9 @@
     tr:hover { background:rgba(0,0,0,0.02); }
     .theme-dark tr:hover { background:rgba(255,255,255,0.02); }
 
-    /* Visual separator between ETD and TAXI columns */
-    th:nth-child(7),
-    td:nth-child(7) {
+    /* Visual separator between TAXI and BURN columns */
+    th:nth-child(9),
+    td:nth-child(9) {
       border-left:3px solid var(--brand);
     }
 
@@ -290,18 +290,11 @@
 
     .wx-modal-header {
       display:flex;
-      justify-content:space-between;
+      justify-content:flex-end;
       align-items:center;
       margin-bottom:16px;
-      padding-bottom:12px;
-      border-bottom:2px solid var(--border);
-    }
-
-    .wx-modal-title {
-      font-size:20px;
-      font-weight:700;
-      font-family:monospace;
-      letter-spacing:1px;
+      padding-bottom:0;
+      border-bottom:none;
     }
 
     .wx-modal-close {
@@ -325,7 +318,7 @@
     .wx-modal-body {
       font-family:monospace;
       font-size:13px;
-      line-height:1.6;
+      line-height:1.8;
       white-space:pre-wrap;
       word-break:break-word;
       color:var(--fg);
@@ -977,30 +970,35 @@
     if (wx.taf) {
       const tafText = wx.taf.raw || '';
 
-      // Look for BKN/OVC <2000 (20 in hundreds) or VIS <3SM
-      const ceilingMatch = tafText.match(/\b(BKN|OVC)(\d{3})\b/g);
-      if (ceilingMatch) {
-        for (const match of ceilingMatch) {
+      // Look for BKN/OVC <2000 (020 in hundreds of feet)
+      // Match pattern: BKN020, OVC015, etc. where the 3-digit number is <20
+      const ceilingMatches = tafText.match(/\b(BKN|OVC)(\d{3})\b/g);
+      if (ceilingMatches) {
+        for (const match of ceilingMatches) {
           const height = parseInt(match.slice(-3), 10);
           if (height < 20) return true; // <2000'
         }
       }
 
-      const visMatch = tafText.match(/\b(\d+)SM\b/g);
-      if (visMatch) {
-        for (const match of visMatch) {
+      // Check for visibility <3SM
+      // Match patterns like "1SM", "2SM", "P6SM", "1/2SM", etc.
+      const visMatches = tafText.match(/\b(\d+)SM\b/g);
+      if (visMatches) {
+        for (const match of visMatches) {
           const vis = parseInt(match, 10);
           if (vis < 3) return true;
         }
       }
 
-      // Check for fractional visibility
-      const fracVisMatch = tafText.match(/\b(\d+)\/(\d+)SM\b/g);
-      if (fracVisMatch) {
-        for (const match of fracVisMatch) {
+      // Check for fractional visibility like "1/2SM"
+      const fracVisMatches = tafText.match(/\b(\d+)\/(\d+)SM\b/g);
+      if (fracVisMatches) {
+        for (const match of fracVisMatches) {
           const parts = match.match(/(\d+)\/(\d+)/);
-          const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
-          if (vis < 3) return true;
+          if (parts) {
+            const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
+            if (vis < 3) return true;
+          }
         }
       }
     }
@@ -1039,29 +1037,32 @@
     if (wx.taf) {
       const tafText = wx.taf.raw || '';
 
-      // BKN/OVC <600' (06 in hundreds) or VIS <1.5SM
-      const ceilingMatch = tafText.match(/\b(BKN|OVC)(\d{3})\b/g);
-      if (ceilingMatch) {
-        for (const match of ceilingMatch) {
+      // BKN/OVC <600' (006 in hundreds of feet)
+      const ceilingMatches = tafText.match(/\b(BKN|OVC)(\d{3})\b/g);
+      if (ceilingMatches) {
+        for (const match of ceilingMatches) {
           const height = parseInt(match.slice(-3), 10);
           if (height < 6) return true;
         }
       }
 
-      const visMatch = tafText.match(/\b(\d+)SM\b/g);
-      if (visMatch) {
-        for (const match of visMatch) {
+      // VIS <1.5SM
+      const visMatches = tafText.match(/\b(\d+)SM\b/g);
+      if (visMatches) {
+        for (const match of visMatches) {
           const vis = parseInt(match, 10);
           if (vis < 1.5) return true;
         }
       }
 
-      const fracVisMatch = tafText.match(/\b(\d+)\/(\d+)SM\b/g);
-      if (fracVisMatch) {
-        for (const match of fracVisMatch) {
+      const fracVisMatches = tafText.match(/\b(\d+)\/(\d+)SM\b/g);
+      if (fracVisMatches) {
+        for (const match of fracVisMatches) {
           const parts = match.match(/(\d+)\/(\d+)/);
-          const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
-          if (vis < 1.5) return true;
+          if (parts) {
+            const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
+            if (vis < 1.5) return true;
+          }
         }
       }
     }
@@ -1180,7 +1181,6 @@
 
     modal.innerHTML = `
       <div class="wx-modal-header">
-        <div class="wx-modal-title">${icao}</div>
         <button class="wx-modal-close" id="closeModal">×</button>
       </div>
       <div class="wx-modal-body">${escapeHtml(content)}</div>
