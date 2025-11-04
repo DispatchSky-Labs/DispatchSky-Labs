@@ -228,6 +228,13 @@
       border-radius:3px;
     }
 
+    .flt-cell {
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
     .wx-modal-overlay {
       position:fixed; inset:0;
       background:rgba(0,0,0,0.5);
@@ -253,6 +260,35 @@
       font-family:monospace; font-size:13px; line-height:1.8; white-space:pre-wrap; word-break:break-word; color:var(--fg);
       user-select:text; -webkit-user-select:text;
     }
+
+    .flight-info-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:2000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .flight-info-modal {
+      background:#fff; border-radius:12px; padding:20px;
+      width:100%; max-width:400px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    .theme-dark .flight-info-modal { background:#1f2937; }
+
+    .flight-info-modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+    .flight-info-modal-title { font-size:16px; font-weight:600; color:var(--fg); }
+    .flight-info-modal-close { background:transparent; border:none; font-size:28px; cursor:pointer; color:var(--muted); padding:0; width:36px; height:36px; border-radius:6px; }
+    .flight-info-modal-close:hover { background:rgba(0,0,0,0.1); }
+
+    .flight-info-row {
+      display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border);
+    }
+
+    .flight-info-row:last-child { border-bottom:none; }
+
+    .flight-info-label { font-weight:600; color:var(--muted); font-size:12px; }
+    .flight-info-value { font-size:14px; color:var(--fg); font-family:monospace; }
 
     .upload-modal-overlay {
       position:fixed; inset:0;
@@ -451,14 +487,12 @@
             <th>BURN<span class="trigger-count" data-col="burnoff"></span></th>
             <th>DUR<span class="trigger-count" data-col="duration"></span></th>
             <th>ETA<span class="trigger-count" data-col="eta"></span></th>
-            <th>OUT<span class="trigger-count" data-col="outTime"></span></th>
-            <th>Phase<span class="trigger-count" data-col="phase"></span></th>
             <th>Actions<span class="trigger-count" data-col="actions"></span></th>
             <th></th>
           </tr>
         </thead>
         <tbody id="flightTableBody">
-          <tr><td colspan="15" class="loading">Click "Upload" to add flights</td></tr>
+          <tr><td colspan="13" class="loading">Click "Upload" to add flights</td></tr>
         </tbody>
       </table>
     </div>
@@ -540,9 +574,38 @@
     if (!time) return '';
     const cleaned = time.replace(/[^\d]/g, '');
     if (!cleaned) return '';
-    if (cleaned.length <= 2) return pad2(parseInt(cleaned, 10)) + '00';
-    if (cleaned.length === 3) return '0' + cleaned;
-    return cleaned.slice(0, 4);
+
+    // Parse the input
+    let hours = 0, minutes = 0;
+
+    if (cleaned.length === 1) {
+      // "5" -> "0050" (00:50 UTC)
+      minutes = parseInt(cleaned, 10);
+    } else if (cleaned.length === 2) {
+      // "50" -> "0050" (00:50 UTC)
+      // "23" -> "2300" (23:00 UTC)
+      const num = parseInt(cleaned, 10);
+      if (num <= 59) {
+        minutes = num;
+      } else {
+        hours = Math.floor(num / 100);
+        minutes = num % 100;
+      }
+    } else if (cleaned.length === 3) {
+      // "345" -> "0345" (03:45 UTC)
+      hours = parseInt(cleaned.slice(0, 1), 10);
+      minutes = parseInt(cleaned.slice(1), 10);
+    } else {
+      // "2345" -> "2345" (23:45 UTC)
+      hours = parseInt(cleaned.slice(0, 2), 10);
+      minutes = parseInt(cleaned.slice(2), 10);
+    }
+
+    // Validate and normalize
+    hours = hours % 24;
+    minutes = minutes % 60;
+
+    return pad2(hours) + pad2(minutes);
   }
 
   function formatDuration(minutes) {
@@ -1063,6 +1126,46 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); }, { once: true });
   }
 
+  function showFlightInfoModal(idx) {
+    const flight = flights[idx];
+    const overlay = document.createElement('div');
+    overlay.className = 'flight-info-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'flight-info-modal';
+
+    const outTimeDisplay = flight.outTime ? formatZuluTime(flight.outTime) : '—';
+    const phaseDisplay = flight.phase.toUpperCase();
+
+    modal.innerHTML = `
+      <div class="flight-info-modal-header">
+        <div class="flight-info-modal-title">${flight.flight}</div>
+        <button class="flight-info-modal-close" id="closeModal">×</button>
+      </div>
+      <div class="flight-info-row">
+        <span class="flight-info-label">OUT Time</span>
+        <span class="flight-info-value">${outTimeDisplay}</span>
+      </div>
+      <div class="flight-info-row">
+        <span class="flight-info-label">Phase</span>
+        <span class="flight-info-value">${phaseDisplay}</span>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const closeModal = () => overlay.remove();
+
+    modal.querySelector('#closeModal').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    }, { once: true });
+  }
+
   function showUploadModal() {
     const overlay = document.createElement('div');
     overlay.className = 'upload-modal-overlay';
@@ -1238,8 +1341,6 @@
       burnoff: 0,
       duration: 0,
       eta: 0,
-      outTime: 0,
-      phase: 0,
       actions: 0
     };
 
@@ -1280,7 +1381,7 @@
 
   function renderTable() {
     if (!flights.length) {
-      flightTableBody.innerHTML = '<tr><td colspan="15" class="loading">Click "Upload" to add flights</td></tr>';
+      flightTableBody.innerHTML = '<tr><td colspan="13" class="loading">Click "Upload" to add flights</td></tr>';
       updateStats();
       updateTriggerCounts();
       return;
@@ -1294,7 +1395,7 @@
       if (flight.phase === 'in') row.classList.add('phase-done');
 
       row.innerHTML = `
-        <td>${flight.flight}</td>
+        <td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td>
         <td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight, 'origin')}</td>
         <td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight, 'dest')}</td>
         <td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt || ''}">${renderICAO(flight, 'takeoffAlt')}</td>
@@ -1305,8 +1406,6 @@
         <td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td>
         <td>${formatDuration(flight.duration)}</td>
         <td>${formatZuluTime(flight.eta)}</td>
-        <td class="editable" data-idx="${actualIdx}" data-field="outTime">${flight.outTime ? formatZuluTime(flight.outTime) : ''}</td>
-        <td>${flight.phase}</td>
         <td style="white-space:nowrap;">
           ${flight.phase === 'planned' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markSent(${actualIdx})">Sent</button>` : ''}
           ${flight.phase === 'sent' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markOut(${actualIdx})">Out</button>` : ''}
@@ -1442,6 +1541,35 @@
       cell.addEventListener('click', function() {
         const idx = parseInt(this.dataset.idx, 10);
         showTaxiBurnModal(idx);
+      });
+    });
+
+    flightTableBody.querySelectorAll('.flt-cell').forEach(cell => {
+      let touchStartTime = 0, touchMoved = false;
+
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const idx = parseInt(cell.dataset.idx, 10);
+        showFlightInfoModal(idx);
+      });
+
+      cell.addEventListener('touchstart', function() { 
+        touchStartTime = Date.now(); 
+        touchMoved = false; 
+      }, { passive: true });
+
+      cell.addEventListener('touchmove', function() { 
+        touchMoved = true; 
+      }, { passive: true });
+
+      cell.addEventListener('touchend', function(e) {
+        const touchDuration = Date.now() - touchStartTime;
+        if (!touchMoved && touchDuration > 500) {
+          e.preventDefault();
+          e.stopPropagation();
+          const idx = parseInt(cell.dataset.idx, 10);
+          showFlightInfoModal(idx);
+        }
       });
     });
 
