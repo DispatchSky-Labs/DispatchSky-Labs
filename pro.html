@@ -136,6 +136,35 @@
     .btn-danger { background:var(--danger); }
     .btn-success { background:var(--success); }
 
+    /* Filter/Sort Bar */
+    .filter-bar {
+      padding:12px 16px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    .filter-input {
+      padding:6px 12px;
+      border:1px solid var(--border);
+      border-radius:6px;
+      font-size:13px;
+      background:#fff;
+      color:var(--fg);
+    }
+
+    .theme-dark .filter-input {
+      background:#111827;
+      border-color:#374151;
+      color:#e5e7eb;
+    }
+
+    .filter-input::placeholder {
+      color:var(--muted);
+    }
+
     /* Table Container - fully responsive */
     .table-container { 
       padding:8px; 
@@ -163,9 +192,36 @@
       font-size:12px;
       border-bottom:2px solid var(--border);
       white-space:nowrap;
+      cursor:pointer;
+      user-select:none;
+      position:relative;
     }
 
     .theme-dark th { background:#1f2937; }
+
+    th:hover {
+      background:#e5e7eb;
+    }
+
+    .theme-dark th:hover {
+      background:#374151;
+    }
+
+    th.sortable::after {
+      content:' ⇅';
+      font-size:10px;
+      opacity:0.5;
+    }
+
+    th.sort-asc::after {
+      content:' ↑';
+      opacity:1;
+    }
+
+    th.sort-desc::after {
+      content:' ↓';
+      opacity:1;
+    }
 
     td { 
       padding:6px 4px; 
@@ -359,6 +415,9 @@
       z-index:2000;
       animation:slideIn 0.3s ease-out;
       max-width:400px;
+      display:flex;
+      align-items:center;
+      gap:12px;
     }
 
     @keyframes slideIn {
@@ -370,6 +429,22 @@
     .toast-error { background:var(--danger); color:#fff; }
     .toast-warning { background:var(--warning); color:#fff; }
     .toast-info { background:var(--brand); color:#fff; }
+
+    .toast-btn {
+      background:rgba(255,255,255,0.3);
+      border:1px solid rgba(255,255,255,0.5);
+      color:#fff;
+      padding:4px 8px;
+      border-radius:4px;
+      cursor:pointer;
+      font-size:12px;
+      font-weight:600;
+      white-space:nowrap;
+    }
+
+    .toast-btn:hover {
+      background:rgba(255,255,255,0.5);
+    }
 
     /* Loading */
     .loading { 
@@ -411,12 +486,15 @@
       .wx-modal-body { font-size:12px; }
       .action-btn { font-size:9px; padding:2px 4px; min-width:35px; }
       .stats { font-size:11px; gap:12px; }
+      .filter-bar { gap:8px; }
+      .filter-input { font-size:12px; padding:4px 8px; }
     }
 
     @media (max-width: 480px) {
       header { padding:8px 12px; }
       .controls { padding:8px 12px; gap:6px; }
       .stats { padding:8px 12px; gap:8px; }
+      .filter-bar { padding:8px 12px; gap:6px; }
       .table-container { padding:4px; }
       th { padding:4px 2px; }
       td { padding:3px 2px; }
@@ -463,11 +541,14 @@
   </div>
 
   <div class="controls">
-    <button id="refreshBtn" class="btn btn-secondary">Refresh Weather</button>
-    <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
-      <input type="checkbox" id="autoRefresh" checked> Auto-refresh (60s)
-    </label>
-    <button id="markAllSentBtn" class="btn btn-secondary">Mark All as Sent</button>
+    <button id="parseBtn" class="btn">Parse Flights</button>
+    <button id="clearBtn" class="btn btn-secondary">Clear All</button>
+    <button id="exportBtn" class="btn btn-secondary">Export to Excel</button>
+  </div>
+
+  <div class="filter-bar">
+    <input type="text" id="filterInput" class="filter-input" placeholder="Filter flights (FLT, ORG, DST, Phase)...">
+    <span style="color:var(--muted); font-size:12px;">Click column headers to sort</span>
   </div>
 
   <div class="stats">
@@ -501,19 +582,19 @@
     <table id="flightTable">
       <thead>
         <tr>
-          <th>FLT</th>
-          <th>ORG</th>
-          <th>DEST</th>
-          <th>T/ALT</th>
-          <th>ALT1</th>
-          <th>ALT2</th>
-          <th>ETD</th>
-          <th>TAXI</th>
-          <th>BURN</th>
-          <th>DUR</th>
-          <th>ETA</th>
-          <th>OUT</th>
-          <th>Phase</th>
+          <th class="sortable" data-field="flight">FLT</th>
+          <th class="sortable" data-field="origin">ORG</th>
+          <th class="sortable" data-field="dest">DEST</th>
+          <th class="sortable" data-field="takeoffAlt">T/ALT</th>
+          <th class="sortable" data-field="alt1">ALT1</th>
+          <th class="sortable" data-field="alt2">ALT2</th>
+          <th class="sortable" data-field="etd">ETD</th>
+          <th class="sortable" data-field="taxiOut">TAXI</th>
+          <th class="sortable" data-field="burnoff">BURN</th>
+          <th class="sortable" data-field="duration">DUR</th>
+          <th class="sortable" data-field="eta">ETA</th>
+          <th class="sortable" data-field="outTime">OUT</th>
+          <th class="sortable" data-field="phase">Phase</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -542,6 +623,10 @@
   let autoRefreshInterval = null;
   let lastApiError = null;
   let longPressTimer = null;
+  let sortField = null;
+  let sortAsc = true;
+  let filterText = '';
+  let undoStack = [];
 
   // ===== DOM Elements =====
   const $ = (sel) => document.querySelector(sel);
@@ -551,9 +636,7 @@
   const parseBtn = $('#parseBtn');
   const clearBtn = $('#clearBtn');
   const exportBtn = $('#exportBtn');
-  const refreshBtn = $('#refreshBtn');
-  const autoRefreshChk = $('#autoRefresh');
-  const markAllSentBtn = $('#markAllSentBtn');
+  const filterInput = $('#filterInput');
   const flightTableBody = $('#flightTableBody');
   const currentTimeEl = $('#currentTime');
   const lastUpdateEl = $('#lastUpdate');
@@ -593,18 +676,16 @@
   }
 
   function normalizeTime(time) {
-    // Convert times like "205" to "0205", "45" to "0045", etc.
     if (!time) return '';
     const cleaned = time.replace(/[^\d]/g, '');
     if (cleaned.length === 0) return '';
-    if (cleaned.length <= 2) return pad2(parseInt(cleaned, 10)) + '00'; // "2" -> "0200"
-    if (cleaned.length === 3) return '0' + cleaned; // "205" -> "0205"
-    if (cleaned.length >= 4) return cleaned.slice(0, 4); // "2205" -> "2205"
+    if (cleaned.length <= 2) return pad2(parseInt(cleaned, 10)) + '00';
+    if (cleaned.length === 3) return '0' + cleaned;
+    if (cleaned.length >= 4) return cleaned.slice(0, 4);
     return cleaned.padStart(4, '0');
   }
 
   function formatDuration(minutes) {
-    // Format minutes as HHMM for display
     if (!minutes || minutes === '') return '';
     const min = parseInt(minutes, 10);
     if (isNaN(min)) return '';
@@ -614,17 +695,14 @@
   }
 
   function parseDurationInput(input) {
-    // Parse user input like "30" (30 min), "130" (1h 30m), "16" (16 min)
     if (!input || input === '') return '';
     const cleaned = input.replace(/[^\d]/g, '');
     if (cleaned.length === 0) return '';
 
     let minutes = 0;
     if (cleaned.length <= 2) {
-      // "30" -> 30 minutes
       minutes = parseInt(cleaned, 10);
     } else {
-      // "130" -> 1 hour 30 minutes = 90 minutes
       const hours = parseInt(cleaned.slice(0, -2), 10);
       const mins = parseInt(cleaned.slice(-2), 10);
       minutes = hours * 60 + mins;
@@ -653,15 +731,30 @@
   function normalizeICAO(iata) {
     if (!iata || iata.length < 3) return iata;
     const clean = iata.trim().toUpperCase();
-    if (clean.length === 4) return clean; // Already ICAO
+    if (clean.length === 4) return clean;
     if (clean[0] === 'Y') return 'C' + clean;
     return 'K' + clean;
   }
 
-  function showToast(message, type = 'info', duration = 3000) {
+  function showToast(message, type = 'info', duration = 3000, undoCallback = null) {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.textContent = message;
+
+    const msgSpan = document.createElement('span');
+    msgSpan.textContent = message;
+    toast.appendChild(msgSpan);
+
+    if (undoCallback) {
+      const undoBtn = document.createElement('button');
+      undoBtn.className = 'toast-btn';
+      undoBtn.textContent = 'Undo';
+      undoBtn.addEventListener('click', () => {
+        undoCallback();
+        toast.remove();
+      });
+      toast.appendChild(undoBtn);
+    }
+
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), duration);
   }
@@ -692,7 +785,6 @@
 
   themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
 
-  // Load saved theme
   const savedTheme = localStorage.getItem('ct_pro_theme') || 'light';
   themeSelect.value = savedTheme;
   applyTheme(savedTheme);
@@ -703,14 +795,13 @@
     const newFlights = [];
     let startIdx = 0;
 
-    // Check if first line is header
     if (lines.length > 0) {
       const firstLine = lines[0].trim().split(/[\s\t]+/);
       const isHeader = firstLine.some(word => 
         HEADER_KEYWORDS.includes(word.toUpperCase())
       );
       if (isHeader) {
-        startIdx = 1; // Skip header row
+        startIdx = 1;
       }
     }
 
@@ -718,14 +809,13 @@
       const line = lines[i];
       if (!line.trim()) continue;
 
-      // Parse: FLT ORG ETD DST ETA (space or tab separated)
       const parts = line.trim().split(/[\s\t]+/);
       if (parts.length < 5) continue;
 
       const [flt, org, etd, dst, eta] = parts;
 
       newFlights.push({
-        id: Date.now() + Math.random(), // Unique ID
+        id: Date.now() + Math.random(),
         flight: flt,
         origin: normalizeICAO(org),
         dest: normalizeICAO(dst),
@@ -738,7 +828,7 @@
         duration: '',
         eta: normalizeTime(eta),
         outTime: '',
-        phase: 'planned', // planned, sent, out, in
+        phase: 'planned',
         triggers: new Set()
       });
     }
@@ -747,7 +837,6 @@
   }
 
   function saveFlights() {
-    // Convert triggers Set to Array for JSON serialization
     const flightsToSave = flights.map(f => ({
       ...f,
       triggers: Array.from(f.triggers || [])
@@ -772,16 +861,14 @@
   }
 
   function getTaxiOutSuggestion(origin) {
-    // Get last 5 taxi out times for this origin
     const history = flights
       .filter(f => f.origin === origin && f.taxiOut && f.phase !== 'planned')
       .map(f => parseInt(f.taxiOut, 10))
       .filter(n => !isNaN(n))
       .slice(-5);
 
-    if (history.length < 3) return ''; // Need at least 3 data points
+    if (history.length < 3) return '';
 
-    // Return average
     const avg = Math.round(history.reduce((a,b) => a+b, 0) / history.length);
     return String(avg);
   }
@@ -798,7 +885,6 @@
 
     flight.duration = String(totalMin);
 
-    // Calculate ETA
     if (flight.etd) {
       flight.eta = addMinutesToZulu(flight.etd, totalMin);
     }
@@ -833,12 +919,10 @@
       lastApiError = null;
       errorDisplay.classList.add('hidden');
 
-      // Update last update time
       const hh = pad2(lastSuccessfulUpdate.getUTCHours());
       const mm = pad2(lastSuccessfulUpdate.getUTCMinutes());
       lastUpdateEl.textContent = `Updated: ${hh}:${mm} UTC`;
 
-      // Convert to lookup object
       const lookup = {};
       if (data.results) {
         data.results.forEach(r => {
@@ -850,7 +934,6 @@
     } catch(err) {
       lastApiError = err;
 
-      // Only show error if >5 minutes since last success
       if (lastSuccessfulUpdate) {
         const timeSinceUpdate = Date.now() - lastSuccessfulUpdate.getTime();
         if (timeSinceUpdate > ERROR_THRESHOLD_MS) {
@@ -861,12 +944,11 @@
         }
       }
 
-      return weatherData; // Return cached data
+      return weatherData;
     }
   }
 
   async function refreshWeather() {
-    // Collect all unique ICAOs
     const icaos = new Set();
     flights.forEach(f => {
       if (f.phase !== 'in') {
@@ -885,7 +967,7 @@
     renderTable();
   }
 
-  // ===== Weather Trigger Logic (1-2-3 Rule Implementation) =====
+  // ===== Weather Trigger Logic =====
   function checkWeatherTriggers() {
     flights.forEach(flight => {
       flight.triggers.clear();
@@ -898,43 +980,35 @@
       const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
       const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
 
-      // ORIGIN: Check visibility <1/2SM in METAR (only in planned phase for red highlight)
       if (flight.phase === 'planned') {
         if (checkOriginTrigger(originWx, !!flight.takeoffAlt)) {
           flight.triggers.add(`${flight.origin}:origin`);
         }
 
-        // Check expiration (all fields) only in planned phase
         if (checkMetarExpired(originWx, 'critical')) flight.triggers.add(`${flight.origin}:exp`);
         if (checkMetarExpired(destWx, 'critical')) flight.triggers.add(`${flight.dest}:exp`);
         if (taltWx && checkMetarExpired(taltWx, 'critical')) flight.triggers.add(`${flight.takeoffAlt}:exp`);
         if (alt1Wx && checkMetarExpired(alt1Wx, 'critical')) flight.triggers.add(`${flight.alt1}:exp`);
         if (alt2Wx && checkMetarExpired(alt2Wx, 'critical')) flight.triggers.add(`${flight.alt2}:exp`);
       } else {
-        // For sent/out: just check, but only bold (not red)
         if (checkOriginTrigger(originWx, !!flight.takeoffAlt)) {
           flight.triggers.add(`${flight.origin}:origin-sent`);
         }
       }
 
-      // DESTINATION: Check at ETA ±1 hour for TAF (BKN/OVC <2000' or VIS <3SM)
       const destTrigger = checkDestTrigger(destWx, flight);
       if (destTrigger) {
-        // If planned phase and NO alternates listed: red background
         if (flight.phase === 'planned' && !flight.alt1 && !flight.alt2) {
           flight.triggers.add(`${flight.dest}:dest-noalt`);
         } 
-        // If planned phase WITH alternates listed: just bold
         else if (flight.phase === 'planned') {
           flight.triggers.add(`${flight.dest}:dest`);
         } 
-        // If sent/out: bold
         else {
           flight.triggers.add(`${flight.dest}:dest-sent`);
         }
       }
 
-      // ALTERNATES: Check at ETA for TAF (BKN/OVC <600' or VIS <1.5SM)
       if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) {
         flight.triggers.add(`${flight.alt1}:alt`);
       }
@@ -942,7 +1016,6 @@
         flight.triggers.add(`${flight.alt2}:alt`);
       }
 
-      // TAKEOFF ALTERNATE: Always check METAR
       if (taltWx && checkTakeoffAltTrigger(taltWx)) {
         flight.triggers.add(`${flight.takeoffAlt}:talt`);
       }
@@ -952,7 +1025,6 @@
   function checkOriginTrigger(wx, hasTakeoffAlt) {
     if (!wx || !wx.metar) return false;
     const metarText = wx.metar.raw || '';
-    // Check for <1/2SM
     const visMatch = metarText.match(/\b(\d+)\/(\d+)SM\b/);
     if (visMatch) {
       const num = parseInt(visMatch[1], 10);
@@ -966,44 +1038,31 @@
     if (!wx || !flight.eta) return false;
     const duration = parseInt(flight.duration, 10) || 999;
 
-    // Check TAF if available
     if (wx.taf) {
       const tafText = wx.taf.raw || '';
+      const tafPeriod = getTAFPeriodForETA(tafText, flight.eta);
 
-      // Look for BKN/OVC <2000 (020 in hundreds of feet)
-      // Match pattern: BKN020, OVC015, etc. where the 3-digit number is <20
-      const ceilingMatches = tafText.match(/\b(BKN|OVC)(\d{3})\b/g);
-      if (ceilingMatches) {
-        for (const match of ceilingMatches) {
-          const height = parseInt(match.slice(-3), 10);
-          if (height < 20) return true; // <2000'
+      if (tafPeriod) {
+        const ceilingMatch = tafPeriod.match(/\b(BKN|OVC)(\d{3})\b/);
+        if (ceilingMatch) {
+          const height = parseInt(ceilingMatch[2], 10);
+          if (height < 20) return true;
         }
-      }
 
-      // Check for visibility <3SM
-      // Match patterns like "1SM", "2SM", "P6SM", "1/2SM", etc.
-      const visMatches = tafText.match(/\b(\d+)SM\b/g);
-      if (visMatches) {
-        for (const match of visMatches) {
-          const vis = parseInt(match, 10);
+        const visMatch = tafPeriod.match(/\b(\d+)SM\b/);
+        if (visMatch) {
+          const vis = parseInt(visMatch[1], 10);
           if (vis < 3) return true;
         }
-      }
 
-      // Check for fractional visibility like "1/2SM"
-      const fracVisMatches = tafText.match(/\b(\d+)\/(\d+)SM\b/g);
-      if (fracVisMatches) {
-        for (const match of fracVisMatches) {
-          const parts = match.match(/(\d+)\/(\d+)/);
-          if (parts) {
-            const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
-            if (vis < 3) return true;
-          }
+        const fracVisMatch = tafPeriod.match(/\b(\d+)\/(\d+)SM\b/);
+        if (fracVisMatch) {
+          const vis = parseInt(fracVisMatch[1], 10) / parseInt(fracVisMatch[2], 10);
+          if (vis < 3) return true;
         }
       }
     }
 
-    // If duration <60min, also check METAR
     if (duration < 60 && wx.metar) {
       const metarText = wx.metar.raw || '';
 
@@ -1029,15 +1088,67 @@
     return false;
   }
 
+  function getTAFPeriodForETA(tafText, eta) {
+    const headerMatch = tafText.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
+    if (!headerMatch) return null;
+
+    const startHour = parseInt(headerMatch[1], 10);
+    const startMin = parseInt(headerMatch[2], 10);
+    const endHour = parseInt(headerMatch[3], 10);
+    const endMin = parseInt(headerMatch[4], 10);
+
+    const etaHour = parseInt(eta.slice(0, 2), 10);
+    const etaMin = parseInt(eta.slice(2), 10);
+
+    const periods = tafText.split(/\bFM\d{4}\b/);
+    const fmMatches = tafText.match(/FM(\d{4})/g) || [];
+
+    if (periods[0]) {
+      if (isTimeInPeriod(etaHour, etaMin, startHour, startMin, endHour, endMin)) {
+        return periods[0];
+      }
+    }
+
+    for (let i = 0; i < fmMatches.length; i++) {
+      const fmHour = parseInt(fmMatches[i].slice(2, 4), 10);
+      const fmMin = parseInt(fmMatches[i].slice(4, 6), 10);
+
+      const periodText = periods[i + 1] || '';
+
+      let nextFMHour = endHour;
+      let nextFMMin = endMin;
+      if (i + 1 < fmMatches.length) {
+        nextFMHour = parseInt(fmMatches[i + 1].slice(2, 4), 10);
+        nextFMMin = parseInt(fmMatches[i + 1].slice(4, 6), 10);
+      }
+
+      if (isTimeInPeriod(etaHour, etaMin, fmHour, fmMin, nextFMHour, nextFMMin)) {
+        return periodText;
+      }
+    }
+
+    return null;
+  }
+
+  function isTimeInPeriod(checkHour, checkMin, startHour, startMin, endHour, endMin) {
+    const checkTime = checkHour * 100 + checkMin;
+    const startTime = startHour * 100 + startMin;
+    const endTime = endHour * 100 + endMin;
+
+    if (endTime < startTime) {
+      return checkTime >= startTime || checkTime < endTime;
+    } else {
+      return checkTime >= startTime && checkTime < endTime;
+    }
+  }
+
   function checkAlternateTrigger(wx, flight) {
     if (!wx) return false;
     const duration = parseInt(flight.duration, 10) || 999;
 
-    // Check TAF
     if (wx.taf) {
       const tafText = wx.taf.raw || '';
 
-      // BKN/OVC <600' (006 in hundreds of feet)
       const ceilingMatches = tafText.match(/\b(BKN|OVC)(\d{3})\b/g);
       if (ceilingMatches) {
         for (const match of ceilingMatches) {
@@ -1046,7 +1157,6 @@
         }
       }
 
-      // VIS <1.5SM
       const visMatches = tafText.match(/\b(\d+)SM\b/g);
       if (visMatches) {
         for (const match of visMatches) {
@@ -1067,7 +1177,6 @@
       }
     }
 
-    // If duration <60min, also check METAR
     if (duration < 60 && wx.metar) {
       const metarText = wx.metar.raw || '';
 
@@ -1097,7 +1206,6 @@
     if (!wx || !wx.metar) return false;
     const metarText = wx.metar.raw || '';
 
-    // Same as alternate triggers for METAR
     const ceilingMatch = metarText.match(/\b(BKN|OVC)(\d{3})\b/);
     if (ceilingMatch) {
       const height = parseInt(ceilingMatch[2], 10);
@@ -1136,7 +1244,6 @@
       day, hour, minute
     ));
 
-    // Handle month rollover
     if (day > now.getUTCDate() + 15) {
       metarDate.setUTCMonth(metarDate.getUTCMonth() - 1);
     }
@@ -1170,7 +1277,6 @@
 
     if (wx.taf && wx.taf.raw) {
       if (content) content += '\n\n';
-      // Format TAF with proper line breaks
       const tafLines = wx.taf.raw.split('\n').map(line => line.trim()).filter(line => line);
       content += tafLines.join('\n');
     }
@@ -1189,7 +1295,6 @@
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Close handlers
     const closeBtn = modal.querySelector('#closeModal');
     const closeModal = () => overlay.remove();
 
@@ -1198,7 +1303,6 @@
       if (e.target === overlay) closeModal();
     });
 
-    // ESC key to close
     const escHandler = (e) => {
       if (e.key === 'Escape') {
         closeModal();
@@ -1219,9 +1323,44 @@
     return text.replace(/[&<>"']/g, m => map[m]);
   }
 
+  // ===== Sorting & Filtering =====
+  function getFilteredAndSortedFlights() {
+    let filtered = flights;
+
+    if (filterText) {
+      const query = filterText.toLowerCase();
+      filtered = flights.filter(f => 
+        f.flight.toLowerCase().includes(query) ||
+        f.origin.toLowerCase().includes(query) ||
+        f.dest.toLowerCase().includes(query) ||
+        f.phase.toLowerCase().includes(query)
+      );
+    }
+
+    if (sortField) {
+      filtered.sort((a, b) => {
+        let aVal = a[sortField];
+        let bVal = b[sortField];
+
+        if (typeof aVal === 'string') {
+          aVal = aVal.toLowerCase();
+          bVal = bVal.toLowerCase();
+        }
+
+        if (aVal < bVal) return sortAsc ? -1 : 1;
+        if (aVal > bVal) return sortAsc ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return filtered;
+  }
+
   // ===== Table Rendering =====
   function renderTable() {
-    if (flights.length === 0) {
+    const displayFlights = getFilteredAndSortedFlights();
+
+    if (displayFlights.length === 0) {
       flightTableBody.innerHTML = '<tr><td colspan="14" class="loading">No flights loaded</td></tr>';
       updateStats();
       return;
@@ -1229,29 +1368,30 @@
 
     flightTableBody.innerHTML = '';
 
-    flights.forEach((flight, idx) => {
+    displayFlights.forEach((flight, idx) => {
+      const actualIdx = flights.indexOf(flight);
       const row = document.createElement('tr');
       if (flight.phase === 'in') row.classList.add('phase-done');
 
       row.innerHTML = `
         <td>${flight.flight}</td>
-        <td class="icao-cell editable" data-idx="${idx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight, 'origin')}</td>
-        <td class="icao-cell editable" data-idx="${idx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight, 'dest')}</td>
-        <td class="icao-cell editable" data-idx="${idx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt || ''}">${renderICAO(flight, 'takeoffAlt')}</td>
-        <td class="icao-cell editable" data-idx="${idx}" data-field="alt1" data-icao="${flight.alt1 || ''}">${renderICAO(flight, 'alt1')}</td>
-        <td class="icao-cell editable" data-idx="${idx}" data-field="alt2" data-icao="${flight.alt2 || ''}">${renderICAO(flight, 'alt2')}</td>
-        <td class="editable" data-idx="${idx}" data-field="etd">${flight.etd}</td>
-        <td class="editable" data-idx="${idx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td>
-        <td class="editable" data-idx="${idx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td>
+        <td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight, 'origin')}</td>
+        <td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight, 'dest')}</td>
+        <td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt || ''}">${renderICAO(flight, 'takeoffAlt')}</td>
+        <td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1 || ''}">${renderICAO(flight, 'alt1')}</td>
+        <td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2 || ''}">${renderICAO(flight, 'alt2')}</td>
+        <td class="editable" data-idx="${actualIdx}" data-field="etd">${flight.etd}</td>
+        <td class="editable" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td>
+        <td class="editable" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td>
         <td>${formatDuration(flight.duration)}</td>
         <td>${formatZuluTime(flight.eta)}</td>
-        <td class="editable" data-idx="${idx}" data-field="outTime">${flight.outTime ? formatZuluTime(flight.outTime) : ''}</td>
+        <td class="editable" data-idx="${actualIdx}" data-field="outTime">${flight.outTime ? formatZuluTime(flight.outTime) : ''}</td>
         <td><span class="phase-${flight.phase}">${flight.phase.toUpperCase()}</span></td>
         <td style="white-space:nowrap;">
-          ${flight.phase === 'planned' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markSent(${idx})">Sent</button>` : ''}
-          ${flight.phase === 'sent' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markOut(${idx})">Out</button>` : ''}
-          ${flight.phase === 'out' ? `<button class="btn btn-success action-btn" onclick="window.flightActions.markIn(${idx})">In</button>` : ''}
-          <button class="btn btn-danger action-btn" onclick="window.flightActions.remove(${idx})">×</button>
+          ${flight.phase === 'planned' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markSent(${actualIdx})">Sent</button>` : ''}
+          ${flight.phase === 'sent' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markOut(${actualIdx})">Out</button>` : ''}
+          ${flight.phase === 'out' ? `<button class="btn btn-success action-btn" onclick="window.flightActions.markIn(${actualIdx})">In</button>` : ''}
+          <button class="btn btn-danger action-btn" onclick="window.flightActions.remove(${actualIdx})">×</button>
         </td>
       `;
 
@@ -1266,7 +1406,6 @@
   function renderICAO(flight, field) {
     const icao = flight[field];
     if (!icao) {
-      // For editable alternate fields, show dash
       if (['takeoffAlt', 'alt1', 'alt2'].includes(field)) {
         return '—';
       }
@@ -1275,7 +1414,6 @@
 
     let triggerType = null;
 
-    // Check what type of trigger this is
     if (field === 'origin') {
       if (flight.triggers.has(`${icao}:origin`)) triggerType = 'red';
       else if (flight.triggers.has(`${icao}:origin-sent`)) triggerType = 'bold';
@@ -1315,41 +1453,34 @@
       let touchStartTime = 0;
       let touchMoved = false;
 
-      // Mouse click - edit
       cell.addEventListener('click', function(e) {
-        if (e.button !== 0) return; // Only left click
-        if (this.querySelector('input')) return; // Already editing
+        if (e.button !== 0) return;
+        if (this.querySelector('input')) return;
         startEdit(this);
       });
 
-      // Touch start - start long press timer
       cell.addEventListener('touchstart', function(e) {
         touchStartTime = Date.now();
         touchMoved = false;
       }, { passive: true });
 
-      // Touch move - cancel long press
       cell.addEventListener('touchmove', function(e) {
         touchMoved = true;
       }, { passive: true });
 
-      // Touch end - check if long press
       cell.addEventListener('touchend', function(e) {
         const touchDuration = Date.now() - touchStartTime;
         const icao = this.dataset.icao;
 
         if (!touchMoved && touchDuration > 500 && icao && icao !== '—' && this.classList.contains('icao-cell')) {
-          // Long press detected - show weather
           e.preventDefault();
           e.stopPropagation();
           showWeatherModal(icao);
         } else if (!touchMoved && touchDuration <= 500 && !this.querySelector('input')) {
-          // Short tap - edit
           startEdit(this);
         }
       });
 
-      // Right click - show weather (desktop)
       cell.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const icao = cell.dataset.icao;
@@ -1370,7 +1501,6 @@
     const input = document.createElement('input');
     input.type = 'text';
 
-    // Display formatted value for duration fields
     if (field === 'taxiOut' || field === 'burnoff') {
       input.value = formatDuration(currentValue);
     } else {
@@ -1380,24 +1510,20 @@
     const save = () => {
       let newValue = input.value.trim();
 
-      // Special handling for ICAO fields
       if (['origin', 'dest', 'takeoffAlt', 'alt1', 'alt2'].includes(field) && newValue) {
         newValue = normalizeICAO(newValue);
       }
 
-      // Special handling for time fields
       if (['etd', 'outTime'].includes(field) && newValue) {
         newValue = normalizeTime(newValue);
       }
 
-      // Special handling for duration fields (taxi, burn)
       if ((field === 'taxiOut' || field === 'burnoff') && newValue) {
         newValue = parseDurationInput(newValue);
       }
 
       flights[idx][field] = newValue;
 
-      // Auto-suggest taxi out
       if (field === 'taxiOut' && !newValue) {
         const suggestion = getTaxiOutSuggestion(flights[idx].origin);
         if (suggestion) {
@@ -1405,12 +1531,10 @@
         }
       }
 
-      // Recalculate duration/ETA
       if (['taxiOut', 'burnoff', 'etd'].includes(field)) {
         calculateDurationAndETA(flights[idx]);
       }
 
-      // Update phase if burnoff and taxiOut filled
       if (field === 'burnoff' || field === 'taxiOut') {
         if (flights[idx].burnoff && flights[idx].taxiOut && flights[idx].phase === 'planned') {
           flights[idx].phase = 'sent';
@@ -1479,12 +1603,24 @@
     },
 
     remove(idx) {
-      if (confirm(`Remove flight ${flights[idx].flight}?`)) {
-        flights.splice(idx, 1);
+      const flight = flights[idx];
+      const flightCopy = JSON.parse(JSON.stringify(flight));
+      flightCopy.triggers = Array.from(flight.triggers);
+
+      flights.splice(idx, 1);
+      renderTable();
+      refreshWeather();
+
+      showToast(`${flight.flight} removed`, 'info', 12000, () => {
+        const restored = {
+          ...flightCopy,
+          triggers: new Set(flightCopy.triggers)
+        };
+        flights.splice(idx, 0, restored);
         renderTable();
         refreshWeather();
-        showToast('Flight removed', 'info');
-      }
+        showToast(`${flight.flight} restored`, 'success');
+      });
     }
   };
 
@@ -1533,46 +1669,47 @@
     showToast('Exported to CSV', 'success');
   });
 
-  refreshBtn.addEventListener('click', () => {
-    refreshWeather();
-    showToast('Refreshing weather...', 'info');
-  });
+  // ===== Sorting =====
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.field;
 
-  markAllSentBtn.addEventListener('click', () => {
-    let count = 0;
-    flights.forEach(f => {
-      if (f.phase === 'planned' && f.burnoff && f.taxiOut) {
-        f.phase = 'sent';
-        count++;
+      if (sortField === field) {
+        sortAsc = !sortAsc;
+      } else {
+        sortField = field;
+        sortAsc = true;
       }
-    });
-    if (count > 0) {
+
+      document.querySelectorAll('th.sortable').forEach(h => {
+        h.classList.remove('sort-asc', 'sort-desc');
+      });
+
+      if (sortAsc) {
+        th.classList.add('sort-asc');
+      } else {
+        th.classList.add('sort-desc');
+      }
+
       renderTable();
-      showToast(`${count} flight(s) marked as SENT`, 'success');
-    } else {
-      showToast('No flights ready to mark as SENT', 'warning');
-    }
+    });
   });
 
-  // ===== Auto-refresh =====
+  // ===== Filtering =====
+  filterInput.addEventListener('input', (e) => {
+    filterText = e.target.value;
+    renderTable();
+  });
+
+  // ===== Auto-refresh (always on) =====
   function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(() => {
-      if (autoRefreshChk.checked && flights.length > 0) {
+      if (flights.length > 0) {
         refreshWeather();
       }
     }, 60000);
   }
-
-  autoRefreshChk.addEventListener('change', () => {
-    if (autoRefreshChk.checked) {
-      startAutoRefresh();
-      showToast('Auto-refresh enabled', 'info');
-    } else {
-      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-      showToast('Auto-refresh disabled', 'info');
-    }
-  });
 
   // ===== Init =====
   startClock();
