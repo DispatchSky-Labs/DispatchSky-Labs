@@ -28,7 +28,6 @@
       --trigger-bg:#7f1d1d; --trigger-text:#fca5a5;
     }
 
-    /* Header */
     header { 
       display:flex; 
       align-items:center; 
@@ -43,7 +42,6 @@
     .header-center { display:flex; gap:16px; font-size:14px; color:var(--muted); flex-wrap:wrap; }
     .header-right { display:flex; align-items:center; gap:8px; }
 
-    /* Paste Area - Collapsible */
     .paste-section { 
       border-bottom:1px solid var(--border); 
       overflow:hidden;
@@ -98,14 +96,6 @@
 
     .theme-dark #pasteArea { background:#111827; border-color:#374151; color:#e5e7eb; }
 
-    .paste-buttons { 
-      display:flex; 
-      gap:8px; 
-      margin-top:8px; 
-      flex-wrap:wrap;
-    }
-
-    /* Controls */
     .controls { 
       display:flex; 
       flex-wrap:wrap; 
@@ -136,7 +126,6 @@
     .btn-danger { background:var(--danger); }
     .btn-success { background:var(--success); }
 
-    /* Filter/Sort Bar */
     .filter-bar {
       padding:12px 16px;
       border-bottom:1px solid var(--border);
@@ -165,7 +154,6 @@
       color:var(--muted);
     }
 
-    /* Table Container - fully responsive */
     .table-container { 
       padding:8px; 
       overflow-x:auto;
@@ -199,29 +187,12 @@
 
     .theme-dark th { background:#1f2937; }
 
-    th:hover {
-      background:#e5e7eb;
-    }
+    th:hover { background:#e5e7eb; }
+    .theme-dark th:hover { background:#374151; }
 
-    .theme-dark th:hover {
-      background:#374151;
-    }
-
-    th.sortable::after {
-      content:' ⇅';
-      font-size:10px;
-      opacity:0.5;
-    }
-
-    th.sort-asc::after {
-      content:' ↑';
-      opacity:1;
-    }
-
-    th.sort-desc::after {
-      content:' ↓';
-      opacity:1;
-    }
+    th.sortable::after { content:' ⇅'; font-size:10px; opacity:0.5; }
+    th.sort-asc::after { content:' ↑'; opacity:1; }
+    th.sort-desc::after { content:' ↓'; opacity:1; }
 
     td { 
       padding:6px 4px; 
@@ -234,13 +205,8 @@
     tr:hover { background:rgba(0,0,0,0.02); }
     .theme-dark tr:hover { background:rgba(255,255,255,0.02); }
 
-    /* Visual separator between TAXI and BURN columns */
-    th:nth-child(9),
-    td:nth-child(9) {
-      border-left:3px solid var(--brand);
-    }
+    th:nth-child(9), td:nth-child(9) { border-left:3px solid var(--brand); }
 
-    /* Editable cells */
     .editable { 
       cursor:text; 
       min-width:40px;
@@ -264,7 +230,6 @@
 
     .editable input:focus { outline:2px solid var(--brand); }
 
-    /* ICAO cells - weather triggers */
     .icao-cell { 
       font-family:monospace;
       font-weight:500;
@@ -283,198 +248,77 @@
       border-radius:3px;
     }
 
+    /* Bold triggers also show yellow for visibility (your request) */
     .icao-bold { 
       font-weight:700; 
+      color:#f59e0b;
     }
 
-    .icao-toast-green {
-      animation:toastGreen 1.5s ease-out;
-    }
+    .icao-toast-green { animation:toastGreen 1.5s ease-out; }
+    @keyframes toastGreen { 0%,100%{background:transparent;}50%{background:#86efac;} }
 
-    @keyframes toastGreen {
-      0%, 100% { background:transparent; }
-      50% { background:#86efac; }
-    }
-
-    /* Phase indicators */
     .phase-planned { color:var(--muted); font-style:italic; font-size:11px; }
     .phase-sent { color:var(--brand); font-weight:600; font-size:11px; }
     .phase-out { color:var(--warning); font-weight:600; font-size:11px; }
     .phase-in { color:var(--success); font-weight:600; font-size:11px; }
     .phase-done { opacity:0.4; }
 
-    /* Weather modal */
     .wx-modal-overlay {
-      position:fixed;
-      top:0;
-      left:0;
-      right:0;
-      bottom:0;
+      position:fixed; inset:0;
       background:rgba(0,0,0,0.5);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      z-index:2000;
-      animation:fadeIn 0.2s;
-      padding:20px;
+      display:flex; align-items:center; justify-content:center;
+      z-index:2000; animation:fadeIn 0.2s; padding:20px;
     }
-
-    @keyframes fadeIn {
-      from { opacity:0; }
-      to { opacity:1; }
-    }
+    @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
 
     .wx-modal {
-      background:#fff;
-      border-radius:12px;
-      padding:20px;
-      width:100%;
-      max-width:700px;
-      max-height:80vh;
-      overflow-y:auto;
+      background:#fff; border-radius:12px; padding:20px;
+      width:100%; max-width:700px; max-height:80vh; overflow-y:auto;
       box-shadow:0 10px 40px rgba(0,0,0,0.3);
-      position:relative;
-      animation:slideUp 0.3s ease-out;
+      position:relative; animation:slideUp 0.3s ease-out;
     }
-
-    @keyframes slideUp {
-      from { transform:translateY(20px); opacity:0; }
-      to { transform:translateY(0); opacity:1; }
-    }
-
+    @keyframes slideUp { from{transform:translateY(20px);opacity:0;} to{transform:translateY(0);opacity:1;} }
     .theme-dark .wx-modal { background:#1f2937; }
 
-    .wx-modal-header {
-      display:flex;
-      justify-content:flex-end;
-      align-items:center;
-      margin-bottom:16px;
-      padding-bottom:0;
-      border-bottom:none;
-    }
-
-    .wx-modal-close {
-      background:transparent;
-      border:none;
-      font-size:28px;
-      cursor:pointer;
-      color:var(--muted);
-      padding:0;
-      width:36px;
-      height:36px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      border-radius:6px;
-      line-height:1;
-    }
-
+    .wx-modal-header { display:flex; justify-content:flex-end; align-items:center; margin-bottom:16px; }
+    .wx-modal-close { background:transparent; border:none; font-size:28px; cursor:pointer; color:var(--muted); padding:0; width:36px; height:36px; border-radius:6px; }
     .wx-modal-close:hover { background:rgba(0,0,0,0.1); }
 
     .wx-modal-body {
-      font-family:monospace;
-      font-size:13px;
-      line-height:1.8;
-      white-space:pre-wrap;
-      word-break:break-word;
-      color:var(--fg);
-      user-select:text;
-      -webkit-user-select:text;
+      font-family:monospace; font-size:13px; line-height:1.8; white-space:pre-wrap; word-break:break-word; color:var(--fg);
+      user-select:text; -webkit-user-select:text;
     }
 
-    .wx-divider {
-      height:1px;
-      background:var(--border);
-      margin:16px 0;
-    }
-
-    /* Statistics */
     .stats { 
-      padding:12px 16px; 
-      display:flex; 
-      gap:20px; 
-      font-size:13px;
-      border-bottom:1px solid var(--border);
-      flex-wrap:wrap;
+      padding:12px 16px; display:flex; gap:20px; font-size:13px; border-bottom:1px solid var(--border); flex-wrap:wrap;
     }
-
     .stat { display:flex; align-items:center; gap:6px; }
     .stat-label { color:var(--muted); }
     .stat-value { font-weight:600; }
 
-    /* Toast notifications */
     .toast {
-      position:fixed;
-      top:20px;
-      right:20px;
-      background:#111;
-      color:#fff;
-      padding:12px 16px;
-      border-radius:8px;
-      box-shadow:0 4px 12px rgba(0,0,0,0.3);
-      z-index:2000;
-      animation:slideIn 0.3s ease-out;
-      max-width:400px;
-      display:flex;
-      align-items:center;
-      gap:12px;
+      position:fixed; top:20px; right:20px; background:#111; color:#fff;
+      padding:12px 16px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3);
+      z-index:2000; animation:slideIn 0.3s ease-out; max-width:400px; display:flex; align-items:center; gap:12px;
     }
+    @keyframes slideIn { from{transform:translateX(400px);opacity:0;} to{transform:translateX(0);opacity:1;} }
+    .toast-success { background:var(--success); }
+    .toast-error { background:var(--danger); }
+    .toast-warning { background:var(--warning); }
+    .toast-info { background:var(--brand); }
+    .toast-btn { background:rgba(255,255,255,0.3); border:1px solid rgba(255,255,255,0.5); color:#fff; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:600; }
+    .toast-btn:hover { background:rgba(255,255,255,0.5); }
 
-    @keyframes slideIn {
-      from { transform:translateX(400px); opacity:0; }
-      to { transform:translateX(0); opacity:1; }
-    }
+    .loading { text-align:center; padding:40px; color:var(--muted); }
 
-    .toast-success { background:var(--success); color:#fff; }
-    .toast-error { background:var(--danger); color:#fff; }
-    .toast-warning { background:var(--warning); color:#fff; }
-    .toast-info { background:var(--brand); color:#fff; }
-
-    .toast-btn {
-      background:rgba(255,255,255,0.3);
-      border:1px solid rgba(255,255,255,0.5);
-      color:#fff;
-      padding:4px 8px;
-      border-radius:4px;
-      cursor:pointer;
-      font-size:12px;
-      font-weight:600;
-      white-space:nowrap;
-    }
-
-    .toast-btn:hover {
-      background:rgba(255,255,255,0.5);
-    }
-
-    /* Loading */
-    .loading { 
-      text-align:center; 
-      padding:40px; 
-      color:var(--muted); 
-    }
-
-    /* Error (only shown after 5min) */
     .error-critical { 
-      padding:12px 16px; 
-      background:#fef2f2; 
-      color:var(--danger); 
-      border-left:4px solid var(--danger);
-      margin:16px;
-      border-radius:4px;
-      font-weight:600;
+      padding:12px 16px; background:#fef2f2; color:var(--danger); border-left:4px solid var(--danger);
+      margin:16px; border-radius:4px; font-weight:600;
     }
-
     .theme-dark .error-critical { background:#7f1d1d; color:#fca5a5; }
 
-    /* Action buttons in table */
-    .action-btn {
-      padding:3px 6px;
-      height:auto;
-      font-size:10px;
-      min-width:40px;
-    }
+    .action-btn { padding:3px 6px; height:auto; font-size:10px; min-width:40px; }
 
-    /* Responsive adjustments */
     @media (max-width: 768px) {
       body { font-size:12px; }
       .header-left { font-size:16px; }
@@ -500,7 +344,6 @@
       td { padding:3px 2px; }
     }
 
-    /* Utility */
     .hidden { display:none !important; }
     .muted { color:var(--muted); }
   </style>
@@ -532,10 +375,13 @@
       <textarea id="pasteArea" placeholder="5002 ORD 2218 LEX 2345
 5004 DEN 345 ATL 715
 5006 LAX 1915 JFK 345"></textarea>
+      <div class="muted" style="margin-top:6px; font-size:12px;">
+        Press Enter to parse flights. Shift+Enter for a new line.
+      </div>
     </div>
   </div>
 
-  <div class="controls">
+  <div class="controls" id="controlsBar">
     <button id="clearBtn" class="btn btn-secondary">Clear All</button>
     <button id="exportBtn" class="btn btn-secondary">Export to Excel</button>
   </div>
@@ -606,7 +452,6 @@
 
   // ===== Configuration =====
   const API_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
-  const ADVERSE_WX = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
   const ERROR_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
   const HEADER_KEYWORDS = ['FLT', 'ORG', 'ETD', 'DST', 'ETA', 'DEST', 'BURN', 'TAXI', 'DUR', 'OUT', 'PHASE', 'T/ALT', 'ALT1', 'ALT2'];
 
@@ -616,17 +461,16 @@
   let lastSuccessfulUpdate = null;
   let autoRefreshInterval = null;
   let lastApiError = null;
-  let longPressTimer = null;
   let sortField = null;
   let sortAsc = true;
   let filterText = '';
-  let undoStack = [];
 
   // ===== DOM Elements =====
   const $ = (sel) => document.querySelector(sel);
   const pasteSection = $('#pasteSection');
   const pasteHeader = $('#pasteHeader');
   const pasteArea = $('#pasteArea');
+  const controlsBar = $('#controlsBar');
   const clearBtn = $('#clearBtn');
   const exportBtn = $('#exportBtn');
   const filterInput = $('#filterInput');
@@ -645,10 +489,17 @@
   const statTriggers = $('#statTriggers');
 
   // ===== Collapsible Paste Section =====
+  function syncControlsVisibility() {
+    const collapsed = pasteSection.classList.contains('collapsed');
+    if (collapsed) controlsBar.classList.add('hidden');
+    else controlsBar.classList.remove('hidden');
+  }
+
   pasteHeader.addEventListener('click', () => {
     pasteSection.classList.toggle('collapsed');
     pasteSection.classList.toggle('expanded');
     localStorage.setItem('ct_pro_paste_collapsed', pasteSection.classList.contains('collapsed') ? '1' : '0');
+    syncControlsVisibility();
   });
 
   // Load collapse state
@@ -659,6 +510,7 @@
     pasteSection.classList.remove('collapsed');
     pasteSection.classList.add('expanded');
   }
+  syncControlsVisibility();
 
   // ===== Utility Functions =====
   function pad2(n) { return String(n).padStart(2, '0'); }
@@ -679,7 +531,7 @@
   }
 
   function formatDuration(minutes) {
-    if (!minutes || minutes === '') return '';
+    if (!minutes && minutes !== 0) return '';
     const min = parseInt(minutes, 10);
     if (isNaN(min)) return '';
     const h = Math.floor(min / 60);
@@ -691,7 +543,6 @@
     if (!input || input === '') return '';
     const cleaned = input.replace(/[^\d]/g, '');
     if (cleaned.length === 0) return '';
-
     let minutes = 0;
     if (cleaned.length <= 2) {
       minutes = parseInt(cleaned, 10);
@@ -700,12 +551,11 @@
       const mins = parseInt(cleaned.slice(-2), 10);
       minutes = hours * 60 + mins;
     }
-
     return String(minutes);
   }
 
   function formatZuluTime(hhmm) {
-    if (!hhmm || hhmm.length !== 4) return hhmm;
+    if (!hhmm || hhmm.length !== 4) return hhmm || '';
     return `${hhmm.slice(0,2)}:${hhmm.slice(2)}`;
   }
 
@@ -732,22 +582,16 @@
   function showToast(message, type = 'info', duration = 3000, undoCallback = null) {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-
     const msgSpan = document.createElement('span');
     msgSpan.textContent = message;
     toast.appendChild(msgSpan);
-
     if (undoCallback) {
       const undoBtn = document.createElement('button');
       undoBtn.className = 'toast-btn';
       undoBtn.textContent = 'Undo';
-      undoBtn.addEventListener('click', () => {
-        undoCallback();
-        toast.remove();
-      });
+      undoBtn.addEventListener('click', () => { undoCallback(); toast.remove(); });
       toast.appendChild(undoBtn);
     }
-
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), duration);
   }
@@ -775,9 +619,7 @@
     document.body.className = theme === 'dark' ? 'theme-dark' : 'theme-light';
     localStorage.setItem('ct_pro_theme', theme);
   }
-
   themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
-
   const savedTheme = localStorage.getItem('ct_pro_theme') || 'light';
   themeSelect.value = savedTheme;
   applyTheme(savedTheme);
@@ -790,18 +632,13 @@
 
     if (lines.length > 0) {
       const firstLine = lines[0].trim().split(/[\s\t]+/);
-      const isHeader = firstLine.some(word => 
-        HEADER_KEYWORDS.includes(word.toUpperCase())
-      );
-      if (isHeader) {
-        startIdx = 1;
-      }
+      const isHeader = firstLine.some(word => HEADER_KEYWORDS.includes(word.toUpperCase()));
+      if (isHeader) startIdx = 1;
     }
 
     for (let i = startIdx; i < lines.length; i++) {
       const line = lines[i];
       if (!line.trim()) continue;
-
       const parts = line.trim().split(/[\s\t]+/);
       if (parts.length < 5) continue;
 
@@ -830,10 +667,7 @@
   }
 
   function saveFlights() {
-    const flightsToSave = flights.map(f => ({
-      ...f,
-      triggers: Array.from(f.triggers || [])
-    }));
+    const flightsToSave = flights.map(f => ({ ...f, triggers: Array.from(f.triggers || []) }));
     localStorage.setItem('ct_pro_flights', JSON.stringify(flightsToSave));
   }
 
@@ -842,10 +676,7 @@
     if (saved) {
       try {
         const loaded = JSON.parse(saved);
-        flights = loaded.map(f => ({
-          ...f,
-          triggers: new Set(f.triggers || [])
-        }));
+        flights = loaded.map(f => ({ ...f, triggers: new Set(f.triggers || []) }));
       } catch(e) {
         console.error('Failed to load flights:', e);
         flights = [];
@@ -861,7 +692,6 @@
       .slice(-5);
 
     if (history.length < 3) return '';
-
     const avg = Math.round(history.reduce((a,b) => a+b, 0) / history.length);
     return String(avg);
   }
@@ -871,16 +701,11 @@
       flight.duration = '';
       return;
     }
-
     const taxiMin = parseInt(flight.taxiOut, 10) || 0;
     const burnMin = parseInt(flight.burnoff, 10) || 0;
     const totalMin = taxiMin + burnMin;
-
     flight.duration = String(totalMin);
-
-    if (flight.etd) {
-      flight.eta = addMinutesToZulu(flight.etd, totalMin);
-    }
+    if (flight.etd) flight.eta = addMinutesToZulu(flight.etd, totalMin);
   }
 
   // ===== Weather API =====
@@ -898,14 +723,8 @@
     });
 
     try {
-      const res = await fetch(`${API_URL}?${params}`, { 
-        method: 'GET', 
-        mode: 'cors' 
-      });
-
-      if (!res.ok) {
-        throw new Error(`API ${res.status}`);
-      }
+      const res = await fetch(`${API_URL}?${params}`, { method: 'GET', mode: 'cors' });
+      if (!res.ok) throw new Error(`API ${res.status}`);
 
       const data = await res.json();
       lastSuccessfulUpdate = new Date();
@@ -917,16 +736,10 @@
       lastUpdateEl.textContent = `Updated: ${hh}:${mm} UTC`;
 
       const lookup = {};
-      if (data.results) {
-        data.results.forEach(r => {
-          lookup[r.icao] = r;
-        });
-      }
-
+      if (data.results) data.results.forEach(r => { lookup[r.icao] = r; });
       return lookup;
     } catch(err) {
       lastApiError = err;
-
       if (lastSuccessfulUpdate) {
         const timeSinceUpdate = Date.now() - lastSuccessfulUpdate.getTime();
         if (timeSinceUpdate > ERROR_THRESHOLD_MS) {
@@ -936,7 +749,6 @@
           errorTimeEl.textContent = `${hh}:${mm}`;
         }
       }
-
       return weatherData;
     }
   }
@@ -945,8 +757,8 @@
     const icaos = new Set();
     flights.forEach(f => {
       if (f.phase !== 'in') {
-        icaos.add(f.origin);
-        icaos.add(f.dest);
+        if (f.origin) icaos.add(f.origin);
+        if (f.dest) icaos.add(f.dest);
         if (f.takeoffAlt) icaos.add(f.takeoffAlt);
         if (f.alt1) icaos.add(f.alt1);
         if (f.alt2) icaos.add(f.alt2);
@@ -954,17 +766,116 @@
     });
 
     if (icaos.size === 0) return;
-
     weatherData = await fetchWeather(Array.from(icaos));
     checkWeatherTriggers();
     renderTable();
+  }
+
+  // ===== TAF parsing helpers (DDHH/DDHH header, FMDDHHMM groups) =====
+  const FM_SPLIT = /\bFM\d{6}\b/;
+  const FM_FIND = /FM(\d{6})/g;
+
+  function parseTafHeader(tafText) {
+    const m = tafText.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
+    if (!m) return null;
+
+    const now = new Date();
+    const Y = now.getUTCFullYear();
+    const M = now.getUTCMonth();
+
+    const startDay = parseInt(m[1], 10);
+    const startHour = parseInt(m[2], 10);
+    const endDay = parseInt(m[3], 10);
+    const endHour = parseInt(m[4], 10);
+
+    const start = new Date(Date.UTC(Y, M, startDay, startHour, 0, 0));
+
+    // 24Z = 00Z next day
+    let end = new Date(Date.UTC(Y, M, endDay, endHour === 24 ? 0 : endHour, 0, 0));
+    if (endHour === 24) end = new Date(end.getTime() + 24 * 3600 * 1000);
+
+    return { start, end, Y, M };
+  }
+
+  function buildTafSegments(tafRaw) {
+    const header = parseTafHeader(tafRaw);
+    if (!header) return { segments: [], start: null, end: null };
+
+    const { start, end, Y, M } = header;
+
+    const parts = tafRaw.split(FM_SPLIT);
+    const fmMatches = [...tafRaw.matchAll(FM_FIND)];
+
+    const fmTimeAt = (fmIndex) => {
+      const fm = fmMatches[fmIndex];
+      const d = parseInt(fm[1].slice(0, 2), 10);
+      const h = parseInt(fm[1].slice(2, 4), 10);
+      const m = parseInt(fm[1].slice(4, 6), 10);
+      return new Date(Date.UTC(Y, M, d, h, m, 0));
+    };
+
+    const segments = [];
+
+    // Initial segment
+    if (parts[0]) {
+      const firstEnd = fmMatches.length ? fmTimeAt(0) : end;
+      segments.push({ start, end: firstEnd, text: parts[0] });
+    }
+
+    // FM segments
+    for (let i = 0; i < fmMatches.length; i++) {
+      const segStart = fmTimeAt(i);
+      const segEnd = (i + 1 < fmMatches.length) ? fmTimeAt(i + 1) : end;
+      const text = parts[i + 1] || '';
+      segments.push({ start: segStart, end: segEnd, text });
+    }
+
+    return { segments, start, end };
+  }
+
+  function etaToUtcDateWithinTaf(etaHHMM, tafStart, tafEnd) {
+    const h = parseInt(etaHHMM.slice(0, 2), 10);
+    const m = parseInt(etaHHMM.slice(2), 10);
+
+    let candidate = new Date(Date.UTC(
+      tafStart.getUTCFullYear(),
+      tafStart.getUTCMonth(),
+      tafStart.getUTCDate(),
+      h, m, 0
+    ));
+
+    if (candidate < tafStart) candidate = new Date(candidate.getTime() + 24 * 3600 * 1000);
+    if (candidate >= tafEnd) candidate = new Date(candidate.getTime() - 24 * 3600 * 1000);
+
+    if (candidate >= tafStart && candidate < tafEnd) return candidate;
+    return null;
+  }
+
+  function getTafSegmentForEta(tafRaw, etaHHMM) {
+    const { segments, start, end } = buildTafSegments(tafRaw);
+    if (!segments.length) return null;
+
+    const eta = etaToUtcDateWithinTaf(etaHHMM, start, end);
+    if (!eta) return null;
+
+    for (const seg of segments) {
+      if (eta >= seg.start && eta < seg.end) return seg.text;
+    }
+    return null;
+  }
+
+  function formatTAFPretty(raw) {
+    return raw
+      .replace(/\s+FM(\d{6})/g, '\nFM$1')
+      .replace(/\s+TEMPO/g, '\nTEMPO')
+      .replace(/\s+BECMG/g, '\nBECMG')
+      .replace(/\s+PROB(30|40)/g, '\nPROB$1');
   }
 
   // ===== Weather Trigger Logic =====
   function checkWeatherTriggers() {
     flights.forEach(flight => {
       flight.triggers.clear();
-
       if (flight.phase === 'in') return;
 
       const originWx = weatherData[flight.origin];
@@ -973,35 +884,37 @@
       const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
       const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
 
+      // Origin visibility trigger (Planned)
       if (flight.phase === 'planned') {
-        if (checkOriginTrigger(originWx, !!flight.takeoffAlt)) {
-          flight.triggers.add(`${flight.origin}:origin`);
+        if (checkOriginTrigger(originWx)) {
+          if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
+          else flight.triggers.add(`${flight.origin}:origin-red`);
         }
-
+        // Expired METAR checks (critical age)
         if (checkMetarExpired(originWx, 'critical')) flight.triggers.add(`${flight.origin}:exp`);
         if (checkMetarExpired(destWx, 'critical')) flight.triggers.add(`${flight.dest}:exp`);
         if (taltWx && checkMetarExpired(taltWx, 'critical')) flight.triggers.add(`${flight.takeoffAlt}:exp`);
         if (alt1Wx && checkMetarExpired(alt1Wx, 'critical')) flight.triggers.add(`${flight.alt1}:exp`);
         if (alt2Wx && checkMetarExpired(alt2Wx, 'critical')) flight.triggers.add(`${flight.alt2}:exp`);
       } else {
-        if (checkOriginTrigger(originWx, !!flight.takeoffAlt)) {
-          flight.triggers.add(`${flight.origin}:origin-sent`);
+        if (checkOriginTrigger(originWx)) {
+          flight.triggers.add(`${flight.origin}:origin-bold`);
         }
       }
 
+      // Destination triggers (TAF at ETA ±1 hour; METAR if duration < 60)
       const destTrigger = checkDestTrigger(destWx, flight);
       if (destTrigger) {
         if (flight.phase === 'planned' && !flight.alt1 && !flight.alt2) {
           flight.triggers.add(`${flight.dest}:dest-noalt`);
-        } 
-        else if (flight.phase === 'planned') {
+        } else if (flight.phase === 'planned') {
           flight.triggers.add(`${flight.dest}:dest`);
-        } 
-        else {
+        } else {
           flight.triggers.add(`${flight.dest}:dest-sent`);
         }
       }
 
+      // Alternate triggers (TAF at ETA only; METAR if duration < 60)
       if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) {
         flight.triggers.add(`${flight.alt1}:alt`);
       }
@@ -1009,21 +922,26 @@
         flight.triggers.add(`${flight.alt2}:alt`);
       }
 
+      // Takeoff alternate triggers (METAR only, always check)
       if (taltWx && checkTakeoffAltTrigger(taltWx)) {
         flight.triggers.add(`${flight.takeoffAlt}:talt`);
       }
     });
   }
 
-  function checkOriginTrigger(wx, hasTakeoffAlt) {
+  function checkOriginTrigger(wx) {
     if (!wx || !wx.metar) return false;
     const metarText = wx.metar.raw || '';
-    const visMatch = metarText.match(/\b(\d+)\/(\d+)SM\b/);
-    if (visMatch) {
-      const num = parseInt(visMatch[1], 10);
-      const denom = parseInt(visMatch[2], 10);
-      if (num / denom < 0.5) return true;
+    // Fractional visibility like 1/2SM
+    const frac = metarText.match(/\b(\d+)\/(\d+)SM\b/);
+    if (frac) {
+      const num = parseInt(frac[1], 10);
+      const denom = parseInt(frac[2], 10);
+      return (num / denom) < 0.5;
     }
+    // Integer visibility like 0SM (rare) - treat < 1 as trigger as well
+    const whole = metarText.match(/\b(\d+)SM\b/);
+    if (whole) return parseInt(whole[1], 10) < 1;
     return false;
   }
 
@@ -1031,165 +949,83 @@
     if (!wx || !flight.eta) return false;
     const duration = parseInt(flight.duration, 10) || 999;
 
-    if (wx.taf) {
-      const tafText = wx.taf.raw || '';
-      const tafPeriod = getTAFPeriodForETA(tafText, flight.eta);
+    // TAF window: ETA ± 60 minutes (whole hours)
+    if (wx.taf && wx.taf.raw) {
+      const tafRaw = wx.taf.raw;
 
-      if (tafPeriod) {
-        const ceilingMatch = tafPeriod.match(/\b(BKN|OVC)(\d{3})\b/);
-        if (ceilingMatch) {
-          const height = parseInt(ceilingMatch[2], 10);
-          if (height < 20) return true;
-        }
+      const texts = [];
+      const seg0 = getTafSegmentForEta(tafRaw, flight.eta);
+      if (seg0) texts.push(seg0);
 
-        const visMatch = tafPeriod.match(/\b(\d+)SM\b/);
-        if (visMatch) {
-          const vis = parseInt(visMatch[1], 10);
-          if (vis < 3) return true;
-        }
+      const etaMinus60 = addMinutesToZulu(flight.eta, -60);
+      const segMinus = getTafSegmentForEta(tafRaw, etaMinus60);
+      if (segMinus) texts.push(segMinus);
 
-        const fracVisMatch = tafPeriod.match(/\b(\d+)\/(\d+)SM\b/);
-        if (fracVisMatch) {
-          const vis = parseInt(fracVisMatch[1], 10) / parseInt(fracVisMatch[2], 10);
-          if (vis < 3) return true;
-        }
+      const etaPlus60 = addMinutesToZulu(flight.eta, +60);
+      const segPlus = getTafSegmentForEta(tafRaw, etaPlus60);
+      if (segPlus) texts.push(segPlus);
+
+      const windowText = texts.join(' ');
+      if (windowText) {
+        // Ceiling trigger: BKN/OVC < 2000' (groups are hundreds of feet)
+        const ceil = windowText.match(/\b(BKN|OVC)(\d{3})\b/);
+        if (ceil && parseInt(ceil[2], 10) < 20) return true;
+
+        // Vis trigger: < 3SM
+        const vi = windowText.match(/\b(\d+)SM\b/);
+        if (vi && parseInt(vi[1], 10) < 3) return true;
+
+        const vf = windowText.match(/\b(\d+)\/(\d+)SM\b/);
+        if (vf && (parseInt(vf[1], 10) / parseInt(vf[2], 10)) < 3) return true;
       }
     }
 
+    // If duration < 60 min, also check METAR
     if (duration < 60 && wx.metar) {
-      const metarText = wx.metar.raw || '';
+      const m = wx.metar.raw || '';
+      const ceil = m.match(/\b(BKN|OVC)(\d{3})\b/);
+      if (ceil && parseInt(ceil[2], 10) < 20) return true;
 
-      const ceilingMatch = metarText.match(/\b(BKN|OVC)(\d{3})\b/);
-      if (ceilingMatch) {
-        const height = parseInt(ceilingMatch[2], 10);
-        if (height < 20) return true;
-      }
+      const vi = m.match(/\b(\d+)SM\b/);
+      if (vi && parseInt(vi[1], 10) < 3) return true;
 
-      const visMatch = metarText.match(/\b(\d+)SM\b/);
-      if (visMatch) {
-        const vis = parseInt(visMatch[1], 10);
-        if (vis < 3) return true;
-      }
-
-      const fracVisMatch = metarText.match(/\b(\d+)\/(\d+)SM\b/);
-      if (fracVisMatch) {
-        const vis = parseInt(fracVisMatch[1], 10) / parseInt(fracVisMatch[2], 10);
-        if (vis < 3) return true;
-      }
+      const vf = m.match(/\b(\d+)\/(\d+)SM\b/);
+      if (vf && (parseInt(vf[1], 10) / parseInt(vf[2], 10)) < 3) return true;
     }
 
     return false;
-  }
-
-  function getTAFPeriodForETA(tafText, eta) {
-    const headerMatch = tafText.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
-    if (!headerMatch) return null;
-
-    const startHour = parseInt(headerMatch[1], 10);
-    const startMin = parseInt(headerMatch[2], 10);
-    const endHour = parseInt(headerMatch[3], 10);
-    const endMin = parseInt(headerMatch[4], 10);
-
-    const etaHour = parseInt(eta.slice(0, 2), 10);
-    const etaMin = parseInt(eta.slice(2), 10);
-
-    const periods = tafText.split(/\bFM\d{4}\b/);
-    const fmMatches = tafText.match(/FM(\d{4})/g) || [];
-
-    if (periods[0]) {
-      if (isTimeInPeriod(etaHour, etaMin, startHour, startMin, endHour, endMin)) {
-        return periods[0];
-      }
-    }
-
-    for (let i = 0; i < fmMatches.length; i++) {
-      const fmHour = parseInt(fmMatches[i].slice(2, 4), 10);
-      const fmMin = parseInt(fmMatches[i].slice(4, 6), 10);
-
-      const periodText = periods[i + 1] || '';
-
-      let nextFMHour = endHour;
-      let nextFMMin = endMin;
-      if (i + 1 < fmMatches.length) {
-        nextFMHour = parseInt(fmMatches[i + 1].slice(2, 4), 10);
-        nextFMMin = parseInt(fmMatches[i + 1].slice(4, 6), 10);
-      }
-
-      if (isTimeInPeriod(etaHour, etaMin, fmHour, fmMin, nextFMHour, nextFMMin)) {
-        return periodText;
-      }
-    }
-
-    return null;
-  }
-
-  function isTimeInPeriod(checkHour, checkMin, startHour, startMin, endHour, endMin) {
-    const checkTime = checkHour * 100 + checkMin;
-    const startTime = startHour * 100 + startMin;
-    const endTime = endHour * 100 + endMin;
-
-    if (endTime < startTime) {
-      return checkTime >= startTime || checkTime < endTime;
-    } else {
-      return checkTime >= startTime && checkTime < endTime;
-    }
   }
 
   function checkAlternateTrigger(wx, flight) {
     if (!wx) return false;
     const duration = parseInt(flight.duration, 10) || 999;
 
-    if (wx.taf) {
-      const tafText = wx.taf.raw || '';
+    // TAF at ETA (no window)
+    if (wx.taf && wx.taf.raw && flight.eta) {
+      const seg = getTafSegmentForEta(wx.taf.raw, flight.eta);
+      if (seg) {
+        const ceil = seg.match(/\b(BKN|OVC)(\d{3})\b/);
+        if (ceil && parseInt(ceil[2], 10) < 6) return true;
 
-      const ceilingMatches = tafText.match(/\b(BKN|OVC)(\d{3})\b/g);
-      if (ceilingMatches) {
-        for (const match of ceilingMatches) {
-          const height = parseInt(match.slice(-3), 10);
-          if (height < 6) return true;
-        }
-      }
+        const vi = seg.match(/\b(\d+)SM\b/);
+        if (vi && parseInt(vi[1], 10) < 2) return true; // 1.5SM threshold will be caught by fraction
 
-      const visMatches = tafText.match(/\b(\d+)SM\b/g);
-      if (visMatches) {
-        for (const match of visMatches) {
-          const vis = parseInt(match, 10);
-          if (vis < 1.5) return true;
-        }
-      }
-
-      const fracVisMatches = tafText.match(/\b(\d+)\/(\d+)SM\b/g);
-      if (fracVisMatches) {
-        for (const match of fracVisMatches) {
-          const parts = match.match(/(\d+)\/(\d+)/);
-          if (parts) {
-            const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
-            if (vis < 1.5) return true;
-          }
-        }
+        const vf = seg.match(/\b(\d+)\/(\d+)SM\b/);
+        if (vf && (parseInt(vf[1], 10) / parseInt(vf[2], 10)) < 1.5) return true;
       }
     }
 
+    // If duration < 60 min, also check METAR
     if (duration < 60 && wx.metar) {
-      const metarText = wx.metar.raw || '';
+      const m = wx.metar.raw || '';
+      const ceil = m.match(/\b(BKN|OVC)(\d{3})\b/);
+      if (ceil && parseInt(ceil[2], 10) < 6) return true;
 
-      const ceilingMatch = metarText.match(/\b(BKN|OVC)(\d{3})\b/);
-      if (ceilingMatch) {
-        const height = parseInt(ceilingMatch[2], 10);
-        if (height < 6) return true;
-      }
+      const vi = m.match(/\b(\d+)SM\b/);
+      if (vi && parseInt(vi[1], 10) < 2) return true;
 
-      const visMatch = metarText.match(/\b(\d+)SM\b/);
-      if (visMatch) {
-        const vis = parseInt(visMatch[1], 10);
-        if (vis < 1.5) return true;
-      }
-
-      const fracVisMatch = metarText.match(/\b(\d+)\/(\d+)SM\b/);
-      if (fracVisMatch) {
-        const vis = parseInt(fracVisMatch[1], 10) / parseInt(fracVisMatch[2], 10);
-        if (vis < 1.5) return true;
-      }
+      const vf = m.match(/\b(\d+)\/(\d+)SM\b/);
+      if (vf && (parseInt(vf[1], 10) / parseInt(vf[2], 10)) < 1.5) return true;
     }
 
     return false;
@@ -1199,23 +1035,14 @@
     if (!wx || !wx.metar) return false;
     const metarText = wx.metar.raw || '';
 
-    const ceilingMatch = metarText.match(/\b(BKN|OVC)(\d{3})\b/);
-    if (ceilingMatch) {
-      const height = parseInt(ceilingMatch[2], 10);
-      if (height < 6) return true;
-    }
+    const ceil = metarText.match(/\b(BKN|OVC)(\d{3})\b/);
+    if (ceil && parseInt(ceil[2], 10) < 6) return true;
 
-    const visMatch = metarText.match(/\b(\d+)SM\b/);
-    if (visMatch) {
-      const vis = parseInt(visMatch[1], 10);
-      if (vis < 1.5) return true;
-    }
+    const vi = metarText.match(/\b(\d+)SM\b/);
+    if (vi && parseInt(vi[1], 10) < 2) return true;
 
-    const fracVisMatch = metarText.match(/\b(\d+)\/(\d+)SM\b/);
-    if (fracVisMatch) {
-      const vis = parseInt(fracVisMatch[1], 10) / parseInt(fracVisMatch[2], 10);
-      if (vis < 1.5) return true;
-    }
+    const vf = metarText.match(/\b(\d+)\/(\d+)SM\b/);
+    if (vf && (parseInt(vf[1], 10) / parseInt(vf[2], 10)) < 1.5) return true;
 
     return false;
   }
@@ -1237,12 +1064,10 @@
       day, hour, minute
     ));
 
-    if (day > now.getUTCDate() + 15) {
-      metarDate.setUTCMonth(metarDate.getUTCMonth() - 1);
-    }
+    // Month wrap handling if needed
+    if (day > now.getUTCDate() + 15) metarDate.setUTCMonth(metarDate.getUTCMonth() - 1);
 
     const ageMin = (now - metarDate) / 60000;
-
     if (level === 'warning') return ageMin > 60;
     if (level === 'critical') return ageMin > 75;
     return false;
@@ -1251,11 +1076,6 @@
   // ===== Weather Modal =====
   function showWeatherModal(icao) {
     const wx = weatherData[icao];
-    if (!wx) {
-      showToast(`No weather data for ${icao}`, 'warning');
-      return;
-    }
-
     const overlay = document.createElement('div');
     overlay.className = 'wx-modal-overlay';
 
@@ -1263,26 +1083,18 @@
     modal.className = 'wx-modal';
 
     let content = '';
-
-    if (wx.metar && wx.metar.raw) {
-      content += escapeHtml(wx.metar.raw);
-    }
-
-    if (wx.taf && wx.taf.raw) {
+    if (wx && wx.metar && wx.metar.raw) content += escapeHtml(wx.metar.raw);
+    if (wx && wx.taf && wx.taf.raw) {
       if (content) content += '\n\n';
-      const tafLines = wx.taf.raw.split('\n').map(line => line.trim()).filter(line => line);
-      content += tafLines.join('\n');
+      content += escapeHtml(formatTAFPretty(wx.taf.raw));
     }
-
-    if (!content) {
-      content = 'No weather data available';
-    }
+    if (!content) content = 'No weather data available';
 
     modal.innerHTML = `
       <div class="wx-modal-header">
         <button class="wx-modal-close" id="closeModal">×</button>
       </div>
-      <div class="wx-modal-body">${escapeHtml(content)}</div>
+      <div class="wx-modal-body">${content}</div>
     `;
 
     overlay.appendChild(modal);
@@ -1290,29 +1102,14 @@
 
     const closeBtn = modal.querySelector('#closeModal');
     const closeModal = () => overlay.remove();
-
     closeBtn.addEventListener('click', closeModal);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeModal();
-    });
-
-    const escHandler = (e) => {
-      if (e.key === 'Escape') {
-        closeModal();
-        document.removeEventListener('keydown', escHandler);
-      }
-    };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+    const escHandler = (e) => { if (e.key === 'Escape') { closeModal(); document.removeEventListener('keydown', escHandler); } };
     document.addEventListener('keydown', escHandler);
   }
 
   function escapeHtml(text) {
-    const map = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#039;'
-    };
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
     return text.replace(/[&<>"']/g, m => map[m]);
   }
 
@@ -1323,10 +1120,10 @@
     if (filterText) {
       const query = filterText.toLowerCase();
       filtered = flights.filter(f => 
-        f.flight.toLowerCase().includes(query) ||
-        f.origin.toLowerCase().includes(query) ||
-        f.dest.toLowerCase().includes(query) ||
-        f.phase.toLowerCase().includes(query)
+        String(f.flight).toLowerCase().includes(query) ||
+        String(f.origin).toLowerCase().includes(query) ||
+        String(f.dest).toLowerCase().includes(query) ||
+        String(f.phase).toLowerCase().includes(query)
       );
     }
 
@@ -1335,11 +1132,7 @@
         let aVal = a[sortField];
         let bVal = b[sortField];
 
-        if (typeof aVal === 'string') {
-          aVal = aVal.toLowerCase();
-          bVal = bVal.toLowerCase();
-        }
-
+        if (typeof aVal === 'string') { aVal = aVal.toLowerCase(); bVal = String(bVal || '').toLowerCase(); }
         if (aVal < bVal) return sortAsc ? -1 : 1;
         if (aVal > bVal) return sortAsc ? 1 : -1;
         return 0;
@@ -1361,7 +1154,7 @@
 
     flightTableBody.innerHTML = '';
 
-    displayFlights.forEach((flight, idx) => {
+    displayFlights.forEach((flight) => {
       const actualIdx = flights.indexOf(flight);
       const row = document.createElement('tr');
       if (flight.phase === 'in') row.classList.add('phase-done');
@@ -1398,18 +1191,13 @@
 
   function renderICAO(flight, field) {
     const icao = flight[field];
-    if (!icao) {
-      if (['takeoffAlt', 'alt1', 'alt2'].includes(field)) {
-        return '—';
-      }
-      return '';
-    }
+    if (!icao) return ['takeoffAlt','alt1','alt2'].includes(field) ? '—' : '';
 
     let triggerType = null;
 
     if (field === 'origin') {
-      if (flight.triggers.has(`${icao}:origin`)) triggerType = 'red';
-      else if (flight.triggers.has(`${icao}:origin-sent`)) triggerType = 'bold';
+      if (flight.triggers.has(`${icao}:origin-red`)) triggerType = 'red';
+      else if (flight.triggers.has(`${icao}:origin-bold`)) triggerType = 'bold';
       else if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     } else if (field === 'dest') {
       if (flight.triggers.has(`${icao}:dest-noalt`)) triggerType = 'red';
@@ -1417,9 +1205,7 @@
       else if (flight.triggers.has(`${icao}:dest-sent`)) triggerType = 'bold';
       else if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     } else if (field === 'takeoffAlt') {
-      if (flight.triggers.has(`${icao}:talt`)) {
-        triggerType = flight.phase === 'planned' ? 'red' : 'bold';
-      }
+      if (flight.triggers.has(`${icao}:talt`)) triggerType = (flight.phase === 'planned' ? 'red' : 'bold');
       else if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     } else if (field === 'alt1' || field === 'alt2') {
       if (flight.triggers.has(`${icao}:alt`)) triggerType = 'yellow';
@@ -1427,7 +1213,6 @@
     }
 
     let html = icao;
-
     if (triggerType === 'red') {
       html = `<span class="icao-trigger">${icao}</span>`;
     } else if (triggerType === 'bold') {
@@ -1437,7 +1222,6 @@
     } else if (triggerType === 'exp') {
       html = `⏰ <span class="icao-bold">${icao}</span>`;
     }
-
     return html;
   }
 
@@ -1452,22 +1236,13 @@
         startEdit(this);
       });
 
-      cell.addEventListener('touchstart', function(e) {
-        touchStartTime = Date.now();
-        touchMoved = false;
-      }, { passive: true });
-
-      cell.addEventListener('touchmove', function(e) {
-        touchMoved = true;
-      }, { passive: true });
-
+      cell.addEventListener('touchstart', function() { touchStartTime = Date.now(); touchMoved = false; }, { passive: true });
+      cell.addEventListener('touchmove', function() { touchMoved = true; }, { passive: true });
       cell.addEventListener('touchend', function(e) {
         const touchDuration = Date.now() - touchStartTime;
         const icao = this.dataset.icao;
-
         if (!touchMoved && touchDuration > 500 && icao && icao !== '—' && this.classList.contains('icao-cell')) {
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault(); e.stopPropagation();
           showWeatherModal(icao);
         } else if (!touchMoved && touchDuration <= 500 && !this.querySelector('input')) {
           startEdit(this);
@@ -1493,42 +1268,35 @@
 
     const input = document.createElement('input');
     input.type = 'text';
+    input.value = (field === 'taxiOut' || field === 'burnoff') ? formatDuration(currentValue) : (currentValue || '');
 
-    if (field === 'taxiOut' || field === 'burnoff') {
-      input.value = formatDuration(currentValue);
-    } else {
-      input.value = currentValue;
-    }
-
-    const save = () => {
+    const save = (opts = { autoAdvance: false }) => {
       let newValue = input.value.trim();
 
       if (['origin', 'dest', 'takeoffAlt', 'alt1', 'alt2'].includes(field) && newValue) {
         newValue = normalizeICAO(newValue);
       }
-
       if (['etd', 'outTime'].includes(field) && newValue) {
         newValue = normalizeTime(newValue);
       }
-
       if ((field === 'taxiOut' || field === 'burnoff') && newValue) {
         newValue = parseDurationInput(newValue);
       }
 
       flights[idx][field] = newValue;
 
+      // Smart taxi suggestion if user cleared it
       if (field === 'taxiOut' && !newValue) {
         const suggestion = getTaxiOutSuggestion(flights[idx].origin);
-        if (suggestion) {
-          flights[idx].taxiOut = suggestion;
-        }
+        if (suggestion) flights[idx].taxiOut = suggestion;
       }
 
       if (['taxiOut', 'burnoff', 'etd'].includes(field)) {
         calculateDurationAndETA(flights[idx]);
       }
 
-      if (field === 'burnoff' || field === 'taxiOut') {
+      // Planned → Sent once taxi & burn provided
+      if ((field === 'burnoff' || field === 'taxiOut')) {
         if (flights[idx].burnoff && flights[idx].taxiOut && flights[idx].phase === 'planned') {
           flights[idx].phase = 'sent';
         }
@@ -1536,11 +1304,32 @@
 
       renderTable();
       refreshWeather();
+
+      // Auto-advance logic for Taxi → Burn 
+      if (opts.autoAdvance && field === 'taxiOut') {
+        const nextCell = flightTableBody.querySelector(`[data-idx="${idx}"][data-field="burnoff"]`);
+        if (nextCell) setTimeout(() => startEdit(nextCell), 30);
+      }
     };
 
-    input.addEventListener('blur', save);
+    input.addEventListener('blur', () => save());
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') save();
+      // Enter: save and auto-advance Taxi → Burn
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save({ autoAdvance: true });
+      }
+      // Tab: move to next field in row (Taxi → Burn)
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        if (field === 'taxiOut') {
+          save();
+          const nextCell = flightTableBody.querySelector(`[data-idx="${idx}"][data-field="burnoff"]`);
+          if (nextCell) setTimeout(() => startEdit(nextCell), 30);
+        } else {
+          save();
+        }
+      }
       if (e.key === 'Escape') renderTable();
     });
 
@@ -1557,9 +1346,7 @@
     statOut.textContent = flights.filter(f => f.phase === 'out').length;
 
     let triggerCount = 0;
-    flights.forEach(f => {
-      if (f.phase !== 'in' && f.triggers.size > 0) triggerCount++;
-    });
+    flights.forEach(f => { if (f.phase !== 'in' && f.triggers.size > 0) triggerCount++; });
     statTriggers.textContent = triggerCount;
   }
 
@@ -1598,17 +1385,14 @@
     remove(idx) {
       const flight = flights[idx];
       const flightCopy = JSON.parse(JSON.stringify(flight));
-      flightCopy.triggers = Array.from(flight.triggers);
+      flightCopy.triggers = Array.from(flight.triggers || []);
 
       flights.splice(idx, 1);
       renderTable();
       refreshWeather();
 
       showToast(`${flight.flight} removed`, 'info', 12000, () => {
-        const restored = {
-          ...flightCopy,
-          triggers: new Set(flightCopy.triggers)
-        };
+        const restored = { ...flightCopy, triggers: new Set(flightCopy.triggers) };
         flights.splice(idx, 0, restored);
         renderTable();
         refreshWeather();
@@ -1617,7 +1401,7 @@
     }
   };
 
-  // ===== Button Handlers =====
+  // ===== Buttons =====
   clearBtn.addEventListener('click', () => {
     if (confirm('Clear all flights?')) {
       flights = [];
@@ -1647,22 +1431,11 @@
     th.addEventListener('click', () => {
       const field = th.dataset.field;
 
-      if (sortField === field) {
-        sortAsc = !sortAsc;
-      } else {
-        sortField = field;
-        sortAsc = true;
-      }
+      if (sortField === field) sortAsc = !sortAsc;
+      else { sortField = field; sortAsc = true; }
 
-      document.querySelectorAll('th.sortable').forEach(h => {
-        h.classList.remove('sort-asc', 'sort-desc');
-      });
-
-      if (sortAsc) {
-        th.classList.add('sort-asc');
-      } else {
-        th.classList.add('sort-desc');
-      }
+      document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+      th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
 
       renderTable();
     });
@@ -1674,13 +1447,28 @@
     renderTable();
   });
 
+  // ===== Paste handling: parse flights on Enter (Shift+Enter = newline) =====
+  pasteArea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const text = pasteArea.value;
+      const parsed = parsePastedFlights(text);
+      if (parsed.length > 0) {
+        flights = parsed;
+        renderTable();
+        refreshWeather();
+        showToast(`Parsed ${parsed.length} flights`, 'success');
+      } else {
+        showToast('No valid rows found', 'warning');
+      }
+    }
+  });
+
   // ===== Auto-refresh (always on) =====
   function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(() => {
-      if (flights.length > 0) {
-        refreshWeather();
-      }
+      if (flights.length > 0) refreshWeather();
     }, 60000);
   }
 
@@ -1688,9 +1476,7 @@
   startClock();
   loadFlights();
   renderTable();
-  if (flights.length > 0) {
-    refreshWeather();
-  }
+  if (flights.length > 0) refreshWeather();
   startAutoRefresh();
 
 })();
