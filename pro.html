@@ -136,57 +136,59 @@
     .btn-danger { background:var(--danger); }
     .btn-success { background:var(--success); }
 
-    /* Table Container with frozen header */
+    /* Table Container - fully responsive */
     .table-container { 
-      padding:16px; 
+      padding:8px; 
       overflow-x:auto;
       overflow-y:auto;
-      max-height:calc(100vh - 400px);
-      position:relative;
+      -webkit-overflow-scrolling:touch;
     }
 
     table { 
       width:100%; 
-      min-width:1200px;
       border-collapse:collapse; 
       background:#fff;
       border-radius:8px;
       overflow:hidden;
+      font-size:13px;
     }
 
     .theme-dark table { background:#0d1218; }
 
     th { 
       background:#f3f4f6; 
-      padding:10px 8px; 
+      padding:8px 4px; 
       text-align:left; 
       font-weight:600; 
-      font-size:13px;
+      font-size:12px;
       border-bottom:2px solid var(--border);
-      position:sticky;
-      top:0;
-      z-index:10;
       white-space:nowrap;
     }
 
     .theme-dark th { background:#1f2937; }
 
     td { 
-      padding:8px; 
+      padding:6px 4px; 
       border-bottom:1px solid var(--border); 
       vertical-align:middle;
-      font-size:13px;
+      font-size:12px;
       white-space:nowrap;
     }
 
     tr:hover { background:rgba(0,0,0,0.02); }
     .theme-dark tr:hover { background:rgba(255,255,255,0.02); }
 
+    /* Visual separator between ETD and TAXI columns */
+    th:nth-child(7),
+    td:nth-child(7) {
+      border-left:3px solid var(--brand);
+    }
+
     /* Editable cells */
     .editable { 
       cursor:text; 
-      min-width:50px;
-      padding:6px;
+      min-width:40px;
+      padding:4px;
       border-radius:4px;
     }
 
@@ -195,12 +197,12 @@
 
     .editable input { 
       width:100%; 
-      min-width:60px;
+      min-width:50px;
       border:1px solid var(--brand); 
       background:transparent; 
       font:inherit; 
       color:inherit;
-      padding:4px;
+      padding:3px;
       border-radius:3px;
     }
 
@@ -209,6 +211,7 @@
     /* ICAO cells - weather triggers */
     .icao-cell { 
       font-family:monospace;
+      font-weight:500;
       cursor:text;
       user-select:none;
       touch-action:manipulation;
@@ -220,8 +223,8 @@
       background:var(--trigger-bg); 
       color:var(--trigger-text); 
       font-weight:700;
-      padding:3px 6px;
-      border-radius:4px;
+      padding:2px 4px;
+      border-radius:3px;
     }
 
     .icao-bold { 
@@ -238,10 +241,10 @@
     }
 
     /* Phase indicators */
-    .phase-planned { color:var(--muted); font-style:italic; font-size:12px; }
-    .phase-sent { color:var(--brand); font-weight:600; font-size:12px; }
-    .phase-out { color:var(--warning); font-weight:600; font-size:12px; }
-    .phase-in { color:var(--success); font-weight:600; font-size:12px; }
+    .phase-planned { color:var(--muted); font-style:italic; font-size:11px; }
+    .phase-sent { color:var(--brand); font-weight:600; font-size:11px; }
+    .phase-out { color:var(--warning); font-weight:600; font-size:11px; }
+    .phase-in { color:var(--success); font-weight:600; font-size:11px; }
     .phase-done { opacity:0.4; }
 
     /* Weather modal */
@@ -395,16 +398,35 @@
 
     .theme-dark .error-critical { background:#7f1d1d; color:#fca5a5; }
 
-    /* Responsive */
+    /* Action buttons in table */
+    .action-btn {
+      padding:3px 6px;
+      height:auto;
+      font-size:10px;
+      min-width:40px;
+    }
+
+    /* Responsive adjustments */
     @media (max-width: 768px) {
-      .header-center { font-size:12px; }
-      .table-container { 
-        max-height:calc(100vh - 350px); 
-        padding:8px;
-      }
-      th, td { font-size:12px; padding:6px 4px; }
+      body { font-size:12px; }
+      .header-left { font-size:16px; }
+      .header-center { font-size:11px; gap:8px; }
+      table { font-size:11px; }
+      th { font-size:10px; padding:6px 3px; }
+      td { font-size:11px; padding:4px 3px; }
       .wx-modal { padding:16px; max-width:95%; }
       .wx-modal-body { font-size:12px; }
+      .action-btn { font-size:9px; padding:2px 4px; min-width:35px; }
+      .stats { font-size:11px; gap:12px; }
+    }
+
+    @media (max-width: 480px) {
+      header { padding:8px 12px; }
+      .controls { padding:8px 12px; gap:6px; }
+      .stats { padding:8px 12px; gap:8px; }
+      .table-container { padding:4px; }
+      th { padding:4px 2px; }
+      td { padding:3px 2px; }
     }
 
     /* Utility */
@@ -1226,10 +1248,10 @@
         <td class="editable" data-idx="${idx}" data-field="outTime">${flight.outTime ? formatZuluTime(flight.outTime) : ''}</td>
         <td><span class="phase-${flight.phase}">${flight.phase.toUpperCase()}</span></td>
         <td style="white-space:nowrap;">
-          ${flight.phase === 'planned' ? `<button class="btn btn-secondary" style="padding:4px 8px; height:auto; font-size:11px;" onclick="window.flightActions.markSent(${idx})">Sent</button>` : ''}
-          ${flight.phase === 'sent' ? `<button class="btn btn-secondary" style="padding:4px 8px; height:auto; font-size:11px;" onclick="window.flightActions.markOut(${idx})">Out</button>` : ''}
-          ${flight.phase === 'out' ? `<button class="btn btn-success" style="padding:4px 8px; height:auto; font-size:11px;" onclick="window.flightActions.markIn(${idx})">In</button>` : ''}
-          <button class="btn btn-danger" style="padding:4px 8px; height:auto; font-size:11px;" onclick="window.flightActions.remove(${idx})">×</button>
+          ${flight.phase === 'planned' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markSent(${idx})">Sent</button>` : ''}
+          ${flight.phase === 'sent' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markOut(${idx})">Out</button>` : ''}
+          ${flight.phase === 'out' ? `<button class="btn btn-success action-btn" onclick="window.flightActions.markIn(${idx})">In</button>` : ''}
+          <button class="btn btn-danger action-btn" onclick="window.flightActions.remove(${idx})">×</button>
         </td>
       `;
 
@@ -1280,7 +1302,7 @@
     } else if (triggerType === 'bold') {
       html = `<span class="icao-bold">${icao}</span>`;
     } else if (triggerType === 'yellow') {
-      html = `<span style="background:#fef3c7; color:#92400e; font-weight:700; padding:3px 6px; border-radius:4px;">${icao}</span>`;
+      html = `<span style="background:#fef3c7; color:#92400e; font-weight:700; padding:2px 4px; border-radius:3px;">${icao}</span>`;
     } else if (triggerType === 'exp') {
       html = `⏰ <span class="icao-bold">${icao}</span>`;
     }
