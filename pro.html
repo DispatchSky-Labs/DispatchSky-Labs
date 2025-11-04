@@ -42,9 +42,28 @@
       flex-shrink:0;
     }
 
-    .header-left { font-size:18px; font-weight:600; white-space:nowrap; }
-    .header-center { display:flex; gap:16px; font-size:13px; color:var(--muted); flex-wrap:wrap; align-items:center; }
-    .header-right { display:flex; align-items:center; gap:8px; }
+    .header-left { 
+      font-size:18px; 
+      font-weight:600; 
+      white-space:nowrap; 
+      cursor:pointer;
+      user-select:none;
+      -webkit-user-select:none;
+      touch-action:manipulation;
+    }
+
+    .header-left:hover {
+      opacity:0.8;
+    }
+
+    .header-center { 
+      display:flex; 
+      gap:16px; 
+      font-size:13px; 
+      color:var(--muted); 
+      flex-wrap:wrap; 
+      align-items:center; 
+    }
 
     .stat-item { display:flex; align-items:center; gap:4px; }
     .stat-label { color:var(--muted); font-size:12px; }
@@ -235,13 +254,64 @@
       touch-action: manipulation;
     }
 
+    .context-menu {
+      position:fixed;
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:8px;
+      box-shadow:0 4px 12px rgba(0,0,0,0.15);
+      z-index:3000;
+      min-width:180px;
+      animation:fadeIn 0.15s ease-out;
+    }
+
+    .theme-dark .context-menu {
+      background:#1f2937;
+      border-color:#374151;
+    }
+
+    @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+
+    .context-menu-item {
+      padding:10px 16px;
+      cursor:pointer;
+      font-size:13px;
+      color:var(--fg);
+      border:none;
+      background:transparent;
+      width:100%;
+      text-align:left;
+      transition:background 0.15s;
+    }
+
+    .context-menu-item:hover {
+      background:rgba(0,0,0,0.08);
+    }
+
+    .theme-dark .context-menu-item:hover {
+      background:rgba(255,255,255,0.1);
+    }
+
+    .context-menu-item:first-child {
+      border-radius:8px 8px 0 0;
+    }
+
+    .context-menu-item:last-child {
+      border-radius:0 0 8px 8px;
+    }
+
+    .context-menu-divider {
+      height:1px;
+      background:var(--border);
+      margin:4px 0;
+    }
+
     .wx-modal-overlay {
       position:fixed; inset:0;
       background:rgba(0,0,0,0.5);
       display:flex; align-items:center; justify-content:center;
       z-index:2000; animation:fadeIn 0.2s; padding:20px;
     }
-    @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
 
     .wx-modal {
       background:#fff; border-radius:12px; padding:20px;
@@ -448,7 +518,7 @@
 <body class="theme-light">
 
   <header>
-    <div class="header-left">CieloTracker <strong>Pro</strong></div>
+    <div class="header-left" id="headerTitle">CieloTracker <strong>Pro</strong></div>
     <div class="header-center">
       <span id="currentTime">--:-- UTC</span>
       <span id="lastUpdate">Updated: --:-- UTC</span>
@@ -456,14 +526,6 @@
         <span class="stat-label">Total:</span>
         <span class="stat-value" id="statTotal">0</span>
       </div>
-    </div>
-    <div class="header-right">
-      <button id="uploadBtn" class="btn btn-secondary">Upload</button>
-      <label for="theme" style="font-size:13px; color:var(--muted);">Theme</label>
-      <select id="theme" class="btn" style="padding:0 8px;">
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
     </div>
   </header>
 
@@ -492,7 +554,7 @@
           </tr>
         </thead>
         <tbody id="flightTableBody">
-          <tr><td colspan="13" class="loading">Click "Upload" to add flights</td></tr>
+          <tr><td colspan="13" class="loading">Right-click CieloTracker to upload flights</td></tr>
         </tbody>
       </table>
     </div>
@@ -558,11 +620,10 @@
   let draggedIndex = null;
 
   const $ = (sel) => document.querySelector(sel);
-  const uploadBtn = $('#uploadBtn');
+  const headerTitle = $('#headerTitle');
   const flightTableBody = $('#flightTableBody');
   const currentTimeEl = $('#currentTime');
   const lastUpdateEl = $('#lastUpdate');
-  const themeSelect = $('#theme');
   const errorDisplay = $('#errorDisplay');
   const errorTimeEl = $('#errorTime');
   const statTotal = $('#statTotal');
@@ -691,10 +752,16 @@
     localStorage.setItem('ct_pro_theme', theme);
   }
 
-  themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
-  const savedTheme = localStorage.getItem('ct_pro_theme') || 'light';
-  themeSelect.value = savedTheme;
-  applyTheme(savedTheme);
+  function getTheme() {
+    return localStorage.getItem('ct_pro_theme') || 'light';
+  }
+
+  function toggleTheme() {
+    const current = getTheme();
+    const newTheme = current === 'dark' ? 'light' : 'dark';
+    applyTheme(newTheme);
+    closeContextMenu();
+  }
 
   function parsePastedFlights(text) {
     const lines = text.trim().split('\n');
@@ -1328,6 +1395,50 @@
     return text.replace(/[&<>"']/g, m => map[m]);
   }
 
+  function closeContextMenu() {
+    const existing = document.querySelector('.context-menu');
+    if (existing) existing.remove();
+  }
+
+  function showContextMenu(e) {
+    e.preventDefault();
+    closeContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+
+    const uploadItem = document.createElement('button');
+    uploadItem.className = 'context-menu-item';
+    uploadItem.textContent = 'Upload Flights';
+    uploadItem.addEventListener('click', () => {
+      closeContextMenu();
+      showUploadModal();
+    });
+
+    const themeItem = document.createElement('button');
+    themeItem.className = 'context-menu-item';
+    const currentTheme = getTheme();
+    themeItem.textContent = currentTheme === 'dark' ? 'Light Theme' : 'Dark Theme';
+    themeItem.addEventListener('click', () => {
+      toggleTheme();
+    });
+
+    menu.appendChild(uploadItem);
+    menu.appendChild(themeItem);
+
+    document.body.appendChild(menu);
+
+    const rect = headerTitle.getBoundingClientRect();
+    menu.style.left = (rect.left) + 'px';
+    menu.style.top = (rect.bottom + 8) + 'px';
+
+    const closeMenu = () => closeContextMenu();
+    document.addEventListener('click', closeMenu, { once: true });
+    document.addEventListener('contextmenu', closeMenu, { once: true });
+  }
+
+  headerTitle.addEventListener('contextmenu', showContextMenu);
+
   function updateTriggerCounts() {
     const columnTriggerCounts = {
       flight: 0,
@@ -1381,7 +1492,7 @@
 
   function renderTable() {
     if (!flights.length) {
-      flightTableBody.innerHTML = '<tr><td colspan="13" class="loading">Click "Upload" to add flights</td></tr>';
+      flightTableBody.innerHTML = '<tr><td colspan="13" class="loading">Right-click CieloTracker to upload flights</td></tr>';
       updateStats();
       updateTriggerCounts();
       return;
@@ -1668,13 +1779,6 @@
       });
     }
   };
-
-  uploadBtn.addEventListener('click', showUploadModal);
-
-  function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(() => { if (flights.length > 0) refreshWeather(); }, 60000);
-  }
 
   startClock();
   loadFlights();
