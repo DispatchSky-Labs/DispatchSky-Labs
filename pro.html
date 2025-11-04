@@ -21,6 +21,9 @@
       color:var(--fg); 
       font-size:14px;
       min-width:320px;
+      display:flex;
+      flex-direction:column;
+      height:100vh;
     }
 
     .theme-dark { 
@@ -35,75 +38,17 @@
       padding:12px 16px; 
       border-bottom:1px solid var(--border);
       flex-wrap:wrap;
-      gap:8px;
+      gap:12px;
+      flex-shrink:0;
     }
 
     .header-left { font-size:18px; font-weight:600; white-space:nowrap; }
-    .header-center { display:flex; gap:16px; font-size:14px; color:var(--muted); flex-wrap:wrap; }
+    .header-center { display:flex; gap:16px; font-size:13px; color:var(--muted); flex-wrap:wrap; align-items:center; }
     .header-right { display:flex; align-items:center; gap:8px; }
 
-    .paste-section { 
-      border-bottom:1px solid var(--border); 
-      overflow:hidden;
-      transition:max-height 0.3s ease;
-    }
-
-    .paste-section.collapsed { max-height:40px; }
-    .paste-section.expanded { max-height:500px; }
-
-    .paste-header {
-      padding:12px 16px;
-      cursor:pointer;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      background:var(--bg);
-      user-select:none;
-    }
-
-    .paste-header:hover { background:rgba(0,0,0,0.02); }
-    .theme-dark .paste-header:hover { background:rgba(255,255,255,0.02); }
-
-    .paste-toggle { 
-      font-size:18px; 
-      transition:transform 0.3s;
-    }
-
-    .paste-section.collapsed .paste-toggle { transform:rotate(-90deg); }
-
-    .paste-content {
-      padding:0 16px 16px;
-    }
-
-    .paste-label { 
-      font-size:13px; 
-      color:var(--muted); 
-      margin-bottom:6px; 
-      font-weight:500;
-    }
-
-    #pasteArea { 
-      width:100%; 
-      min-height:80px; 
-      padding:10px; 
-      border:2px dashed var(--border); 
-      border-radius:8px; 
-      font-family:monospace; 
-      font-size:13px;
-      background:#fff;
-      resize:vertical;
-    }
-
-    .theme-dark #pasteArea { background:#111827; border-color:#374151; color:#e5e7eb; }
-
-    .controls { 
-      display:flex; 
-      flex-wrap:wrap; 
-      gap:10px; 
-      padding:12px 16px; 
-      border-bottom:1px solid var(--border); 
-      align-items:center;
-    }
+    .stat-item { display:flex; align-items:center; gap:4px; }
+    .stat-label { color:var(--muted); font-size:12px; }
+    .stat-value { font-weight:600; font-size:13px; }
 
     .btn { 
       height:32px; 
@@ -125,20 +70,36 @@
     .btn-secondary { background:var(--muted); }
     .btn-success { background:var(--success); }
 
+    #errorDisplay { 
+      padding:12px 16px; 
+      background:#fef2f2; 
+      color:var(--danger); 
+      border-left:4px solid var(--danger);
+      border-bottom:1px solid var(--border);
+      font-weight:600;
+      font-size:13px;
+      flex-shrink:0;
+    }
+    .theme-dark #errorDisplay { background:#7f1d1d; color:#fca5a5; }
+    #errorDisplay.hidden { display:none !important; }
+
+    .table-wrapper {
+      flex:1;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+    }
+
     .table-container { 
-      padding:8px; 
-      overflow-x:auto;
-      overflow-y:auto;
+      flex:1;
+      overflow:auto;
       -webkit-overflow-scrolling:touch;
-      max-height:calc(100vh - 300px);
     }
 
     table { 
       width:100%; 
       border-collapse:collapse; 
       background:#fff;
-      border-radius:8px;
-      overflow:hidden;
       font-size:13px;
     }
 
@@ -179,11 +140,11 @@
       white-space:nowrap;
     }
 
-    tr:hover { 
+    tbody tr:hover { 
       background:#dbeafe;
     }
 
-    .theme-dark tr:hover { 
+    .theme-dark tbody tr:hover { 
       background:#1e3a5f;
     }
 
@@ -267,9 +228,6 @@
       border-radius:3px;
     }
 
-    .icao-toast-green { animation:toastGreen 1.5s ease-out; }
-    @keyframes toastGreen { 0%,100%{background:transparent;}50%{background:#86efac;} }
-
     .wx-modal-overlay {
       position:fixed; inset:0;
       background:rgba(0,0,0,0.5);
@@ -294,6 +252,50 @@
     .wx-modal-body {
       font-family:monospace; font-size:13px; line-height:1.8; white-space:pre-wrap; word-break:break-word; color:var(--fg);
       user-select:text; -webkit-user-select:text;
+    }
+
+    .upload-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:3000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .upload-modal {
+      background:#fff; border-radius:12px; padding:24px;
+      width:100%; max-width:500px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    .theme-dark .upload-modal { background:#1f2937; }
+
+    .upload-modal-title {
+      font-size:16px; font-weight:600; margin-bottom:16px; color:var(--fg);
+    }
+
+    .upload-modal-label {
+      display:block; font-size:13px; font-weight:600; margin-bottom:8px; color:var(--fg);
+    }
+
+    .upload-modal-textarea {
+      width:100%; min-height:200px; padding:10px; border:1px solid var(--border); border-radius:6px;
+      font-size:13px; background:#fff; color:var(--fg); font-family:monospace; resize:vertical;
+    }
+
+    .theme-dark .upload-modal-textarea {
+      background:#111827; border-color:#374151; color:#e5e7eb;
+    }
+
+    .upload-modal-textarea:focus {
+      outline:2px solid var(--brand);
+    }
+
+    .upload-modal-actions {
+      display:flex; gap:10px; margin-top:20px; justify-content:flex-end;
+    }
+
+    .upload-modal-actions .btn {
+      height:36px; padding:0 16px; font-size:13px;
     }
 
     .taxi-burn-modal-overlay {
@@ -344,13 +346,6 @@
       height:36px; padding:0 16px; font-size:13px;
     }
 
-    .stats { 
-      padding:12px 16px; display:flex; gap:20px; font-size:13px; border-bottom:1px solid var(--border); flex-wrap:wrap;
-    }
-    .stat { display:flex; align-items:center; gap:6px; }
-    .stat-label { color:var(--muted); }
-    .stat-value { font-weight:600; }
-
     .toast {
       position:fixed; top:20px; right:20px; background:#111; color:#fff;
       padding:12px 16px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3);
@@ -365,12 +360,6 @@
     .toast-btn:hover { background:rgba(255,255,255,0.5); }
 
     .loading { text-align:center; padding:40px; color:var(--muted); }
-
-    .error-critical { 
-      padding:12px 16px; background:#fef2f2; color:var(--danger); border-left:4px solid var(--danger);
-      margin:16px; border-radius:4px; font-weight:600;
-    }
-    .theme-dark .error-critical { background:#7f1d1d; color:#fca5a5; }
 
     .action-btn { padding:3px 6px; height:auto; font-size:10px; min-width:40px; }
 
@@ -415,8 +404,6 @@
 
     @media (max-width: 480px) {
       header { padding:8px 12px; }
-      .controls { padding:8px 12px; gap:6px; }
-      .stats { padding:8px 12px; }
     }
 
     .hidden { display:none !important; }
@@ -429,8 +416,13 @@
     <div class="header-center">
       <span id="currentTime">--:-- UTC</span>
       <span id="lastUpdate">Updated: --:-- UTC</span>
+      <div class="stat-item">
+        <span class="stat-label">Total:</span>
+        <span class="stat-value" id="statTotal">0</span>
+      </div>
     </div>
     <div class="header-right">
+      <button id="uploadBtn" class="btn btn-secondary">Upload</button>
       <label for="theme" style="font-size:13px; color:var(--muted);">Theme</label>
       <select id="theme" class="btn" style="padding:0 8px;">
         <option value="light">Light</option>
@@ -439,61 +431,37 @@
     </div>
   </header>
 
-  <div class="paste-section collapsed" id="pasteSection">
-    <div class="paste-header" id="pasteHeader">
-      <span style="font-weight:600; font-size:14px;">Flight List Input</span>
-      <span class="paste-toggle">▼</span>
-    </div>
-    <div class="paste-content">
-      <div class="paste-label">Paste Flight List (FLT ORG ETD DST ETA) – one flight per line:</div>
-      <textarea id="pasteArea" placeholder="5002 ORD 2218 LEX 2345
-5004 DEN 345 ATL 715
-5006 LAX 1915 JFK 345"></textarea>
-    </div>
-  </div>
-
-  <div class="controls" id="controlsBar">
-    <button id="clearBtn" class="btn btn-secondary">Clear All</button>
-    <button id="exportBtn" class="btn btn-secondary">Export to Excel</button>
-  </div>
-
-  <div class="stats">
-    <div class="stat"><span class="stat-label">Total:</span><span class="stat-value" id="statTotal">0</span></div>
-    <div class="stat"><span class="stat-label">Planned:</span><span class="stat-value" id="statPlanned">0</span></div>
-    <div class="stat"><span class="stat-label">Sent:</span><span class="stat-value" id="statSent">0</span></div>
-    <div class="stat"><span class="stat-label">Out:</span><span class="stat-value" id="statOut">0</span></div>
-    <div class="stat"><span class="stat-label">Triggers:</span><span class="stat-value" id="statTriggers">0</span></div>
-  </div>
-
-  <div id="errorDisplay" class="error-critical hidden">
+  <div id="errorDisplay" class="hidden">
     ⚠️ Weather data unavailable for 5+ minutes. Last update: <span id="errorTime">--:--</span> UTC
   </div>
 
-  <div class="table-container">
-    <table id="flightTable">
-      <thead>
-        <tr>
-          <th>FLT<span class="trigger-count" data-col="flight"></span></th>
-          <th>ORG<span class="trigger-count" data-col="origin"></span></th>
-          <th>DEST<span class="trigger-count" data-col="dest"></span></th>
-          <th>T/ALT<span class="trigger-count" data-col="takeoffAlt"></span></th>
-          <th>ALT1<span class="trigger-count" data-col="alt1"></span></th>
-          <th>ALT2<span class="trigger-count" data-col="alt2"></span></th>
-          <th>ETD<span class="trigger-count" data-col="etd"></span></th>
-          <th>TAXI<span class="trigger-count" data-col="taxiOut"></span></th>
-          <th>BURN<span class="trigger-count" data-col="burnoff"></span></th>
-          <th>DUR<span class="trigger-count" data-col="duration"></span></th>
-          <th>ETA<span class="trigger-count" data-col="eta"></span></th>
-          <th>OUT<span class="trigger-count" data-col="outTime"></span></th>
-          <th>Phase<span class="trigger-count" data-col="phase"></span></th>
-          <th>Actions<span class="trigger-count" data-col="actions"></span></th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="flightTableBody">
-        <tr><td colspan="15" class="loading">Click "Flight List Input" above to add flights</td></tr>
-      </tbody>
-    </table>
+  <div class="table-wrapper">
+    <div class="table-container">
+      <table id="flightTable">
+        <thead>
+          <tr>
+            <th>FLT<span class="trigger-count" data-col="flight"></span></th>
+            <th>ORG<span class="trigger-count" data-col="origin"></span></th>
+            <th>DEST<span class="trigger-count" data-col="dest"></span></th>
+            <th>T/ALT<span class="trigger-count" data-col="takeoffAlt"></span></th>
+            <th>ALT1<span class="trigger-count" data-col="alt1"></span></th>
+            <th>ALT2<span class="trigger-count" data-col="alt2"></span></th>
+            <th>ETD<span class="trigger-count" data-col="etd"></span></th>
+            <th>TAXI<span class="trigger-count" data-col="taxiOut"></span></th>
+            <th>BURN<span class="trigger-count" data-col="burnoff"></span></th>
+            <th>DUR<span class="trigger-count" data-col="duration"></span></th>
+            <th>ETA<span class="trigger-count" data-col="eta"></span></th>
+            <th>OUT<span class="trigger-count" data-col="outTime"></span></th>
+            <th>Phase<span class="trigger-count" data-col="phase"></span></th>
+            <th>Actions<span class="trigger-count" data-col="actions"></span></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="flightTableBody">
+          <tr><td colspan="15" class="loading">Click "Upload" to add flights</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <script>
@@ -556,12 +524,7 @@
   let draggedIndex = null;
 
   const $ = (sel) => document.querySelector(sel);
-  const pasteSection = $('#pasteSection');
-  const pasteHeader = $('#pasteHeader');
-  const pasteArea = $('#pasteArea');
-  const controlsBar = $('#controlsBar');
-  const clearBtn = $('#clearBtn');
-  const exportBtn = $('#exportBtn');
+  const uploadBtn = $('#uploadBtn');
   const flightTableBody = $('#flightTableBody');
   const currentTimeEl = $('#currentTime');
   const lastUpdateEl = $('#lastUpdate');
@@ -569,10 +532,6 @@
   const errorDisplay = $('#errorDisplay');
   const errorTimeEl = $('#errorTime');
   const statTotal = $('#statTotal');
-  const statPlanned = $('#statPlanned');
-  const statSent = $('#statSent');
-  const statOut = $('#statOut');
-  const statTriggers = $('#statTriggers');
 
   function pad2(n) { return String(n).padStart(2, '0'); }
   function getCurrentZulu() { const now = new Date(); return `${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}`; }
@@ -673,19 +632,6 @@
   const savedTheme = localStorage.getItem('ct_pro_theme') || 'light';
   themeSelect.value = savedTheme;
   applyTheme(savedTheme);
-
-  pasteHeader.addEventListener('click', () => {
-    pasteSection.classList.toggle('collapsed');
-    pasteSection.classList.toggle('expanded');
-    if (pasteSection.classList.contains('collapsed')) controlsBar.classList.add('hidden');
-    else controlsBar.classList.remove('hidden');
-  });
-
-  if (localStorage.getItem('ct_pro_paste_collapsed') === '1') {
-    pasteSection.classList.add('collapsed');
-    pasteSection.classList.remove('expanded');
-    controlsBar.classList.add('hidden');
-  }
 
   function parsePastedFlights(text) {
     const lines = text.trim().split('\n');
@@ -940,7 +886,6 @@
         }
       }
 
-      // FIXED: For "Out" flights, check destination METAR
       if (flight.phase === 'out' && destWx && destWx.metar) {
         const worst = findWorstWeather(destWx.metar.raw || '');
         const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) < 600) || 
@@ -1118,6 +1063,72 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); }, { once: true });
   }
 
+  function showUploadModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'upload-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'upload-modal';
+
+    modal.innerHTML = `
+      <div class="upload-modal-title">Upload Flight List</div>
+      <label class="upload-modal-label">Paste Flight List (FLT ORG ETD DST ETA) – one flight per line:</label>
+      <textarea id="uploadTextarea" class="upload-modal-textarea" placeholder="5002 ORD 2218 LEX 2345
+5004 DEN 345 ATL 715
+5006 LAX 1915 JFK 345"></textarea>
+      <div class="upload-modal-actions">
+        <button class="btn btn-secondary" id="uploadCancelBtn">Cancel</button>
+        <button class="btn btn-success" id="uploadSubmitBtn">Submit</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const textarea = modal.querySelector('#uploadTextarea');
+    const cancelBtn = modal.querySelector('#uploadCancelBtn');
+    const submitBtn = modal.querySelector('#uploadSubmitBtn');
+
+    const closeModal = () => overlay.remove();
+
+    const submit = () => {
+      const text = textarea.value.trim();
+      if (!text) {
+        showToast('Please enter flight data', 'warning');
+        return;
+      }
+      const parsed = parsePastedFlights(text);
+      if (parsed.length > 0) {
+        flights = parsed;
+        renderTable();
+        refreshWeather();
+        closeModal();
+        showToast(`Loaded ${parsed.length} flights`, 'success');
+      } else {
+        showToast('No valid flights found', 'warning');
+      }
+    };
+
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        e.preventDefault();
+        submit();
+      }
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+    submitBtn.addEventListener('click', submit);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    }, { once: true });
+
+    textarea.focus();
+  }
+
   function showTaxiBurnModal(idx) {
     const flight = flights[idx];
     const overlay = document.createElement('div');
@@ -1234,32 +1245,26 @@
 
     flights.forEach(flight => {
       if (flight.triggers.size > 0) {
-        // Origin triggers
         if (flight.triggers.has(`${flight.origin}:origin-red`) || flight.triggers.has(`${flight.origin}:origin-bold`)) {
           columnTriggerCounts.origin++;
         }
-        // Destination triggers
         if (flight.triggers.has(`${flight.dest}:dest`) || flight.triggers.has(`${flight.dest}:dest-noalt`) || 
             flight.triggers.has(`${flight.dest}:dest-sent`) || flight.triggers.has(`${flight.dest}:dest-out`) ||
             flight.triggers.has(`${flight.dest}:dest-out-metar`) || flight.triggers.has(`${flight.dest}:improved`)) {
           columnTriggerCounts.dest++;
         }
-        // Takeoff Alt triggers
         if (flight.triggers.has(`${flight.takeoffAlt}:talt`)) {
           columnTriggerCounts.takeoffAlt++;
         }
-        // Alt1 triggers
         if (flight.triggers.has(`${flight.alt1}:alt-sent`) || flight.triggers.has(`${flight.alt1}:alt-out`)) {
           columnTriggerCounts.alt1++;
         }
-        // Alt2 triggers
         if (flight.triggers.has(`${flight.alt2}:alt-sent`) || flight.triggers.has(`${flight.alt2}:alt-out`)) {
           columnTriggerCounts.alt2++;
         }
       }
     });
 
-    // Update header display
     document.querySelectorAll('th .trigger-count').forEach(span => {
       const col = span.dataset.col;
       const count = columnTriggerCounts[col];
@@ -1275,7 +1280,7 @@
 
   function renderTable() {
     if (!flights.length) {
-      flightTableBody.innerHTML = '<tr><td colspan="15" class="loading">No flights loaded</td></tr>';
+      flightTableBody.innerHTML = '<tr><td colspan="15" class="loading">Click "Upload" to add flights</td></tr>';
       updateStats();
       updateTriggerCounts();
       return;
@@ -1310,7 +1315,6 @@
         <td><span class="drag-handle">⋮⋮</span></td>
       `;
 
-      // Drag events
       row.addEventListener('dragstart', handleDragStart);
       row.addEventListener('dragend', handleDragEnd);
       row.addEventListener('dragover', handleDragOver);
@@ -1326,7 +1330,6 @@
     saveFlights();
   }
 
-  // Drag and drop handlers
   function handleDragStart(e) {
     draggedIndex = parseInt(this.dataset.index, 10);
     this.classList.add('dragging');
@@ -1382,7 +1385,6 @@
       if (flight.triggers.has(`${icao}:origin-red`)) triggerType = 'red';
       else if (flight.triggers.has(`${icao}:origin-bold`)) triggerType = 'bold';
     } else if (field === 'dest') {
-      // For "Out" flights, check destination METAR
       if (flight.phase === 'out') {
         if (flight.triggers.has(`${icao}:dest-out-metar`)) triggerType = 'dest-out-critical';
       } else {
@@ -1436,7 +1438,6 @@
   }
 
   function attachEditListeners() {
-    // Taxi/Burn cells - open modal on click
     flightTableBody.querySelectorAll('[data-field="taxiOut"]').forEach(cell => {
       cell.addEventListener('click', function() {
         const idx = parseInt(this.dataset.idx, 10);
@@ -1444,7 +1445,6 @@
       });
     });
 
-    // Other editable cells
     flightTableBody.querySelectorAll('.editable').forEach(cell => {
       let touchStartTime = 0, touchMoved = false;
       cell.addEventListener('click', function(e) {
@@ -1509,12 +1509,6 @@
 
   function updateStats() {
     statTotal.textContent = flights.length;
-    statPlanned.textContent = flights.filter(f => f.phase === 'planned').length;
-    statSent.textContent = flights.filter(f => f.phase === 'sent').length;
-    statOut.textContent = flights.filter(f => f.phase === 'out').length;
-    let triggerCount = 0;
-    flights.forEach(f => { if (f.phase !== 'in' && f.triggers.size > 0) triggerCount++; });
-    statTriggers.textContent = triggerCount;
   }
 
   window.flightActions = {
@@ -1547,37 +1541,7 @@
     }
   };
 
-  clearBtn.addEventListener('click', () => {
-    if (confirm('Clear all flights?')) { flights = []; renderTable(); showToast('All flights cleared', 'info'); }
-  });
-
-  exportBtn.addEventListener('click', () => {
-    let csv = 'FLT,ORG,DEST,TALT,ALT1,ALT2,ETD,TAXI,BURN,DUR,ETA,OUT,PHASE\n';
-    flights.forEach(f => { csv += `${f.flight},${f.origin},${f.dest},${f.takeoffAlt},${f.alt1},${f.alt2},${f.etd},${f.taxiOut},${f.burnoff},${f.duration},${f.eta},${f.outTime},${f.phase}\n`; });
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `flights_${getCurrentZulu()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('Exported to CSV', 'success');
-  });
-
-  pasteArea.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const parsed = parsePastedFlights(pasteArea.value);
-      if (parsed.length > 0) {
-        flights = parsed;
-        renderTable();
-        refreshWeather();
-        showToast(`Parsed ${parsed.length} flights`, 'success');
-      } else {
-        showToast('No valid rows found', 'warning');
-      }
-    }
-  });
+  uploadBtn.addEventListener('click', showUploadModal);
 
   function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
