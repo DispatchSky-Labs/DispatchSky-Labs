@@ -50,10 +50,17 @@
       user-select:none;
       -webkit-user-select:none;
       touch-action:manipulation;
+      padding:4px 8px;
+      border-radius:6px;
+      transition:background 0.2s;
     }
 
     .header-left:hover {
-      opacity:0.8;
+      background:rgba(0,0,0,0.08);
+    }
+
+    .theme-dark .header-left:hover {
+      background:rgba(255,255,255,0.08);
     }
 
     .header-center { 
@@ -554,7 +561,7 @@
           </tr>
         </thead>
         <tbody id="flightTableBody">
-          <tr><td colspan="13" class="loading">Right-click CieloTracker to upload flights</td></tr>
+          <tr><td colspan="13" class="loading">Left-click CieloTracker to upload flights</td></tr>
         </tbody>
       </table>
     </div>
@@ -1437,6 +1444,13 @@
     document.addEventListener('contextmenu', closeMenu, { once: true });
   }
 
+  // Left-click handler
+  headerTitle.addEventListener('click', (e) => {
+    e.preventDefault();
+    showContextMenu(e);
+  });
+
+  // Right-click handler (backup)
   headerTitle.addEventListener('contextmenu', showContextMenu);
 
   function updateTriggerCounts() {
@@ -1492,7 +1506,7 @@
 
   function renderTable() {
     if (!flights.length) {
-      flightTableBody.innerHTML = '<tr><td colspan="13" class="loading">Right-click CieloTracker to upload flights</td></tr>';
+      flightTableBody.innerHTML = '<tr><td colspan="13" class="loading">Left-click CieloTracker to upload flights</td></tr>';
       updateStats();
       updateTriggerCounts();
       return;
@@ -1770,7 +1784,7 @@
       flights.splice(idx, 1);
       renderTable();
       refreshWeather();
-      showToast(`${flight.flight} removed`, 'info', 12000, () => {
+      showToast(`${flight.flight} → ${flight.dest} removed`, 'info', 12000, () => {
         const restored = { ...flightCopy, triggers: new Set(flightCopy.triggers) };
         flights.splice(idx, 0, restored);
         renderTable();
