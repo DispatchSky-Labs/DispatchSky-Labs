@@ -130,6 +130,7 @@
       overflow-x:auto;
       overflow-y:auto;
       -webkit-overflow-scrolling:touch;
+      max-height:calc(100vh - 300px);
     }
 
     table { 
@@ -143,6 +144,12 @@
 
     .theme-dark table { background:#0d1218; }
 
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
     th { 
       background:#f3f4f6; 
       padding:8px 4px; 
@@ -152,9 +159,17 @@
       border-bottom:2px solid var(--border);
       white-space:nowrap;
       user-select:none;
+      position: relative;
     }
 
     .theme-dark th { background:#1f2937; }
+
+    th .trigger-count {
+      color: var(--danger);
+      font-weight: 700;
+      margin-left: 4px;
+      font-size: 11px;
+    }
 
     td { 
       padding:6px 4px; 
@@ -458,20 +473,20 @@
     <table id="flightTable">
       <thead>
         <tr>
-          <th>FLT</th>
-          <th>ORG</th>
-          <th>DEST</th>
-          <th>T/ALT</th>
-          <th>ALT1</th>
-          <th>ALT2</th>
-          <th>ETD</th>
-          <th>TAXI</th>
-          <th>BURN</th>
-          <th>DUR</th>
-          <th>ETA</th>
-          <th>OUT</th>
-          <th>Phase</th>
-          <th>Actions</th>
+          <th>FLT<span class="trigger-count" data-col="flight"></span></th>
+          <th>ORG<span class="trigger-count" data-col="origin"></span></th>
+          <th>DEST<span class="trigger-count" data-col="dest"></span></th>
+          <th>T/ALT<span class="trigger-count" data-col="takeoffAlt"></span></th>
+          <th>ALT1<span class="trigger-count" data-col="alt1"></span></th>
+          <th>ALT2<span class="trigger-count" data-col="alt2"></span></th>
+          <th>ETD<span class="trigger-count" data-col="etd"></span></th>
+          <th>TAXI<span class="trigger-count" data-col="taxiOut"></span></th>
+          <th>BURN<span class="trigger-count" data-col="burnoff"></span></th>
+          <th>DUR<span class="trigger-count" data-col="duration"></span></th>
+          <th>ETA<span class="trigger-count" data-col="eta"></span></th>
+          <th>OUT<span class="trigger-count" data-col="outTime"></span></th>
+          <th>Phase<span class="trigger-count" data-col="phase"></span></th>
+          <th>Actions<span class="trigger-count" data-col="actions"></span></th>
           <th></th>
         </tr>
       </thead>
@@ -1199,10 +1214,70 @@
     return text.replace(/[&<>"']/g, m => map[m]);
   }
 
+  function updateTriggerCounts() {
+    const columnTriggerCounts = {
+      flight: 0,
+      origin: 0,
+      dest: 0,
+      takeoffAlt: 0,
+      alt1: 0,
+      alt2: 0,
+      etd: 0,
+      taxiOut: 0,
+      burnoff: 0,
+      duration: 0,
+      eta: 0,
+      outTime: 0,
+      phase: 0,
+      actions: 0
+    };
+
+    flights.forEach(flight => {
+      if (flight.triggers.size > 0) {
+        // Origin triggers
+        if (flight.triggers.has(`${flight.origin}:origin-red`) || flight.triggers.has(`${flight.origin}:origin-bold`)) {
+          columnTriggerCounts.origin++;
+        }
+        // Destination triggers
+        if (flight.triggers.has(`${flight.dest}:dest`) || flight.triggers.has(`${flight.dest}:dest-noalt`) || 
+            flight.triggers.has(`${flight.dest}:dest-sent`) || flight.triggers.has(`${flight.dest}:dest-out`) ||
+            flight.triggers.has(`${flight.dest}:dest-out-metar`) || flight.triggers.has(`${flight.dest}:improved`)) {
+          columnTriggerCounts.dest++;
+        }
+        // Takeoff Alt triggers
+        if (flight.triggers.has(`${flight.takeoffAlt}:talt`)) {
+          columnTriggerCounts.takeoffAlt++;
+        }
+        // Alt1 triggers
+        if (flight.triggers.has(`${flight.alt1}:alt-sent`) || flight.triggers.has(`${flight.alt1}:alt-out`)) {
+          columnTriggerCounts.alt1++;
+        }
+        // Alt2 triggers
+        if (flight.triggers.has(`${flight.alt2}:alt-sent`) || flight.triggers.has(`${flight.alt2}:alt-out`)) {
+          columnTriggerCounts.alt2++;
+        }
+      }
+    });
+
+    // Update header display
+    document.querySelectorAll('th .trigger-count').forEach(span => {
+      const col = span.dataset.col;
+      const count = columnTriggerCounts[col];
+      if (count > 0) {
+        span.textContent = count;
+        span.style.display = 'inline';
+      } else {
+        span.textContent = '';
+        span.style.display = 'none';
+      }
+    });
+  }
+
   function renderTable() {
     if (!flights.length) {
       flightTableBody.innerHTML = '<tr><td colspan="15" class="loading">No flights loaded</td></tr>';
       updateStats();
+      updateTriggerCounts();
       return;
     }
     flightTableBody.innerHTML = '';
@@ -1247,6 +1322,7 @@
     });
     attachEditListeners();
     updateStats();
+    updateTriggerCounts();
     saveFlights();
   }
 
