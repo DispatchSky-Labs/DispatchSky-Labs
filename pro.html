@@ -846,14 +846,14 @@
 
       if (windowText) {
         const worst = findWorstWeather(windowText);
-        if (worst.ceiling !== null && worst.ceiling < 2000) return true;
+        if (worst.ceiling !== null && (worst.ceiling * 100) < 2000) return true;
         if (worst.visibility !== null && worst.visibility < 3) return true;
       }
     }
 
     if (duration < 60 && wx.metar) {
       const worst = findWorstWeather(wx.metar.raw || '');
-      if (worst.ceiling !== null && worst.ceiling < 2000) return true;
+      if (worst.ceiling !== null && (worst.ceiling * 100) < 2000) return true;
       if (worst.visibility !== null && worst.visibility < 3) return true;
     }
 
@@ -869,14 +869,14 @@
       const windowText = segs.map(s => s.text).join(' ');
       if (windowText) {
         const worst = findWorstWeather(windowText);
-        if (worst.ceiling !== null && worst.ceiling < 600) return true;
+        if (worst.ceiling !== null && (worst.ceiling * 100) < 6000) return true;
         if (worst.visibility !== null && worst.visibility < 1.5) return true;
       }
     }
 
     if (duration < 60 && wx.metar) {
       const worst = findWorstWeather(wx.metar.raw || '');
-      if (worst.ceiling !== null && worst.ceiling < 600) return true;
+      if (worst.ceiling !== null && (worst.ceiling * 100) < 6000) return true;
       if (worst.visibility !== null && worst.visibility < 1.5) return true;
     }
 
@@ -887,7 +887,7 @@
     if (!wx || !wx.metar) return false;
     const metarText = wx.metar.raw || '';
     const worst = findWorstWeather(metarText);
-    if (worst.ceiling !== null && worst.ceiling < 600) return true;
+    if (worst.ceiling !== null && (worst.ceiling * 100) < 6000) return true;
     if (worst.visibility !== null && worst.visibility < 1.5) return true;
     return false;
   }
@@ -1016,7 +1016,7 @@
       } else if (flight.phase === 'sent' || flight.phase === 'out') {
         if (wx && wx.metar) {
           const worst = findWorstWeather(wx.metar.raw || '');
-          const metarTrigger = (worst.ceiling !== null && worst.ceiling < 2000) || 
+          const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) < 2000) || 
                               (worst.visibility !== null && worst.visibility < 3);
           if (metarTrigger) {
             if (!flight.alt1 && !flight.alt2) triggerType = 'red';
