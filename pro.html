@@ -470,8 +470,8 @@
           <th>ALT1</th>
           <th>ALT2</th>
           <th>ETD</th>
-          <th>BURN</th>
           <th>TAXI</th>
+          <th>BURN</th>
           <th>DUR</th>
           <th>ETA</th>
           <th>OUT</th>
@@ -495,6 +495,7 @@
   const API_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
   const ADVERSE_WX = ['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
   const ERROR_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+  const HEADER_KEYWORDS = ['FLT', 'ORG', 'ETD', 'DST', 'ETA', 'DEST', 'BURN', 'TAXI', 'DUR', 'OUT', 'PHASE', 'T/ALT', 'ALT1', 'ALT2'];
 
   // ===== State =====
   let flights = [];
@@ -563,6 +564,36 @@
     return cleaned.padStart(4, '0');
   }
 
+  function formatDuration(minutes) {
+    // Format minutes as HHMM for display
+    if (!minutes || minutes === '') return '';
+    const min = parseInt(minutes, 10);
+    if (isNaN(min)) return '';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${pad2(h)}${pad2(m)}`;
+  }
+
+  function parseDurationInput(input) {
+    // Parse user input like "30" (30 min), "130" (1h 30m), "16" (16 min)
+    if (!input || input === '') return '';
+    const cleaned = input.replace(/[^\d]/g, '');
+    if (cleaned.length === 0) return '';
+
+    let minutes = 0;
+    if (cleaned.length <= 2) {
+      // "30" -> 30 minutes
+      minutes = parseInt(cleaned, 10);
+    } else {
+      // "130" -> 1 hour 30 minutes = 90 minutes
+      const hours = parseInt(cleaned.slice(0, -2), 10);
+      const mins = parseInt(cleaned.slice(-2), 10);
+      minutes = hours * 60 + mins;
+    }
+
+    return String(minutes);
+  }
+
   function formatZuluTime(hhmm) {
     if (!hhmm || hhmm.length !== 4) return hhmm;
     return `${hhmm.slice(0,2)}:${hhmm.slice(2)}`;
@@ -572,19 +603,12 @@
     if (!hhmm || hhmm.length !== 4) return '';
     let h = parseInt(hhmm.slice(0,2), 10);
     let m = parseInt(hhmm.slice(2), 10);
-    m += minutes;
+    m += parseInt(minutes, 10) || 0;
     while (m >= 60) { m -= 60; h++; }
     while (m < 0) { m += 60; h--; }
     while (h >= 24) h -= 24;
     while (h < 0) h += 24;
     return pad2(h) + pad2(m);
-  }
-
-  function decimalHoursToMinutes(decimal) {
-    // 1.21 = 81 minutes (1 hour 21 minutes)
-    const hours = Math.floor(decimal);
-    const minutes = Math.round((decimal - hours) * 100);
-    return hours * 60 + minutes;
   }
 
   function normalizeICAO(iata) {
@@ -638,8 +662,21 @@
   function parsePastedFlights(text) {
     const lines = text.trim().split('\n');
     const newFlights = [];
+    let startIdx = 0;
 
-    for (const line of lines) {
+    // Check if first line is header
+    if (lines.length > 0) {
+      const firstLine = lines[0].trim().split(/[\s\t]+/);
+      const isHeader = firstLine.some(word => 
+        HEADER_KEYWORDS.includes(word.toUpperCase())
+      );
+      if (isHeader) {
+        startIdx = 1; // Skip header row
+      }
+    }
+
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i];
       if (!line.trim()) continue;
 
       // Parse: FLT ORG ETD DST ETA (space or tab separated)
@@ -657,8 +694,8 @@
         alt1: '',
         alt2: '',
         etd: normalizeTime(etd),
-        burnoff: '',
         taxiOut: '',
+        burnoff: '',
         duration: '',
         eta: normalizeTime(eta),
         outTime: '',
@@ -717,7 +754,7 @@
     }
 
     const taxiMin = parseInt(flight.taxiOut, 10) || 0;
-    const burnMin = decimalHoursToMinutes(parseFloat(flight.burnoff) || 0);
+    const burnMin = parseInt(flight.burnoff, 10) || 0;
     const totalMin = taxiMin + burnMin;
 
     flight.duration = String(totalMin);
@@ -1129,9 +1166,9 @@
         <td class="icao-cell editable" data-idx="${idx}" data-field="alt1" data-icao="${flight.alt1 || ''}">${renderICAO(flight, 'alt1')}</td>
         <td class="icao-cell editable" data-idx="${idx}" data-field="alt2" data-icao="${flight.alt2 || ''}">${renderICAO(flight, 'alt2')}</td>
         <td class="editable" data-idx="${idx}" data-field="etd">${flight.etd}</td>
-        <td class="editable" data-idx="${idx}" data-field="burnoff">${flight.burnoff}</td>
-        <td class="editable" data-idx="${idx}" data-field="taxiOut">${flight.taxiOut}</td>
-        <td>${flight.duration}</td>
+        <td class="editable" data-idx="${idx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td>
+        <td class="editable" data-idx="${idx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td>
+        <td>${formatDuration(flight.duration)}</td>
         <td>${formatZuluTime(flight.eta)}</td>
         <td class="editable" data-idx="${idx}" data-field="outTime">${flight.outTime ? formatZuluTime(flight.outTime) : ''}</td>
         <td><span class="phase-${flight.phase}">${flight.phase.toUpperCase()}</span></td>
@@ -1202,26 +1239,24 @@
   function attachEditListeners() {
     flightTableBody.querySelectorAll('.editable').forEach(cell => {
       cell.addEventListener('click', function(e) {
+        // Don't edit on right-click
+        if (e.button === 2) return;
+
         if (this.querySelector('input')) return; // Already editing
 
         const idx = parseInt(this.dataset.idx, 10);
         const field = this.dataset.field;
         const currentValue = flights[idx][field];
 
-        // Special handling for ICAO cells - click on text opens weather, click on empty opens edit
-        if (this.classList.contains('icao-cell')) {
-          const icao = this.dataset.icao;
-          // If there's an ICAO and clicking on it, show weather
-          if (icao && icao !== '—' && e.target.tagName !== 'INPUT') {
-            showWeatherModal(icao);
-            return;
-          }
-          // Otherwise fall through to edit mode
-        }
-
         const input = document.createElement('input');
         input.type = 'text';
-        input.value = currentValue;
+
+        // Display formatted value for duration fields
+        if (field === 'taxiOut' || field === 'burnoff') {
+          input.value = formatDuration(currentValue);
+        } else {
+          input.value = currentValue;
+        }
 
         const save = () => {
           let newValue = input.value.trim();
@@ -1234,6 +1269,11 @@
           // Special handling for time fields
           if (['etd', 'outTime'].includes(field) && newValue) {
             newValue = normalizeTime(newValue);
+          }
+
+          // Special handling for duration fields (taxi, burn)
+          if ((field === 'taxiOut' || field === 'burnoff') && newValue) {
+            newValue = parseDurationInput(newValue);
           }
 
           flights[idx][field] = newValue;
@@ -1277,7 +1317,15 @@
   }
 
   function attachWeatherClickListeners() {
-    // Already handled in attachEditListeners for ICAO cells
+    flightTableBody.querySelectorAll('.icao-cell').forEach(cell => {
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const icao = cell.dataset.icao;
+        if (icao && icao !== '—') {
+          showWeatherModal(icao);
+        }
+      });
+    });
   }
 
   function updateStats() {
@@ -1297,7 +1345,7 @@
   window.flightActions = {
     markSent(idx) {
       if (!flights[idx].burnoff || !flights[idx].taxiOut) {
-        showToast('Please enter Burnoff and Taxi Out times first', 'warning');
+        showToast('Please enter Taxi and Burn times first', 'warning');
         return;
       }
       flights[idx].phase = 'sent';
@@ -1365,9 +1413,9 @@
   });
 
   exportBtn.addEventListener('click', () => {
-    let csv = 'FLT,ORG,DEST,TALT,ALT1,ALT2,ETD,BURN,TAXI,DUR,ETA,OUT,PHASE\n';
+    let csv = 'FLT,ORG,DEST,TALT,ALT1,ALT2,ETD,TAXI,BURN,DUR,ETA,OUT,PHASE\n';
     flights.forEach(f => {
-      csv += `${f.flight},${f.origin},${f.dest},${f.takeoffAlt},${f.alt1},${f.alt2},${f.etd},${f.burnoff},${f.taxiOut},${f.duration},${f.eta},${f.outTime},${f.phase}\n`;
+      csv += `${f.flight},${f.origin},${f.dest},${f.takeoffAlt},${f.alt1},${f.alt2},${f.etd},${f.taxiOut},${f.burnoff},${f.duration},${f.eta},${f.outTime},${f.phase}\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv' });
