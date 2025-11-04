@@ -174,6 +174,15 @@
 
     .taxi-burn-cell {
       font-style: italic;
+      cursor: pointer;
+    }
+
+    .taxi-burn-cell:hover {
+      background: rgba(0,0,0,0.08);
+    }
+
+    .theme-dark .taxi-burn-cell:hover {
+      background: rgba(255,255,255,0.08);
     }
 
     .editable { 
@@ -235,6 +244,14 @@
       color:#ea580c;
     }
 
+    .icao-dest-out-critical {
+      background:#dc2626;
+      color:#fff;
+      font-weight:700;
+      padding:2px 4px;
+      border-radius:3px;
+    }
+
     .icao-toast-green { animation:toastGreen 1.5s ease-out; }
     @keyframes toastGreen { 0%,100%{background:transparent;}50%{background:#86efac;} }
 
@@ -262,6 +279,54 @@
     .wx-modal-body {
       font-family:monospace; font-size:13px; line-height:1.8; white-space:pre-wrap; word-break:break-word; color:var(--fg);
       user-select:text; -webkit-user-select:text;
+    }
+
+    .taxi-burn-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:3000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .taxi-burn-modal {
+      background:#fff; border-radius:12px; padding:24px;
+      width:100%; max-width:400px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    .theme-dark .taxi-burn-modal { background:#1f2937; }
+
+    .taxi-burn-modal-title {
+      font-size:16px; font-weight:600; margin-bottom:20px; color:var(--fg);
+    }
+
+    .taxi-burn-form-group {
+      margin-bottom:16px;
+    }
+
+    .taxi-burn-label {
+      display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--fg);
+    }
+
+    .taxi-burn-input {
+      width:100%; padding:10px; border:1px solid var(--border); border-radius:6px;
+      font-size:13px; background:#fff; color:var(--fg); font-family:monospace;
+    }
+
+    .theme-dark .taxi-burn-input {
+      background:#111827; border-color:#374151; color:#e5e7eb;
+    }
+
+    .taxi-burn-input:focus {
+      outline:2px solid var(--brand);
+    }
+
+    .taxi-burn-modal-actions {
+      display:flex; gap:10px; margin-top:20px; justify-content:flex-end;
+    }
+
+    .taxi-burn-modal-actions .btn {
+      height:36px; padding:0 16px; font-size:13px;
     }
 
     .stats { 
@@ -853,8 +918,20 @@
           flight.triggers.add(`${flight.dest}:dest-noalt`);
         } else if (flight.phase === 'planned') {
           flight.triggers.add(`${flight.dest}:dest`);
-        } else {
+        } else if (flight.phase === 'sent') {
           flight.triggers.add(`${flight.dest}:dest-sent`);
+        } else if (flight.phase === 'out') {
+          flight.triggers.add(`${flight.dest}:dest-out`);
+        }
+      }
+
+      // FIXED: For "Out" flights, check destination METAR
+      if (flight.phase === 'out' && destWx && destWx.metar) {
+        const worst = findWorstWeather(destWx.metar.raw || '');
+        const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) < 600) || 
+                            (worst.visibility !== null && worst.visibility < 1);
+        if (metarTrigger) {
+          flight.triggers.add(`${flight.dest}:dest-out-metar`);
         }
       }
 
@@ -1026,6 +1103,97 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); }, { once: true });
   }
 
+  function showTaxiBurnModal(idx) {
+    const flight = flights[idx];
+    const overlay = document.createElement('div');
+    overlay.className = 'taxi-burn-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'taxi-burn-modal';
+
+    const title = `${flight.flight} (${flight.origin} → ${flight.dest})`;
+
+    modal.innerHTML = `
+      <div class="taxi-burn-modal-title">${title}</div>
+      <div class="taxi-burn-form-group">
+        <label class="taxi-burn-label">Taxi Out (minutes)</label>
+        <input type="text" id="taxiOutInput" class="taxi-burn-input" placeholder="e.g., 15 or 0015" value="${formatDuration(flight.taxiOut)}">
+      </div>
+      <div class="taxi-burn-form-group">
+        <label class="taxi-burn-label">Burn (minutes)</label>
+        <input type="text" id="burnInput" class="taxi-burn-input" placeholder="e.g., 240 or 0400" value="${formatDuration(flight.burnoff)}">
+      </div>
+      <div class="taxi-burn-modal-actions">
+        <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+        <button class="btn btn-success" id="saveBtn">Save</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const taxiOutInput = modal.querySelector('#taxiOutInput');
+    const burnInput = modal.querySelector('#burnInput');
+    const cancelBtn = modal.querySelector('#cancelBtn');
+    const saveBtn = modal.querySelector('#saveBtn');
+
+    const closeModal = () => overlay.remove();
+
+    const save = () => {
+      let taxiValue = taxiOutInput.value.trim();
+      let burnValue = burnInput.value.trim();
+
+      if (taxiValue) taxiValue = parseDurationInput(taxiValue);
+      if (burnValue) burnValue = parseDurationInput(burnValue);
+
+      flights[idx].taxiOut = taxiValue;
+      flights[idx].burnoff = burnValue;
+
+      if (flights[idx].taxiOut && !flights[idx].burnoff && getTaxiOutSuggestion(flights[idx].origin)) {
+        flights[idx].taxiOut = getTaxiOutSuggestion(flights[idx].origin);
+      }
+
+      calculateDurationAndETA(flights[idx]);
+
+      if ((flights[idx].burnoff || flights[idx].taxiOut) && flights[idx].taxiOut && flights[idx].burnoff && flights[idx].phase === 'planned') {
+        flights[idx].phase = 'sent';
+      }
+
+      renderTable();
+      refreshWeather();
+      closeModal();
+      showToast('Taxi and Burn times saved', 'success');
+    };
+
+    taxiOutInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        burnInput.focus();
+        burnInput.select();
+      }
+    });
+
+    burnInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save();
+      }
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+    saveBtn.addEventListener('click', save);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    }, { once: true });
+
+    taxiOutInput.focus();
+    taxiOutInput.select();
+  }
+
   function escapeHtml(text) {
     const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
     return text.replace(/[&<>"']/g, m => map[m]);
@@ -1053,8 +1221,8 @@
         <td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1 || ''}">${renderICAO(flight, 'alt1')}</td>
         <td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2 || ''}">${renderICAO(flight, 'alt2')}</td>
         <td class="editable" data-idx="${actualIdx}" data-field="etd">${flight.etd}</td>
-        <td class="editable taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td>
-        <td class="editable taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td>
+        <td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td>
+        <td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td>
         <td>${formatDuration(flight.duration)}</td>
         <td>${formatZuluTime(flight.eta)}</td>
         <td class="editable" data-idx="${actualIdx}" data-field="outTime">${flight.outTime ? formatZuluTime(flight.outTime) : ''}</td>
@@ -1138,19 +1306,24 @@
       if (flight.triggers.has(`${icao}:origin-red`)) triggerType = 'red';
       else if (flight.triggers.has(`${icao}:origin-bold`)) triggerType = 'bold';
     } else if (field === 'dest') {
-      const hasTrigger = flight.triggers.has(`${icao}:dest`) || flight.triggers.has(`${icao}:dest-noalt`) || flight.triggers.has(`${icao}:dest-sent`);
+      // For "Out" flights, check destination METAR
+      if (flight.phase === 'out') {
+        if (flight.triggers.has(`${icao}:dest-out-metar`)) triggerType = 'dest-out-critical';
+      } else {
+        const hasTrigger = flight.triggers.has(`${icao}:dest`) || flight.triggers.has(`${icao}:dest-noalt`) || flight.triggers.has(`${icao}:dest-sent`);
 
-      if (flight.phase === 'planned') {
-        if (flight.triggers.has(`${icao}:dest-noalt`)) triggerType = 'red';
-        else if (hasTrigger) triggerType = 'bold';
-      } else if (flight.phase === 'sent' || flight.phase === 'out') {
-        if (wx && wx.metar) {
-          const worst = findWorstWeather(wx.metar.raw || '');
-          const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) < 2000) || 
-                              (worst.visibility !== null && worst.visibility < 3);
-          if (metarTrigger) {
-            if (!flight.alt1 && !flight.alt2) triggerType = 'red';
-            else triggerType = 'bold';
+        if (flight.phase === 'planned') {
+          if (flight.triggers.has(`${icao}:dest-noalt`)) triggerType = 'red';
+          else if (hasTrigger) triggerType = 'bold';
+        } else if (flight.phase === 'sent') {
+          if (wx && wx.metar) {
+            const worst = findWorstWeather(wx.metar.raw || '');
+            const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) < 2000) || 
+                                (worst.visibility !== null && worst.visibility < 3);
+            if (metarTrigger) {
+              if (!flight.alt1 && !flight.alt2) triggerType = 'red';
+              else triggerType = 'bold';
+            }
           }
         }
       }
@@ -1173,6 +1346,8 @@
       html = `<span class="icao-alt-critical">${icao}</span>`;
     } else if (triggerType === 'alt-out') {
       html = `<span class="icao-alt-out">${icao}</span>`;
+    } else if (triggerType === 'dest-out-critical') {
+      html = `<span class="icao-dest-out-critical">${icao}</span>`;
     }
 
     html += getMetarIndicators(icao, flight.phase);
@@ -1185,6 +1360,15 @@
   }
 
   function attachEditListeners() {
+    // Taxi/Burn cells - open modal on click
+    flightTableBody.querySelectorAll('[data-field="taxiOut"]').forEach(cell => {
+      cell.addEventListener('click', function() {
+        const idx = parseInt(this.dataset.idx, 10);
+        showTaxiBurnModal(idx);
+      });
+    });
+
+    // Other editable cells
     flightTableBody.querySelectorAll('.editable').forEach(cell => {
       let touchStartTime = 0, touchMoved = false;
       cell.addEventListener('click', function(e) {
@@ -1218,43 +1402,22 @@
     const currentValue = flights[idx][field];
     const input = document.createElement('input');
     input.type = 'text';
-    input.value = (field === 'taxiOut' || field === 'burnoff') ? formatDuration(currentValue) : (currentValue || '');
+    input.value = currentValue || '';
 
     const save = () => {
       let newValue = input.value.trim();
       if (['origin', 'dest', 'takeoffAlt', 'alt1', 'alt2'].includes(field) && newValue) newValue = normalizeICAO(newValue);
       if (['etd', 'outTime'].includes(field) && newValue) newValue = normalizeTime(newValue);
-      if ((field === 'taxiOut' || field === 'burnoff') && newValue) newValue = parseDurationInput(newValue);
       flights[idx][field] = newValue;
-      if (field === 'taxiOut' && !newValue) {
-        const suggestion = getTaxiOutSuggestion(flights[idx].origin);
-        if (suggestion) flights[idx].taxiOut = suggestion;
-      }
-      if (['taxiOut', 'burnoff', 'etd'].includes(field)) calculateDurationAndETA(flights[idx]);
-      if ((field === 'burnoff' || field === 'taxiOut') && flights[idx].burnoff && flights[idx].taxiOut && flights[idx].phase === 'planned') {
-        flights[idx].phase = 'sent';
-      }
+      if (['etd'].includes(field)) calculateDurationAndETA(flights[idx]);
       renderTable();
       refreshWeather();
     };
 
-    // FIXED: When pressing Enter in taxiOut, automatically move to burnoff
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { 
         e.preventDefault(); 
-
-        if (field === 'taxiOut') {
-          // Save taxi value first
-          save();
-          // Find the burnoff cell in the same row and start editing it
-          const row = cell.parentElement;
-          const burnoffCell = row.querySelector('[data-field="burnoff"]');
-          if (burnoffCell) {
-            setTimeout(() => startEdit(burnoffCell), 50);
-          }
-        } else {
-          save();
-        }
+        save(); 
       } else if (e.key === 'Escape') {
         renderTable();
       }
