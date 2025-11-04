@@ -532,16 +532,10 @@
       <textarea id="pasteArea" placeholder="5002 ORD 2218 LEX 2345
 5004 DEN 345 ATL 715
 5006 LAX 1915 JFK 345"></textarea>
-      <div class="paste-buttons">
-        <button id="parseBtn" class="btn">Parse Flights</button>
-        <button id="clearBtn" class="btn btn-secondary">Clear All</button>
-        <button id="exportBtn" class="btn btn-secondary">Export to Excel</button>
-      </div>
     </div>
   </div>
 
   <div class="controls">
-    <button id="parseBtn" class="btn">Parse Flights</button>
     <button id="clearBtn" class="btn btn-secondary">Clear All</button>
     <button id="exportBtn" class="btn btn-secondary">Export to Excel</button>
   </div>
@@ -633,7 +627,6 @@
   const pasteSection = $('#pasteSection');
   const pasteHeader = $('#pasteHeader');
   const pasteArea = $('#pasteArea');
-  const parseBtn = $('#parseBtn');
   const clearBtn = $('#clearBtn');
   const exportBtn = $('#exportBtn');
   const filterInput = $('#filterInput');
@@ -1625,26 +1618,6 @@
   };
 
   // ===== Button Handlers =====
-  parseBtn.addEventListener('click', () => {
-    const text = pasteArea.value;
-    if (!text.trim()) {
-      showToast('Paste flight list first', 'warning');
-      return;
-    }
-
-    const newFlights = parsePastedFlights(text);
-    if (newFlights.length === 0) {
-      showToast('No valid flights found', 'error');
-      return;
-    }
-
-    flights = [...flights, ...newFlights];
-    pasteArea.value = '';
-    renderTable();
-    refreshWeather();
-    showToast(`${newFlights.length} flight(s) added`, 'success');
-  });
-
   clearBtn.addEventListener('click', () => {
     if (confirm('Clear all flights?')) {
       flights = [];
