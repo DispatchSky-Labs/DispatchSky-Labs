@@ -12,12 +12,15 @@
       --trigger-bg:#ef4444; --trigger-text:#fff;
     }
 
+    * { box-sizing:border-box; }
+
     body { 
       margin:0; 
       font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; 
       background:var(--bg); 
       color:var(--fg); 
       font-size:14px;
+      min-width:320px;
     }
 
     .theme-dark { 
@@ -32,10 +35,12 @@
       justify-content:space-between; 
       padding:12px 16px; 
       border-bottom:1px solid var(--border);
+      flex-wrap:wrap;
+      gap:8px;
     }
 
-    .header-left { font-size:18px; font-weight:600; }
-    .header-center { display:flex; gap:16px; font-size:14px; color:var(--muted); }
+    .header-left { font-size:18px; font-weight:600; white-space:nowrap; }
+    .header-center { display:flex; gap:16px; font-size:14px; color:var(--muted); flex-wrap:wrap; }
     .header-right { display:flex; align-items:center; gap:8px; }
 
     /* Paste Area - Collapsible */
@@ -97,6 +102,7 @@
       display:flex; 
       gap:8px; 
       margin-top:8px; 
+      flex-wrap:wrap;
     }
 
     /* Controls */
@@ -120,6 +126,7 @@
       cursor:pointer; 
       font-size:13px;
       transition:opacity 0.2s;
+      white-space:nowrap;
     }
 
     .btn:hover { opacity:0.9; }
@@ -140,6 +147,7 @@
 
     table { 
       width:100%; 
+      min-width:1200px;
       border-collapse:collapse; 
       background:#fff;
       border-radius:8px;
@@ -153,11 +161,12 @@
       padding:10px 8px; 
       text-align:left; 
       font-weight:600; 
-      font-size:12px;
+      font-size:13px;
       border-bottom:2px solid var(--border);
       position:sticky;
       top:0;
       z-index:10;
+      white-space:nowrap;
     }
 
     .theme-dark th { background:#1f2937; }
@@ -166,6 +175,8 @@
       padding:8px; 
       border-bottom:1px solid var(--border); 
       vertical-align:middle;
+      font-size:13px;
+      white-space:nowrap;
     }
 
     tr:hover { background:rgba(0,0,0,0.02); }
@@ -184,6 +195,7 @@
 
     .editable input { 
       width:100%; 
+      min-width:60px;
       border:1px solid var(--brand); 
       background:transparent; 
       font:inherit; 
@@ -200,6 +212,8 @@
       cursor:text;
       user-select:none;
       touch-action:manipulation;
+      -webkit-user-select:none;
+      -webkit-touch-callout:none;
     }
 
     .icao-trigger { 
@@ -243,6 +257,7 @@
       justify-content:center;
       z-index:2000;
       animation:fadeIn 0.2s;
+      padding:20px;
     }
 
     @keyframes fadeIn {
@@ -254,6 +269,7 @@
       background:#fff;
       border-radius:12px;
       padding:20px;
+      width:100%;
       max-width:700px;
       max-height:80vh;
       overflow-y:auto;
@@ -275,50 +291,49 @@
       align-items:center;
       margin-bottom:16px;
       padding-bottom:12px;
-      border-bottom:1px solid var(--border);
+      border-bottom:2px solid var(--border);
     }
 
     .wx-modal-title {
-      font-size:18px;
+      font-size:20px;
       font-weight:700;
       font-family:monospace;
+      letter-spacing:1px;
     }
 
     .wx-modal-close {
       background:transparent;
       border:none;
-      font-size:24px;
+      font-size:28px;
       cursor:pointer;
       color:var(--muted);
       padding:0;
-      width:30px;
-      height:30px;
+      width:36px;
+      height:36px;
       display:flex;
       align-items:center;
       justify-content:center;
       border-radius:6px;
+      line-height:1;
     }
 
     .wx-modal-close:hover { background:rgba(0,0,0,0.1); }
 
     .wx-modal-body {
       font-family:monospace;
-      font-size:12px;
-      line-height:1.5;
+      font-size:13px;
+      line-height:1.6;
       white-space:pre-wrap;
       word-break:break-word;
       color:var(--fg);
+      user-select:text;
+      -webkit-user-select:text;
     }
 
-    .wx-section {
-      margin-bottom:16px;
-    }
-
-    .wx-section-title {
-      font-weight:700;
-      margin-bottom:6px;
-      color:var(--brand);
-      font-size:13px;
+    .wx-divider {
+      height:1px;
+      background:var(--border);
+      margin:16px 0;
     }
 
     /* Statistics */
@@ -382,13 +397,14 @@
 
     /* Responsive */
     @media (max-width: 768px) {
-      header { flex-direction:column; gap:12px; align-items:flex-start; }
-      .header-center { flex-direction:column; gap:4px; align-items:flex-start; }
-      .controls { flex-direction:column; align-items:stretch; }
-      table { font-size:12px; }
-      td, th { padding:6px 4px; }
-      .wx-modal { max-width:95%; }
-      .table-container { max-height:calc(100vh - 350px); }
+      .header-center { font-size:12px; }
+      .table-container { 
+        max-height:calc(100vh - 350px); 
+        padding:8px;
+      }
+      th, td { font-size:12px; padding:6px 4px; }
+      .wx-modal { padding:16px; max-width:95%; }
+      .wx-modal-body { font-size:12px; }
     }
 
     /* Utility */
@@ -889,11 +905,16 @@
       // DESTINATION: Check at ETA ±1 hour for TAF (BKN/OVC <2000' or VIS <3SM)
       const destTrigger = checkDestTrigger(destWx, flight);
       if (destTrigger) {
+        // If planned phase and NO alternates listed: red background
         if (flight.phase === 'planned' && !flight.alt1 && !flight.alt2) {
           flight.triggers.add(`${flight.dest}:dest-noalt`);
-        } else if (flight.phase === 'planned') {
+        } 
+        // If planned phase WITH alternates listed: just bold
+        else if (flight.phase === 'planned') {
           flight.triggers.add(`${flight.dest}:dest`);
-        } else {
+        } 
+        // If sent/out: bold
+        else {
           flight.triggers.add(`${flight.dest}:dest-sent`);
         }
       }
@@ -1118,18 +1139,21 @@
     const modal = document.createElement('div');
     modal.className = 'wx-modal';
 
-    let metarHtml = '';
-    let tafHtml = '';
+    let content = '';
 
     if (wx.metar && wx.metar.raw) {
-      metarHtml = `<div class="wx-section"><div class="wx-section-title">METAR</div><div class="wx-modal-body">${escapeHtml(wx.metar.raw)}</div></div>`;
+      content += escapeHtml(wx.metar.raw);
     }
 
     if (wx.taf && wx.taf.raw) {
+      if (content) content += '\n\n';
       // Format TAF with proper line breaks
-      const tafLines = wx.taf.raw.split('\n').map(line => escapeHtml(line.trim())).filter(line => line);
-      const tafFormatted = tafLines.join('\n');
-      tafHtml = `<div class="wx-section"><div class="wx-section-title">TAF</div><div class="wx-modal-body">${tafFormatted}</div></div>`;
+      const tafLines = wx.taf.raw.split('\n').map(line => line.trim()).filter(line => line);
+      content += tafLines.join('\n');
+    }
+
+    if (!content) {
+      content = 'No weather data available';
     }
 
     modal.innerHTML = `
@@ -1137,9 +1161,7 @@
         <div class="wx-modal-title">${icao}</div>
         <button class="wx-modal-close" id="closeModal">×</button>
       </div>
-      ${metarHtml}
-      ${tafHtml}
-      ${!metarHtml && !tafHtml ? '<div class="muted" style="padding:16px;">No weather data available</div>' : ''}
+      <div class="wx-modal-body">${escapeHtml(content)}</div>
     `;
 
     overlay.appendChild(modal);
@@ -1215,7 +1237,6 @@
     });
 
     attachEditListeners();
-    attachWeatherClickListeners();
     updateStats();
     saveFlights();
   }
@@ -1270,6 +1291,7 @@
   function attachEditListeners() {
     flightTableBody.querySelectorAll('.editable').forEach(cell => {
       let touchStartTime = 0;
+      let touchMoved = false;
 
       // Mouse click - edit
       cell.addEventListener('click', function(e) {
@@ -1281,17 +1303,27 @@
       // Touch start - start long press timer
       cell.addEventListener('touchstart', function(e) {
         touchStartTime = Date.now();
-      });
+        touchMoved = false;
+      }, { passive: true });
+
+      // Touch move - cancel long press
+      cell.addEventListener('touchmove', function(e) {
+        touchMoved = true;
+      }, { passive: true });
 
       // Touch end - check if long press
       cell.addEventListener('touchend', function(e) {
         const touchDuration = Date.now() - touchStartTime;
-        if (touchDuration > 500) { // 500ms long press
+        const icao = this.dataset.icao;
+
+        if (!touchMoved && touchDuration > 500 && icao && icao !== '—' && this.classList.contains('icao-cell')) {
+          // Long press detected - show weather
           e.preventDefault();
-          const icao = this.dataset.icao;
-          if (icao && icao !== '—' && this.classList.contains('icao-cell')) {
-            showWeatherModal(icao);
-          }
+          e.stopPropagation();
+          showWeatherModal(icao);
+        } else if (!touchMoved && touchDuration <= 500 && !this.querySelector('input')) {
+          // Short tap - edit
+          startEdit(this);
         }
       });
 
@@ -1377,10 +1409,6 @@
     cell.appendChild(input);
     input.focus();
     input.select();
-  }
-
-  function attachWeatherClickListeners() {
-    // Listeners are now attached in attachEditListeners
   }
 
   function updateStats() {
