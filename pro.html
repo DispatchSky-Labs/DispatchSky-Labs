@@ -125,34 +125,6 @@
     .btn-secondary { background:var(--muted); }
     .btn-success { background:var(--success); }
 
-    .filter-bar {
-      padding:12px 16px;
-      border-bottom:1px solid var(--border);
-      display:flex;
-      gap:12px;
-      flex-wrap:wrap;
-      align-items:center;
-    }
-
-    .filter-input {
-      padding:6px 12px;
-      border:1px solid var(--border);
-      border-radius:6px;
-      font-size:13px;
-      background:#fff;
-      color:var(--fg);
-    }
-
-    .theme-dark .filter-input {
-      background:#111827;
-      border-color:#374151;
-      color:#e5e7eb;
-    }
-
-    .filter-input::placeholder {
-      color:var(--muted);
-    }
-
     .table-container { 
       padding:8px; 
       overflow-x:auto;
@@ -179,19 +151,10 @@
       font-size:12px;
       border-bottom:2px solid var(--border);
       white-space:nowrap;
-      cursor:pointer;
       user-select:none;
-      position:relative;
     }
 
     .theme-dark th { background:#1f2937; }
-
-    th:hover { background:#e5e7eb; }
-    .theme-dark th:hover { background:#374151; }
-
-    th.sortable::after { content:' ⇅'; font-size:10px; opacity:0.5; }
-    th.sort-asc::after { content:' ↑'; opacity:1; }
-    th.sort-desc::after { content:' ↓'; opacity:1; }
 
     td { 
       padding:6px 4px; 
@@ -209,7 +172,9 @@
       background:#1e3a5f;
     }
 
-    th:nth-child(9), td:nth-child(9) { border-left:3px solid var(--brand); }
+    .taxi-burn-cell {
+      font-style: italic;
+    }
 
     .editable { 
       cursor:text; 
@@ -333,6 +298,32 @@
     .action-btn-remove:hover { background:rgba(0,0,0,0.08); }
     .theme-dark .action-btn-remove:hover { background:rgba(255,255,255,0.08); }
 
+    .drag-handle {
+      cursor: grab;
+      padding: 4px 8px;
+      color: var(--muted);
+      font-size: 16px;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .drag-handle:hover {
+      color: var(--fg);
+    }
+
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    tr.dragging {
+      opacity: 0.5;
+      background: var(--brand) !important;
+    }
+
+    tr.drag-over {
+      border-top: 3px solid var(--brand);
+    }
+
     @media (max-width: 768px) {
       body { font-size:12px; }
       .header-left { font-size:16px; }
@@ -386,11 +377,6 @@
     <button id="exportBtn" class="btn btn-secondary">Export to Excel</button>
   </div>
 
-  <div class="filter-bar">
-    <input type="text" id="filterInput" class="filter-input" placeholder="Filter flights (FLT, ORG, DST, Phase)...">
-    <span style="color:var(--muted); font-size:12px;">Click column headers to sort</span>
-  </div>
-
   <div class="stats">
     <div class="stat"><span class="stat-label">Total:</span><span class="stat-value" id="statTotal">0</span></div>
     <div class="stat"><span class="stat-label">Planned:</span><span class="stat-value" id="statPlanned">0</span></div>
@@ -407,24 +393,25 @@
     <table id="flightTable">
       <thead>
         <tr>
-          <th class="sortable" data-field="flight">FLT</th>
-          <th class="sortable" data-field="origin">ORG</th>
-          <th class="sortable" data-field="dest">DEST</th>
-          <th class="sortable" data-field="takeoffAlt">T/ALT</th>
-          <th class="sortable" data-field="alt1">ALT1</th>
-          <th class="sortable" data-field="alt2">ALT2</th>
-          <th class="sortable" data-field="etd">ETD</th>
-          <th class="sortable" data-field="taxiOut">TAXI</th>
-          <th class="sortable" data-field="burnoff">BURN</th>
-          <th class="sortable" data-field="duration">DUR</th>
-          <th class="sortable" data-field="eta">ETA</th>
-          <th class="sortable" data-field="outTime">OUT</th>
-          <th class="sortable" data-field="phase">Phase</th>
+          <th>FLT</th>
+          <th>ORG</th>
+          <th>DEST</th>
+          <th>T/ALT</th>
+          <th>ALT1</th>
+          <th>ALT2</th>
+          <th>ETD</th>
+          <th>TAXI</th>
+          <th>BURN</th>
+          <th>DUR</th>
+          <th>ETA</th>
+          <th>OUT</th>
+          <th>Phase</th>
           <th>Actions</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="flightTableBody">
-        <tr><td colspan="14" class="loading">Click "Flight List Input" above to add flights</td></tr>
+        <tr><td colspan="15" class="loading">Click "Flight List Input" above to add flights</td></tr>
       </tbody>
     </table>
   </div>
@@ -437,7 +424,7 @@
   const ERROR_THRESHOLD_MS = 5 * 60 * 1000;
   const HEADER_KEYWORDS = ['FLT', 'ORG', 'ETD', 'DST', 'ETA', 'DEST', 'BURN', 'TAXI', 'DUR', 'OUT', 'PHASE', 'T/ALT', 'ALT1', 'ALT2'];
 
-  // ===== METAR Validation Utilities (from app.v8b.js) =====
+  // ===== METAR Validation Utilities =====
   function checkMetarExpiredStatus(metarText) {
     if (!metarText) return { expired: false, critical: false };
     const match = metarText.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
@@ -485,10 +472,8 @@
   let weatherData = {};
   let lastSuccessfulUpdate = null;
   let autoRefreshInterval = null;
-  let sortField = null;
-  let sortAsc = true;
-  let filterText = '';
   const destImprovementCache = new Map();
+  let draggedIndex = null;
 
   const $ = (sel) => document.querySelector(sel);
   const pasteSection = $('#pasteSection');
@@ -497,7 +482,6 @@
   const controlsBar = $('#controlsBar');
   const clearBtn = $('#clearBtn');
   const exportBtn = $('#exportBtn');
-  const filterInput = $('#filterInput');
   const flightTableBody = $('#flightTableBody');
   const currentTimeEl = $('#currentTime');
   const lastUpdateEl = $('#lastUpdate');
@@ -739,7 +723,7 @@
     renderTable();
   }
 
-  // ===== TAF parsing (DDHH/DDHH header, FMDDHHMM groups) =====
+  // ===== TAF parsing =====
   const FM_SPLIT = /\bFM\d{6}\b/;
   const FM_FIND = /FM(\d{6})/g;
 
@@ -852,7 +836,6 @@
       const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
       const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
 
-      // Origin visibility trigger
       if (flight.phase === 'planned') {
         if (checkOriginTrigger(originWx)) {
           if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
@@ -862,7 +845,6 @@
         if (checkOriginTrigger(originWx)) flight.triggers.add(`${flight.origin}:origin-bold`);
       }
 
-      // Destination
       const destTrigger = checkDestTrigger(destWx, flight);
       const prevDestTrigger = flight.prevDestTrigger !== undefined ? flight.prevDestTrigger : destTrigger;
 
@@ -876,11 +858,9 @@
         }
       }
 
-      // Track improvement for destination
       trackDestinationImprovement(flight, destWx, prevDestTrigger, destTrigger);
       flight.prevDestTrigger = destTrigger;
 
-      // Alternates - FIXED: 600 ft threshold
       if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) {
         if (flight.phase === 'sent') {
           flight.triggers.add(`${flight.alt1}:alt-sent`);
@@ -973,7 +953,6 @@
     if (!wx) return false;
     const duration = parseInt(flight.duration, 10) || 999;
 
-    // FIXED: Changed threshold from 6000 to 600 feet
     if (wx.taf && wx.taf.raw && flight.eta) {
       const segs = getTafSegmentsForWindow(wx.taf.raw, flight.eta);
       const windowText = segs.map(s => s.text).join(' ');
@@ -1052,40 +1031,20 @@
     return text.replace(/[&<>"']/g, m => map[m]);
   }
 
-  function getFilteredAndSortedFlights() {
-    let filtered = flights;
-    if (filterText) {
-      const query = filterText.toLowerCase();
-      filtered = flights.filter(f => 
-        String(f.flight).toLowerCase().includes(query) || String(f.origin).toLowerCase().includes(query) ||
-        String(f.dest).toLowerCase().includes(query) || String(f.phase).toLowerCase().includes(query)
-      );
-    }
-    if (sortField) {
-      filtered.sort((a, b) => {
-        let aVal = a[sortField];
-        let bVal = b[sortField];
-        if (typeof aVal === 'string') { aVal = aVal.toLowerCase(); bVal = String(bVal || '').toLowerCase(); }
-        if (aVal < bVal) return sortAsc ? -1 : 1;
-        if (aVal > bVal) return sortAsc ? 1 : -1;
-        return 0;
-      });
-    }
-    return filtered;
-  }
-
   function renderTable() {
-    const displayFlights = getFilteredAndSortedFlights();
-    if (!displayFlights.length) {
-      flightTableBody.innerHTML = '<tr><td colspan="14" class="loading">No flights loaded</td></tr>';
+    if (!flights.length) {
+      flightTableBody.innerHTML = '<tr><td colspan="15" class="loading">No flights loaded</td></tr>';
       updateStats();
       return;
     }
     flightTableBody.innerHTML = '';
-    displayFlights.forEach((flight) => {
-      const actualIdx = flights.indexOf(flight);
+    flights.forEach((flight, actualIdx) => {
       const row = document.createElement('tr');
+      row.draggable = true;
+      row.dataset.index = actualIdx;
+
       if (flight.phase === 'in') row.classList.add('phase-done');
+
       row.innerHTML = `
         <td>${flight.flight}</td>
         <td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight, 'origin')}</td>
@@ -1094,8 +1053,8 @@
         <td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1 || ''}">${renderICAO(flight, 'alt1')}</td>
         <td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2 || ''}">${renderICAO(flight, 'alt2')}</td>
         <td class="editable" data-idx="${actualIdx}" data-field="etd">${flight.etd}</td>
-        <td class="editable" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td>
-        <td class="editable" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td>
+        <td class="editable taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td>
+        <td class="editable taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td>
         <td>${formatDuration(flight.duration)}</td>
         <td>${formatZuluTime(flight.eta)}</td>
         <td class="editable" data-idx="${actualIdx}" data-field="outTime">${flight.outTime ? formatZuluTime(flight.outTime) : ''}</td>
@@ -1105,12 +1064,68 @@
           ${flight.phase === 'sent' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markOut(${actualIdx})">Out</button>` : ''}
           <button class="btn action-btn action-btn-remove" onclick="window.flightActions.remove(${actualIdx})">×</button>
         </td>
+        <td><span class="drag-handle">⋮⋮</span></td>
       `;
+
+      // Drag events
+      row.addEventListener('dragstart', handleDragStart);
+      row.addEventListener('dragend', handleDragEnd);
+      row.addEventListener('dragover', handleDragOver);
+      row.addEventListener('drop', handleDrop);
+      row.addEventListener('dragenter', handleDragEnter);
+      row.addEventListener('dragleave', handleDragLeave);
+
       flightTableBody.appendChild(row);
     });
     attachEditListeners();
     updateStats();
     saveFlights();
+  }
+
+  // Drag and drop handlers
+  function handleDragStart(e) {
+    draggedIndex = parseInt(this.dataset.index, 10);
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+  }
+
+  function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    document.querySelectorAll('tr').forEach(row => row.classList.remove('drag-over'));
+  }
+
+  function handleDragOver(e) {
+    if (e.preventDefault) e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+  }
+
+  function handleDragEnter(e) {
+    if (this.draggable) this.classList.add('drag-over');
+  }
+
+  function handleDragLeave(e) {
+    this.classList.remove('drag-over');
+  }
+
+  function handleDrop(e) {
+    if (e.stopPropagation) e.stopPropagation();
+
+    const dropIndex = parseInt(this.dataset.index, 10);
+
+    if (draggedIndex !== dropIndex) {
+      const draggedFlight = flights[draggedIndex];
+      flights.splice(draggedIndex, 1);
+
+      const newIndex = draggedIndex < dropIndex ? dropIndex - 1 : dropIndex;
+      flights.splice(newIndex, 0, draggedFlight);
+
+      renderTable();
+      showToast('Flight order updated', 'success', 2000);
+    }
+
+    return false;
   }
 
   function renderICAO(flight, field) {
@@ -1142,7 +1157,6 @@
     } else if (field === 'takeoffAlt') {
       if (flight.triggers.has(`${icao}:talt`)) triggerType = (flight.phase === 'planned' ? 'red' : 'bold');
     } else if (field === 'alt1' || field === 'alt2') {
-      // FIXED: Different styling for sent vs out phases
       if (flight.triggers.has(`${icao}:alt-sent`)) {
         triggerType = 'alt-critical';
       } else if (flight.triggers.has(`${icao}:alt-out`)) {
@@ -1224,22 +1238,25 @@
       refreshWeather();
     };
 
-    // FIXED: Tab navigation between taxiOut and burnoff
+    // FIXED: When pressing Enter in taxiOut, automatically move to burnoff
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { 
         e.preventDefault(); 
-        save(); 
+
+        if (field === 'taxiOut') {
+          // Save taxi value first
+          save();
+          // Find the burnoff cell in the same row and start editing it
+          const row = cell.parentElement;
+          const burnoffCell = row.querySelector('[data-field="burnoff"]');
+          if (burnoffCell) {
+            setTimeout(() => startEdit(burnoffCell), 50);
+          }
+        } else {
+          save();
+        }
       } else if (e.key === 'Escape') {
         renderTable();
-      } else if (e.key === 'Tab' && field === 'taxiOut') {
-        e.preventDefault();
-        save();
-        // Find the burnoff cell in the same row and start editing it
-        const row = cell.parentElement;
-        const burnoffCell = row.querySelector('[data-field="burnoff"]');
-        if (burnoffCell) {
-          setTimeout(() => startEdit(burnoffCell), 50);
-        }
       }
     });
 
@@ -1306,22 +1323,6 @@
     a.click();
     URL.revokeObjectURL(url);
     showToast('Exported to CSV', 'success');
-  });
-
-  document.querySelectorAll('th.sortable').forEach(th => {
-    th.addEventListener('click', () => {
-      const field = th.dataset.field;
-      if (sortField === field) sortAsc = !sortAsc;
-      else { sortField = field; sortAsc = true; }
-      document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
-      th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
-      renderTable();
-    });
-  });
-
-  filterInput.addEventListener('input', (e) => {
-    filterText = e.target.value;
-    renderTable();
   });
 
   pasteArea.addEventListener('keydown', (e) => {
