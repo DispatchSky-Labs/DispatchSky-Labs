@@ -424,6 +424,50 @@
   const ERROR_THRESHOLD_MS = 5 * 60 * 1000;
   const HEADER_KEYWORDS = ['FLT', 'ORG', 'ETD', 'DST', 'ETA', 'DEST', 'BURN', 'TAXI', 'DUR', 'OUT', 'PHASE', 'T/ALT', 'ALT1', 'ALT2'];
 
+  // ===== METAR Validation Utilities (from app.v8b.js) =====
+  function checkMetarExpiredStatus(metarText) {
+    if (!metarText) return { expired: false, critical: false };
+    const match = metarText.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+    if (!match) return { expired: false, critical: false };
+    const day = parseInt(match[1], 10);
+    const hour = parseInt(match[2], 10);
+    const minute = parseInt(match[3], 10);
+    if (day < 1 || day > 31 || hour > 23 || minute > 59) return { expired: false, critical: false };
+    const now = new Date();
+    const currentYear = now.getUTCFullYear();
+    const currentMonth = now.getUTCMonth();
+    const currentDay = now.getUTCDate();
+    let metarDate = new Date(Date.UTC(currentYear, currentMonth, day, hour, minute));
+    if (day > currentDay + 15) {
+      metarDate = new Date(Date.UTC(currentYear, currentMonth - 1, day, hour, minute));
+    } else if (day < currentDay - 15) {
+      metarDate = new Date(Date.UTC(currentYear, currentMonth + 1, day, hour, minute));
+    }
+    const ageInMs = now - metarDate;
+    const ageInMinutes = ageInMs / (1000 * 60);
+    const expired = ageInMinutes > 60;
+    const critical = ageInMinutes > 75;
+    return { expired, critical };
+  }
+
+  function checkMissingMetarElements(metarText) {
+    if (!metarText) return true;
+    const hasWinds = /\b(\d{3}|VRB)\d{2}(G\d{2})?KT\b|\bCALM\b/.test(metarText);
+    const hasVisibility = /\b(P?\d+SM|\d+\/\d+SM)\b/.test(metarText);
+    const hasSkyConditions = /\b(FEW|SCT|BKN|OVC|CLR|CLEAR|SKC|VV|CAVOK)\d*\b/.test(metarText);
+    const hasTemperature = /\b(M?\d{2})\/(M?\d{2})?\b/.test(metarText);
+    const hasAltimeter = /\bA\d{4}\b/.test(metarText);
+    return !(hasWinds && hasVisibility && hasSkyConditions && hasTemperature && hasAltimeter);
+  }
+
+  function extractTafIssueTime(tafText) {
+    if (!tafText) return null;
+    const match = tafText.match(/TAF\s+[A-Z]{4}\s+(\d{6})Z/);
+    if (match) return match[1];
+    return null;
+  }
+
+  // ===== State Variables =====
   let flights = [];
   let weatherData = {};
   let lastSuccessfulUpdate = null;
@@ -431,6 +475,7 @@
   let sortField = null;
   let sortAsc = true;
   let filterText = '';
+  const destImprovementCache = new Map(); // Track destination improvement indicators
 
   const $ = (sel) => document.querySelector(sel);
   const pasteSection = $('#pasteSection');
@@ -800,17 +845,14 @@
           if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
           else flight.triggers.add(`${flight.origin}:origin-red`);
         }
-        if (checkMetarExpired(originWx, 'critical')) flight.triggers.add(`${flight.origin}:exp`);
-        if (checkMetarExpired(destWx, 'critical')) flight.triggers.add(`${flight.dest}:exp`);
-        if (taltWx && checkMetarExpired(taltWx, 'critical')) flight.triggers.add(`${flight.takeoffAlt}:exp`);
-        if (alt1Wx && checkMetarExpired(alt1Wx, 'critical')) flight.triggers.add(`${flight.alt1}:exp`);
-        if (alt2Wx && checkMetarExpired(alt2Wx, 'critical')) flight.triggers.add(`${flight.alt2}:exp`);
       } else {
         if (checkOriginTrigger(originWx)) flight.triggers.add(`${flight.origin}:origin-bold`);
       }
 
       // Destination
       const destTrigger = checkDestTrigger(destWx, flight);
+      const prevDestTrigger = flight.prevDestTrigger !== undefined ? flight.prevDestTrigger : destTrigger;
+
       if (destTrigger) {
         if (flight.phase === 'planned' && !flight.alt1 && !flight.alt2) {
           flight.triggers.add(`${flight.dest}:dest-noalt`);
@@ -821,11 +863,55 @@
         }
       }
 
+      // Track improvement for destination
+      trackDestinationImprovement(flight, destWx, prevDestTrigger, destTrigger);
+      flight.prevDestTrigger = destTrigger;
+
       // Alternates
       if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) flight.triggers.add(`${flight.alt1}:alt`);
       if (alt2Wx && checkAlternateTrigger(alt2Wx, flight)) flight.triggers.add(`${flight.alt2}:alt`);
       if (taltWx && checkTakeoffAltTrigger(taltWx)) flight.triggers.add(`${flight.takeoffAlt}:talt`);
     });
+  }
+
+  function trackDestinationImprovement(flight, destWx, prevTrigger, currentTrigger) {
+    if (!destWx || !destWx.taf || !destWx.taf.raw) return;
+
+    const currentIssueTime = extractTafIssueTime(destWx.taf.raw);
+    if (!currentIssueTime) return;
+
+    const cacheKey = `${flight.id}_${flight.dest}`;
+    const cached = destImprovementCache.get(cacheKey);
+
+    if (!cached) {
+      destImprovementCache.set(cacheKey, {
+        issueTime: currentIssueTime,
+        showIndicator: false,
+        wasTriggered: currentTrigger
+      });
+      return;
+    }
+
+    // TAF hasn't changed - maintain current indicator state
+    if (cached.issueTime === currentIssueTime) {
+      if (cached.showIndicator) {
+        flight.triggers.add(`${flight.dest}:improved`);
+      }
+      return;
+    }
+
+    // New TAF issued - check if weather improved
+    const improved = prevTrigger && !currentTrigger;
+
+    destImprovementCache.set(cacheKey, {
+      issueTime: currentIssueTime,
+      showIndicator: improved,
+      wasTriggered: currentTrigger
+    });
+
+    if (improved) {
+      flight.triggers.add(`${flight.dest}:improved`);
+    }
   }
 
   function checkOriginTrigger(wx) {
@@ -892,21 +978,30 @@
     return false;
   }
 
-  function checkMetarExpired(wx, level = 'warning') {
-    if (!wx || !wx.metar) return false;
-    const metarText = wx.metar.raw || '';
-    const match = metarText.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
-    if (!match) return false;
-    const day = parseInt(match[1], 10);
-    const hour = parseInt(match[2], 10);
-    const minute = parseInt(match[3], 10);
-    const now = new Date();
-    const metarDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, hour, minute));
-    if (day > now.getUTCDate() + 15) metarDate.setUTCMonth(metarDate.getUTCMonth() - 1);
-    const ageMin = (now - metarDate) / 60000;
-    if (level === 'warning') return ageMin > 60;
-    if (level === 'critical') return ageMin > 75;
-    return false;
+  // ===== NEW: METAR indicators for "sent" phase =====
+  function getMetarIndicators(icao, phase) {
+    if (phase !== 'sent' || !icao) return '';
+
+    const wx = weatherData[icao];
+    if (!wx || !wx.metar || !wx.metar.raw) return '';
+
+    const metarText = wx.metar.raw;
+    let indicators = '';
+
+    // Check expired status
+    const expiredStatus = checkMetarExpiredStatus(metarText);
+    if (expiredStatus.critical) {
+      indicators += ' ⏰';
+    } else if (expiredStatus.expired) {
+      indicators += ' ⏲';
+    }
+
+    // Check missing elements
+    if (checkMissingMetarElements(metarText)) {
+      indicators += ' ?';
+    }
+
+    return indicators;
   }
 
   function showWeatherModal(icao) {
@@ -1006,7 +1101,6 @@
     if (field === 'origin') {
       if (flight.triggers.has(`${icao}:origin-red`)) triggerType = 'red';
       else if (flight.triggers.has(`${icao}:origin-bold`)) triggerType = 'bold';
-      else if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     } else if (field === 'dest') {
       const hasTrigger = flight.triggers.has(`${icao}:dest`) || flight.triggers.has(`${icao}:dest-noalt`) || flight.triggers.has(`${icao}:dest-sent`);
 
@@ -1024,13 +1118,10 @@
           }
         }
       }
-      if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     } else if (field === 'takeoffAlt') {
       if (flight.triggers.has(`${icao}:talt`)) triggerType = (flight.phase === 'planned' ? 'red' : 'bold');
-      else if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     } else if (field === 'alt1' || field === 'alt2') {
       if (flight.triggers.has(`${icao}:alt`)) triggerType = 'yellow';
-      else if (flight.triggers.has(`${icao}:exp`)) triggerType = 'exp';
     }
 
     let html = icao;
@@ -1040,9 +1131,16 @@
       html = `<span class="icao-bold">${icao}</span>`;
     } else if (triggerType === 'yellow') {
       html = `<span style="background:#fef3c7; color:#92400e; font-weight:700; padding:2px 4px; border-radius:3px;">${icao}</span>`;
-    } else if (triggerType === 'exp') {
-      html = `⏰ <span class="icao-bold">${icao}</span>`;
     }
+
+    // Add METAR indicators for "sent" phase
+    html += getMetarIndicators(icao, flight.phase);
+
+    // Add improvement indicator for destination
+    if (field === 'dest' && flight.triggers.has(`${icao}:improved`)) {
+      html += ' ↑';
+    }
+
     return html;
   }
 
