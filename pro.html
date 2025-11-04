@@ -257,6 +257,19 @@
       color:#f59e0b;
     }
 
+    .icao-alt-critical {
+      background:#dc2626;
+      color:#fff;
+      font-weight:700;
+      padding:2px 4px;
+      border-radius:3px;
+    }
+
+    .icao-alt-out {
+      font-weight:700;
+      color:#ea580c;
+    }
+
     .icao-toast-green { animation:toastGreen 1.5s ease-out; }
     @keyframes toastGreen { 0%,100%{background:transparent;}50%{background:#86efac;} }
 
@@ -475,7 +488,7 @@
   let sortField = null;
   let sortAsc = true;
   let filterText = '';
-  const destImprovementCache = new Map(); // Track destination improvement indicators
+  const destImprovementCache = new Map();
 
   const $ = (sel) => document.querySelector(sel);
   const pasteSection = $('#pasteSection');
@@ -867,9 +880,21 @@
       trackDestinationImprovement(flight, destWx, prevDestTrigger, destTrigger);
       flight.prevDestTrigger = destTrigger;
 
-      // Alternates
-      if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) flight.triggers.add(`${flight.alt1}:alt`);
-      if (alt2Wx && checkAlternateTrigger(alt2Wx, flight)) flight.triggers.add(`${flight.alt2}:alt`);
+      // Alternates - FIXED: 600 ft threshold
+      if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) {
+        if (flight.phase === 'sent') {
+          flight.triggers.add(`${flight.alt1}:alt-sent`);
+        } else if (flight.phase === 'out') {
+          flight.triggers.add(`${flight.alt1}:alt-out`);
+        }
+      }
+      if (alt2Wx && checkAlternateTrigger(alt2Wx, flight)) {
+        if (flight.phase === 'sent') {
+          flight.triggers.add(`${flight.alt2}:alt-sent`);
+        } else if (flight.phase === 'out') {
+          flight.triggers.add(`${flight.alt2}:alt-out`);
+        }
+      }
       if (taltWx && checkTakeoffAltTrigger(taltWx)) flight.triggers.add(`${flight.takeoffAlt}:talt`);
     });
   }
@@ -892,7 +917,6 @@
       return;
     }
 
-    // TAF hasn't changed - maintain current indicator state
     if (cached.issueTime === currentIssueTime) {
       if (cached.showIndicator) {
         flight.triggers.add(`${flight.dest}:improved`);
@@ -900,7 +924,6 @@
       return;
     }
 
-    // New TAF issued - check if weather improved
     const improved = prevTrigger && !currentTrigger;
 
     destImprovementCache.set(cacheKey, {
@@ -950,19 +973,20 @@
     if (!wx) return false;
     const duration = parseInt(flight.duration, 10) || 999;
 
+    // FIXED: Changed threshold from 6000 to 600 feet
     if (wx.taf && wx.taf.raw && flight.eta) {
       const segs = getTafSegmentsForWindow(wx.taf.raw, flight.eta);
       const windowText = segs.map(s => s.text).join(' ');
       if (windowText) {
         const worst = findWorstWeather(windowText);
-        if (worst.ceiling !== null && (worst.ceiling * 100) < 6000) return true;
+        if (worst.ceiling !== null && (worst.ceiling * 100) < 600) return true;
         if (worst.visibility !== null && worst.visibility < 1.5) return true;
       }
     }
 
     if (duration < 60 && wx.metar) {
       const worst = findWorstWeather(wx.metar.raw || '');
-      if (worst.ceiling !== null && (worst.ceiling * 100) < 6000) return true;
+      if (worst.ceiling !== null && (worst.ceiling * 100) < 600) return true;
       if (worst.visibility !== null && worst.visibility < 1.5) return true;
     }
 
@@ -978,7 +1002,6 @@
     return false;
   }
 
-  // ===== NEW: METAR indicators for "sent" phase =====
   function getMetarIndicators(icao, phase) {
     if (phase !== 'sent' || !icao) return '';
 
@@ -988,7 +1011,6 @@
     const metarText = wx.metar.raw;
     let indicators = '';
 
-    // Check expired status
     const expiredStatus = checkMetarExpiredStatus(metarText);
     if (expiredStatus.critical) {
       indicators += ' ⏰';
@@ -996,7 +1018,6 @@
       indicators += ' ⏲';
     }
 
-    // Check missing elements
     if (checkMissingMetarElements(metarText)) {
       indicators += ' ?';
     }
@@ -1121,7 +1142,12 @@
     } else if (field === 'takeoffAlt') {
       if (flight.triggers.has(`${icao}:talt`)) triggerType = (flight.phase === 'planned' ? 'red' : 'bold');
     } else if (field === 'alt1' || field === 'alt2') {
-      if (flight.triggers.has(`${icao}:alt`)) triggerType = 'yellow';
+      // FIXED: Different styling for sent vs out phases
+      if (flight.triggers.has(`${icao}:alt-sent`)) {
+        triggerType = 'alt-critical';
+      } else if (flight.triggers.has(`${icao}:alt-out`)) {
+        triggerType = 'alt-out';
+      }
     }
 
     let html = icao;
@@ -1129,14 +1155,14 @@
       html = `<span class="icao-trigger">${icao}</span>`;
     } else if (triggerType === 'bold') {
       html = `<span class="icao-bold">${icao}</span>`;
-    } else if (triggerType === 'yellow') {
-      html = `<span style="background:#fef3c7; color:#92400e; font-weight:700; padding:2px 4px; border-radius:3px;">${icao}</span>`;
+    } else if (triggerType === 'alt-critical') {
+      html = `<span class="icao-alt-critical">${icao}</span>`;
+    } else if (triggerType === 'alt-out') {
+      html = `<span class="icao-alt-out">${icao}</span>`;
     }
 
-    // Add METAR indicators for "sent" phase
     html += getMetarIndicators(icao, flight.phase);
 
-    // Add improvement indicator for destination
     if (field === 'dest' && flight.triggers.has(`${icao}:improved`)) {
       html += ' ↑';
     }
@@ -1179,6 +1205,7 @@
     const input = document.createElement('input');
     input.type = 'text';
     input.value = (field === 'taxiOut' || field === 'burnoff') ? formatDuration(currentValue) : (currentValue || '');
+
     const save = () => {
       let newValue = input.value.trim();
       if (['origin', 'dest', 'takeoffAlt', 'alt1', 'alt2'].includes(field) && newValue) newValue = normalizeICAO(newValue);
@@ -1196,11 +1223,28 @@
       renderTable();
       refreshWeather();
     };
-    input.addEventListener('blur', save);
+
+    // FIXED: Tab navigation between taxiOut and burnoff
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); save(); }
-      if (e.key === 'Escape') renderTable();
+      if (e.key === 'Enter') { 
+        e.preventDefault(); 
+        save(); 
+      } else if (e.key === 'Escape') {
+        renderTable();
+      } else if (e.key === 'Tab' && field === 'taxiOut') {
+        e.preventDefault();
+        save();
+        // Find the burnoff cell in the same row and start editing it
+        const row = cell.parentElement;
+        const burnoffCell = row.querySelector('[data-field="burnoff"]');
+        if (burnoffCell) {
+          setTimeout(() => startEdit(burnoffCell), 50);
+        }
+      }
     });
+
+    input.addEventListener('blur', save);
+
     cell.innerHTML = '';
     cell.appendChild(input);
     input.focus();
