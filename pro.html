@@ -643,15 +643,11 @@
     const cleaned = time.replace(/[^\d]/g, '');
     if (!cleaned) return '';
 
-    // Parse the input
     let hours = 0, minutes = 0;
 
     if (cleaned.length === 1) {
-      // "5" -> "0050" (00:50 UTC)
       minutes = parseInt(cleaned, 10);
     } else if (cleaned.length === 2) {
-      // "50" -> "0050" (00:50 UTC)
-      // "23" -> "2300" (23:00 UTC)
       const num = parseInt(cleaned, 10);
       if (num <= 59) {
         minutes = num;
@@ -660,16 +656,13 @@
         minutes = num % 100;
       }
     } else if (cleaned.length === 3) {
-      // "345" -> "0345" (03:45 UTC)
       hours = parseInt(cleaned.slice(0, 1), 10);
       minutes = parseInt(cleaned.slice(1), 10);
     } else {
-      // "2345" -> "2345" (23:45 UTC)
       hours = parseInt(cleaned.slice(0, 2), 10);
       minutes = parseInt(cleaned.slice(2), 10);
     }
 
-    // Validate and normalize
     hours = hours % 24;
     minutes = minutes % 60;
 
@@ -801,6 +794,66 @@
         triggers: new Set()
       });
     }
+    return newFlights;
+  }
+
+  function parseRawInput(text) {
+    const lines = text.trim().split('\n');
+    const newFlights = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // Skip header lines (contain "DD", "TIME", "SQ", "ALC", "FLT", etc.)
+      if (/\b(DD|TIME|SQ|ALC|FLT|ORG|ETD|DST|ETA|A\/C|MAXTOW|CFP|MSGS|DISPATCH|WORKSHEET|DESK|page)\b/i.test(line)) {
+        continue;
+      }
+
+      // Parse the raw dispatch format
+      // Format: DD TIME SQ ALC FLT ORG ETD DST ETA A/C MAXTOW CFP MSGS
+      // Example: 42 1000 10 SKW 3861  MOT    1100  MSP    1235  013          001
+      const parts = line.split(/\s+/);
+
+      // We need at least: DD(0) TIME(1) SQ(2) ALC(3) FLT(4) ORG(5) ETD(6) DST(7) ETA(8)
+      if (parts.length < 9) continue;
+
+      // Extract fields by position
+      const dd = parts[0];
+      const time = parts[1];
+      const sq = parts[2];
+      const alc = parts[3];
+      const flt = parts[4];
+      const org = parts[5];
+      const etd = parts[6];
+      const dst = parts[7];
+      const eta = parts[8];
+
+      // Validate that we have reasonable values
+      if (!flt || !org || !etd || !dst || !eta) continue;
+
+      // Skip if FLT looks like a header or number that's too small
+      if (isNaN(parseInt(flt, 10)) || flt.length < 3) continue;
+
+      newFlights.push({
+        id: Date.now() + Math.random(),
+        flight: flt,
+        origin: normalizeICAO(org),
+        dest: normalizeICAO(dst),
+        takeoffAlt: '',
+        alt1: '',
+        alt2: '',
+        etd: normalizeTime(etd),
+        taxiOut: '',
+        burnoff: '',
+        duration: '',
+        eta: normalizeTime(eta),
+        outTime: '',
+        phase: 'planned',
+        triggers: new Set()
+      });
+    }
+
     return newFlights;
   }
 
@@ -1306,6 +1359,71 @@
     textarea.focus();
   }
 
+  function showRawInputModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'upload-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'upload-modal';
+
+    modal.innerHTML = `
+      <div class="upload-modal-title">Raw Dispatch Input</div>
+      <label class="upload-modal-label">Paste dispatch worksheet data:</label>
+      <textarea id="rawInputTextarea" class="upload-modal-textarea" placeholder="42 1000 10 SKW 3861  MOT    1100  MSP    1235  013          001
+42 1007 10 SKW 4680  BTR    1107  IAH    1233  131S         001"></textarea>
+      <div class="upload-modal-actions">
+        <button class="btn btn-secondary" id="rawCancelBtn">Cancel</button>
+        <button class="btn btn-success" id="rawSubmitBtn">Submit</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const textarea = modal.querySelector('#rawInputTextarea');
+    const cancelBtn = modal.querySelector('#rawCancelBtn');
+    const submitBtn = modal.querySelector('#rawSubmitBtn');
+
+    const closeModal = () => overlay.remove();
+
+    const submit = () => {
+      const text = textarea.value.trim();
+      if (!text) {
+        showToast('Please enter flight data', 'warning');
+        return;
+      }
+      const parsed = parseRawInput(text);
+      if (parsed.length > 0) {
+        flights = parsed;
+        renderTable();
+        refreshWeather();
+        closeModal();
+        showToast(`Loaded ${parsed.length} flights`, 'success');
+      } else {
+        showToast('No valid flights found', 'warning');
+      }
+    };
+
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        e.preventDefault();
+        submit();
+      }
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+    submitBtn.addEventListener('click', submit);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    }, { once: true });
+
+    textarea.focus();
+  }
+
   function showTaxiBurnModal(idx) {
     const flight = flights[idx];
     const overlay = document.createElement('div');
@@ -1423,6 +1541,14 @@
       showUploadModal();
     });
 
+    const rawInputItem = document.createElement('button');
+    rawInputItem.className = 'context-menu-item';
+    rawInputItem.textContent = 'Raw Input';
+    rawInputItem.addEventListener('click', () => {
+      closeContextMenu();
+      showRawInputModal();
+    });
+
     const themeItem = document.createElement('button');
     themeItem.className = 'context-menu-item';
     const currentTheme = getTheme();
@@ -1432,11 +1558,11 @@
     });
 
     menu.appendChild(uploadItem);
+    menu.appendChild(rawInputItem);
     menu.appendChild(themeItem);
 
     document.body.appendChild(menu);
 
-    // Position the menu using clientX/clientY
     const x = e.clientX || 0;
     const y = e.clientY || 0;
 
@@ -1444,7 +1570,6 @@
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
 
-    // Close menu on outside click
     setTimeout(() => {
       document.addEventListener('click', closeContextMenu, { once: true });
     }, 0);
