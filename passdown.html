@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CieloTracker Pro – Passdown</title>
+  <style>
+    :root {
+      --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --border:#e5e7eb;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; font-family: 'Courier New', monospace;
+      background:var(--bg); color:var(--fg); font-size:13px; padding:20px; line-height:1.6;
+    }
+    .theme-dark {
+      --bg:#0b0f14; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937;
+    }
+    .theme-dark body { background:var(--bg); color:var(--fg); }
+    .container { max-width:900px; margin:0 auto; }
+    h1 { margin:0 0 20px 0; font-size:20px; font-weight:600; }
+    .flight-block { margin-bottom:30px; padding:16px; background:#fff; border:1px solid var(--border); border-radius:6px; }
+    .theme-dark .flight-block { background:#1f2937; border-color:#374151; }
+    .flight-header { font-weight:600; font-size:14px; margin-bottom:8px; }
+    .flight-info { margin-bottom:12px; }
+    .flight-info-line { margin-bottom:4px; }
+    .weather-section { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
+    .weather-header { font-weight:600; font-size:12px; margin-bottom:8px; color:var(--muted); }
+    .metar { margin-bottom:8px; white-space:pre-wrap; word-break:break-word; font-size:12px; }
+    .taf { margin-bottom:8px; white-space:pre-wrap; word-break:break-word; font-size:12px; }
+    .no-data { text-align:center; color:var(--muted); padding:40px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CieloTracker Pro – Passdown</h1>
+    <div id="passdownContent"></div>
+  </div>
+
+  <script>
+    (function() {
+      'use strict';
+
+      const flightsData = localStorage.getItem('ct_pro_flights_for_passdown');
+      const weatherData = localStorage.getItem('ct_pro_weather_for_passdown');
+
+      if (!flightsData || !weatherData) {
+        document.querySelector('#passdownContent').innerHTML = '<div class="no-data">No flight data available</div>';
+        return;
+      }
+
+      let flights = [];
+      let weather = {};
+
+      try {
+        flights = JSON.parse(flightsData);
+        weather = JSON.parse(weatherData);
+      } catch(e) {
+        document.querySelector('#passdownContent').innerHTML = '<div class="no-data">Error loading data</div>';
+        return;
+      }
+
+      const content = document.querySelector('#passdownContent');
+
+      if (flights.length === 0) {
+        content.innerHTML = '<div class="no-data">No flights</div>';
+        return;
+      }
+
+      const html = flights.map(flight => {
+        // Build flight info line
+        let flightLine = `${flight.flight} ${flight.origin} ${flight.dest}`;
+        if (flight.takeoffAlt) flightLine += ` ${flight.takeoffAlt}`;
+        if (flight.alt1) flightLine += ` ${flight.alt1}`;
+        if (flight.alt2) flightLine += ` ${flight.alt2}`;
+
+        // Collect airports for weather (exclude origin)
+        const airports = [];
+        if (flight.dest) airports.push(flight.dest);
+        if (flight.takeoffAlt) airports.push(flight.takeoffAlt);
+        if (flight.alt1) airports.push(flight.alt1);
+        if (flight.alt2) airports.push(flight.alt2);
+
+        // Build weather section
+        let weatherHtml = '';
+        if (airports.length > 0) {
+          weatherHtml = '<div class="weather-section"><div class="weather-header">WEATHER:</div>';
+          airports.forEach(airport => {
+            const wx = weather[airport];
+            if (wx) {
+              if (wx.metar && wx.metar.raw) {
+                weatherHtml += `<div class="metar">${escapeHtml(wx.metar.raw)}</div>`;
+              }
+              if (wx.taf && wx.taf.raw) {
+                weatherHtml += `<div class="taf">${escapeHtml(wx.taf.raw)}</div>`;
+              }
+            }
+          });
+          weatherHtml += '</div>';
+        }
+
+        return `
+          <div class="flight-block">
+            <div class="flight-header">${flightLine}</div>
+            <div class="flight-info">
+              <div class="flight-info-line">ETD: ${flight.etd || '—'} ETA: ${flight.eta || '—'}</div>
+            </div>
+            ${weatherHtml}
+          </div>
+        `;
+      }).join('');
+
+      content.innerHTML = html;
+
+      // Apply theme
+      const theme = localStorage.getItem('ct_pro_theme') || 'light';
+      if (theme === 'dark') {
+        document.body.classList.add('theme-dark');
+      }
+
+      function escapeHtml(text) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return text.replace(/[&<>"']/g, m => map[m]);
+      }
+    })();
+  </script>
+</body>
+</html>
