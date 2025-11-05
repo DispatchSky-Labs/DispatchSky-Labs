@@ -1253,14 +1253,14 @@
   }
 
   function getMetarIndicators(icao, phase) {
-    // FIXED: Now shows indicators for all phases starting from 'planned', not just 'sent'
     if (!icao) return '';
 
     const wx = weatherData[icao];
-    if (!wx || !wx.metar || !wx.metar.raw) return '';
+    if (!wx) return '';
 
-    const metarText = wx.metar.raw;
     let indicators = '';
+
+    const metarText = wx.metar?.raw || '';
 
     const expiredStatus = checkMetarExpiredStatus(metarText);
     if (expiredStatus.critical) {
