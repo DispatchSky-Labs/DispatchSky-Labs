@@ -411,6 +411,54 @@
       height:36px; padding:0 16px; font-size:13px;
     }
 
+    .single-flight-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:3000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .single-flight-modal {
+      background:#fff; border-radius:12px; padding:24px;
+      width:100%; max-width:400px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    .theme-dark .single-flight-modal { background:#1f2937; }
+
+    .single-flight-modal-title {
+      font-size:16px; font-weight:600; margin-bottom:20px; color:var(--fg);
+    }
+
+    .single-flight-form-group {
+      margin-bottom:16px;
+    }
+
+    .single-flight-label {
+      display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--fg);
+    }
+
+    .single-flight-input {
+      width:100%; padding:10px; border:1px solid var(--border); border-radius:6px;
+      font-size:13px; background:#fff; color:var(--fg); font-family:monospace;
+    }
+
+    .theme-dark .single-flight-input {
+      background:#111827; border-color:#374151; color:#e5e7eb;
+    }
+
+    .single-flight-input:focus {
+      outline:2px solid var(--brand);
+    }
+
+    .single-flight-modal-actions {
+      display:flex; gap:10px; margin-top:20px; justify-content:flex-end;
+    }
+
+    .single-flight-modal-actions .btn {
+      height:36px; padding:0 16px; font-size:13px;
+    }
+
     .taxi-burn-modal-overlay {
       position:fixed; inset:0;
       background:rgba(0,0,0,0.5);
@@ -811,8 +859,6 @@
       }
 
       // Parse the raw dispatch format
-      // Format: DD TIME SQ ALC FLT ORG ETD DST ETA A/C MAXTOW CFP MSGS
-      // Example: 42 1000 10 SKW 3861  MOT    1100  MSP    1235  013          001
       const parts = line.split(/\s+/);
 
       // We need at least: DD(0) TIME(1) SQ(2) ALC(3) FLT(4) ORG(5) ETD(6) DST(7) ETA(8)
@@ -1359,6 +1405,139 @@
     textarea.focus();
   }
 
+  function showSingleFlightModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'single-flight-modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'single-flight-modal';
+
+    modal.innerHTML = `
+      <div class="single-flight-modal-title">Add Single Flight</div>
+      <div class="single-flight-form-group">
+        <label class="single-flight-label">Flight Number</label>
+        <input type="text" id="singleFlightInput" class="single-flight-input" placeholder="e.g., 5002">
+      </div>
+      <div class="single-flight-form-group">
+        <label class="single-flight-label">Origin</label>
+        <input type="text" id="singleOriginInput" class="single-flight-input" placeholder="e.g., ORD">
+      </div>
+      <div class="single-flight-form-group">
+        <label class="single-flight-label">Destination</label>
+        <input type="text" id="singleDestInput" class="single-flight-input" placeholder="e.g., LEX">
+      </div>
+      <div class="single-flight-form-group">
+        <label class="single-flight-label">ETD (HHMM)</label>
+        <input type="text" id="singleETDInput" class="single-flight-input" placeholder="e.g., 2218">
+      </div>
+      <div class="single-flight-form-group">
+        <label class="single-flight-label">ETA (HHMM)</label>
+        <input type="text" id="singleETAInput" class="single-flight-input" placeholder="e.g., 2345">
+      </div>
+      <div class="single-flight-modal-actions">
+        <button class="btn btn-secondary" id="singleCancelBtn">Cancel</button>
+        <button class="btn btn-success" id="singleSubmitBtn">Add Flight</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const fltInput = modal.querySelector('#singleFlightInput');
+    const orgInput = modal.querySelector('#singleOriginInput');
+    const destInput = modal.querySelector('#singleDestInput');
+    const etdInput = modal.querySelector('#singleETDInput');
+    const etaInput = modal.querySelector('#singleETAInput');
+    const cancelBtn = modal.querySelector('#singleCancelBtn');
+    const submitBtn = modal.querySelector('#singleSubmitBtn');
+
+    const closeModal = () => overlay.remove();
+
+    const submit = () => {
+      const flt = fltInput.value.trim();
+      const org = orgInput.value.trim();
+      const dest = destInput.value.trim();
+      const etd = etdInput.value.trim();
+      const eta = etaInput.value.trim();
+
+      if (!flt || !org || !dest || !etd || !eta) {
+        showToast('Please fill in all fields', 'warning');
+        return;
+      }
+
+      const newFlight = {
+        id: Date.now() + Math.random(),
+        flight: flt,
+        origin: normalizeICAO(org),
+        dest: normalizeICAO(dest),
+        takeoffAlt: '',
+        alt1: '',
+        alt2: '',
+        etd: normalizeTime(etd),
+        taxiOut: '',
+        burnoff: '',
+        duration: '',
+        eta: normalizeTime(eta),
+        outTime: '',
+        phase: 'planned',
+        triggers: new Set()
+      };
+
+      flights.unshift(newFlight);
+      renderTable();
+      refreshWeather();
+      closeModal();
+      showToast(`Flight ${flt} added`, 'success');
+    };
+
+    fltInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        orgInput.focus();
+      }
+    });
+
+    orgInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        destInput.focus();
+      }
+    });
+
+    destInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        etdInput.focus();
+      }
+    });
+
+    etdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        etaInput.focus();
+      }
+    });
+
+    etaInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+    submitBtn.addEventListener('click', submit);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    }, { once: true });
+
+    fltInput.focus();
+  }
+
   function showRawInputModal() {
     const overlay = document.createElement('div');
     overlay.className = 'upload-modal-overlay';
@@ -1541,12 +1720,45 @@
       showUploadModal();
     });
 
+    const singleFlightItem = document.createElement('button');
+    singleFlightItem.className = 'context-menu-item';
+    singleFlightItem.textContent = 'Add Single Flight';
+    singleFlightItem.addEventListener('click', () => {
+      closeContextMenu();
+      showSingleFlightModal();
+    });
+
     const rawInputItem = document.createElement('button');
     rawInputItem.className = 'context-menu-item';
     rawInputItem.textContent = 'Raw Input';
     rawInputItem.addEventListener('click', () => {
       closeContextMenu();
       showRawInputModal();
+    });
+
+    const summaryItem = document.createElement('button');
+    summaryItem.className = 'context-menu-item';
+    summaryItem.textContent = 'Summary';
+    summaryItem.addEventListener('click', () => {
+      closeContextMenu();
+      const flightsToPass = flights.map(f => ({ ...f, triggers: Array.from(f.triggers || []) }));
+      localStorage.setItem('ct_pro_flights_for_summary', JSON.stringify(flightsToPass));
+      window.open('summary.html', 'CieloTracker_Summary');
+    });
+
+    const passdownItem = document.createElement('button');
+    passdownItem.className = 'context-menu-item';
+    passdownItem.textContent = 'Passdown';
+    passdownItem.addEventListener('click', () => {
+      closeContextMenu();
+      const flightsToPass = flights.map(f => ({ ...f, triggers: Array.from(f.triggers || []) }));
+      localStorage.setItem('ct_pro_flights_for_passdown', JSON.stringify(flightsToPass));
+      const weatherToPass = Object.keys(weatherData).reduce((acc, key) => {
+        acc[key] = weatherData[key];
+        return acc;
+      }, {});
+      localStorage.setItem('ct_pro_weather_for_passdown', JSON.stringify(weatherToPass));
+      window.open('passdown.html', 'CieloTracker_Passdown');
     });
 
     const themeItem = document.createElement('button');
@@ -1558,7 +1770,10 @@
     });
 
     menu.appendChild(uploadItem);
+    menu.appendChild(singleFlightItem);
     menu.appendChild(rawInputItem);
+    menu.appendChild(summaryItem);
+    menu.appendChild(passdownItem);
     menu.appendChild(themeItem);
 
     document.body.appendChild(menu);
