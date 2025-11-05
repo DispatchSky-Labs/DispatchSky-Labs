@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CieloTracker Pro – Summary</title>
+  <style>
+    :root {
+      --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --border:#e5e7eb;
+      --brand:#0f5fff;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
+      background:var(--bg); color:var(--fg); font-size:14px; padding:20px;
+    }
+    .theme-dark {
+      --bg:#0b0f14; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937;
+    }
+    .theme-dark body { background:var(--bg); color:var(--fg); }
+    h1 { margin:0 0 20px 0; font-size:24px; }
+    .container { max-width:1200px; margin:0 auto; }
+    .section { margin-bottom:40px; }
+    .section-title { font-size:18px; font-weight:600; margin-bottom:16px; border-bottom:2px solid var(--border); padding-bottom:8px; }
+    table { width:100%; border-collapse:collapse; background:#fff; }
+    .theme-dark table { background:#1f2937; }
+    th { background:#f3f4f6; padding:12px; text-align:left; font-weight:600; border-bottom:2px solid var(--border); }
+    .theme-dark th { background:#111827; }
+    td { padding:12px; border-bottom:1px solid var(--border); }
+    .bold { font-weight:700; }
+    .text-center { text-align:center; }
+    .no-data { text-align:center; color:var(--muted); padding:20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CieloTracker Pro – Summary</h1>
+
+    <div class="section">
+      <div class="section-title">Flights Due by Hour</div>
+      <table id="dueHourTable">
+        <thead>
+          <tr>
+            <th>Hour (UTC)</th>
+            <th class="text-center">Count</th>
+          </tr>
+        </thead>
+        <tbody id="dueHourBody">
+          <tr><td colspan="2" class="no-data">No flights</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Destinations Summary</div>
+      <table id="destTable">
+        <thead>
+          <tr>
+            <th>Destination</th>
+            <th class="text-center">Count</th>
+          </tr>
+        </thead>
+        <tbody id="destBody">
+          <tr><td colspan="2" class="no-data">No flights</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      'use strict';
+
+      function pad2(n) { return String(n).padStart(2, '0'); }
+
+      function subtractOneHour(hhmm) {
+        if (!hhmm || hhmm.length !== 4) return null;
+        let h = parseInt(hhmm.slice(0, 2), 10);
+        let m = parseInt(hhmm.slice(2), 10);
+        h--;
+        if (h < 0) h = 23;
+        return pad2(h);
+      }
+
+      const flightsData = localStorage.getItem('ct_pro_flights_for_summary');
+      if (!flightsData) {
+        document.body.innerHTML = '<p style="text-align:center; padding:40px;">No flight data available</p>';
+        return;
+      }
+
+      let flights = [];
+      try {
+        flights = JSON.parse(flightsData);
+      } catch(e) {
+        document.body.innerHTML = '<p style="text-align:center; padding:40px;">Error loading flight data</p>';
+        return;
+      }
+
+      // Calculate due hours
+      const dueHours = {};
+      flights.forEach(flight => {
+        if (flight.etd) {
+          const dueHour = subtractOneHour(flight.etd);
+          if (dueHour) {
+            dueHours[dueHour] = (dueHours[dueHour] || 0) + 1;
+          }
+        }
+      });
+
+      // Sort and find top 2
+      const sortedHours = Object.entries(dueHours)
+        .sort((a, b) => b[1] - a[1])
+        .map(([hour, count]) => ({ hour, count }));
+
+      const top2Hours = new Set(sortedHours.slice(0, 2).map(h => h.hour));
+
+      // Render due hours table
+      const dueHourBody = document.querySelector('#dueHourBody');
+      if (sortedHours.length === 0) {
+        dueHourBody.innerHTML = '<tr><td colspan="2" class="no-data">No flights</td></tr>';
+      } else {
+        dueHourBody.innerHTML = sortedHours.map(({ hour, count }) => {
+          const isBold = top2Hours.has(hour);
+          return `<tr>
+            <td>${hour}:00</td>
+            <td class="text-center ${isBold ? 'bold' : ''}">${count}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Calculate destinations
+      const destCounts = {};
+      flights.forEach(flight => {
+        if (flight.dest) {
+          destCounts[flight.dest] = (destCounts[flight.dest] || 0) + 1;
+        }
+      });
+
+      // Sort and find top 3
+      const sortedDests = Object.entries(destCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([dest, count]) => ({ dest, count }));
+
+      const top3Dests = new Set(sortedDests.slice(0, 3).map(d => d.dest));
+
+      // Render destinations table
+      const destBody = document.querySelector('#destBody');
+      if (sortedDests.length === 0) {
+        destBody.innerHTML = '<tr><td colspan="2" class="no-data">No flights</td></tr>';
+      } else {
+        destBody.innerHTML = sortedDests.map(({ dest, count }) => {
+          const isBold = top3Dests.has(dest);
+          return `<tr>
+            <td>${dest}</td>
+            <td class="text-center ${isBold ? 'bold' : ''}">${count}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Apply theme
+      const theme = localStorage.getItem('ct_pro_theme') || 'light';
+      if (theme === 'dark') {
+        document.body.classList.add('theme-dark');
+      }
+    })();
+  </script>
+</body>
+</html>
