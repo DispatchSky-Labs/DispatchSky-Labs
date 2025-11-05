@@ -1121,9 +1121,10 @@
       }
 
       if (flight.phase === 'out' && destWx && destWx.metar) {
-        const worst = findWorstWeather(destWx.metar.raw || '');
-        const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) < 600) || 
-                            (worst.visibility !== null && worst.visibility < 1);
+        const metarText = destWx.metar.raw || '';
+        const worst = findWorstWeather(metarText);
+        const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) <= 200) || 
+                            (worst.visibility !== null && worst.visibility <= 0.5);
         if (metarTrigger) {
           flight.triggers.add(`${flight.dest}:dest-out-metar`);
         }
@@ -2005,6 +2006,10 @@
 
     if (field === 'dest' && flight.triggers.has(`${icao}:improved`)) {
       html += ' ↑';
+    }
+
+    if (field === 'dest' && flight.triggers.has(`${icao}:dest-out-metar`)) {
+      html += ' ⚠';
     }
 
     return html;
