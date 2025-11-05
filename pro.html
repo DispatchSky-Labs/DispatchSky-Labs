@@ -80,7 +80,7 @@
       height:32px; 
       padding:0 16px; 
       border:none; 
-      border-radius:6px; 
+      border-radius:6px;
       background:var(--brand); 
       color:#fff; 
       font-weight:600; 
@@ -585,7 +585,7 @@
   </header>
 
   <div id="errorDisplay" class="hidden">
-    ⚠️ Weather data unavailable for 5+ minutes. Last update: <span id="errorTime">--:--</span> UTC
+    Weather data unavailable for 5+ minutes. Last update: <span id="errorTime">--:--</span> UTC
   </div>
 
   <div class="table-wrapper">
@@ -750,553 +750,117 @@
     if (!hhmm || hhmm.length !== 4) return '';
     let h = parseInt(hhmm.slice(0,2), 10);
     let m = parseInt(hhmm.slice(2), 10);
-    m += parseInt(minutes, 10) || 0;
-    while (m >= 60) { m -= 60; h++; }
-    while (m < 0) { m += 60; h--; }
-    while (h >= 24) h -= 24;
-    while (h < 0) h += 24;
+    m += minutes;
+    h += Math.floor(m / 60);
+    m %= 60;
+    h %= 24;
     return pad2(h) + pad2(m);
   }
 
-  function normalizeICAO(iata) {
-    if (!iata || iata.length < 3) return iata;
-    const clean = iata.trim().toUpperCase();
-    if (clean.length === 4) return clean;
-    if (clean[0] === 'Y') return 'C' + clean;
-    return 'K' + clean;
-  }
-
-  function showToast(message, type = 'info', duration = 3000, undoCallback = null) {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    const msgSpan = document.createElement('span');
-    msgSpan.textContent = message;
-    toast.appendChild(msgSpan);
-    if (undoCallback) {
-      const undoBtn = document.createElement('button');
-      undoBtn.className = 'toast-btn';
-      undoBtn.textContent = 'Undo';
-      undoBtn.addEventListener('click', () => { undoCallback(); toast.remove(); });
-      toast.appendChild(undoBtn);
-    }
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), duration);
-  }
-
-  function updateClock() {
-    const now = new Date();
-    currentTimeEl.textContent = `${pad2(now.getUTCHours())}:${pad2(now.getUTCMinutes())} UTC`;
-  }
-
-  function startClock() {
-    updateClock();
-    const now = new Date();
-    const msToNextMinute = (60 - now.getUTCSeconds()) * 1000 - now.getUTCMilliseconds();
-    setTimeout(() => { updateClock(); setInterval(updateClock, 60000); }, msToNextMinute);
-  }
-
-  function applyTheme(theme) {
-    document.body.className = theme === 'dark' ? 'theme-dark' : 'theme-light';
-    localStorage.setItem('ct_pro_theme', theme);
-  }
-
-  function getTheme() {
-    return localStorage.getItem('ct_pro_theme') || 'light';
-  }
-
-  function toggleTheme() {
-    const current = getTheme();
-    const newTheme = current === 'dark' ? 'light' : 'dark';
-    applyTheme(newTheme);
-    closeContextMenu();
-  }
-
-  function parsePastedFlights(text) {
-    const lines = text.trim().split('\n');
-    const newFlights = [];
-    let startIdx = 0;
-    if (lines.length > 0) {
-      const firstLine = lines[0].trim().split(/[\s\t]+/);
-      if (firstLine.some(word => HEADER_KEYWORDS.includes(word.toUpperCase()))) startIdx = 1;
-    }
-    for (let i = startIdx; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const parts = lines[i].trim().split(/[\s\t]+/);
-      if (parts.length < 5) continue;
-      const [flt, org, etd, dst, eta] = parts;
-      newFlights.push({
-        id: Date.now() + Math.random(),
-        flight: flt,
-        origin: normalizeICAO(org),
-        dest: normalizeICAO(dst),
-        takeoffAlt: '',
-        alt1: '',
-        alt2: '',
-        etd: normalizeTime(etd),
-        taxiOut: '',
-        burnoff: '',
-        duration: '',
-        eta: normalizeTime(eta),
-        outTime: '',
-        phase: 'planned',
-        triggers: new Set()
-      });
-    }
-    return newFlights;
-  }
-
-  function parseRawInput(text) {
-    const lines = text.trim().split('\n');
-    const newFlights = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-
-      // Skip header lines (contain "DD", "TIME", "SQ", "ALC", "FLT", etc.)
-      if (/\b(DD|TIME|SQ|ALC|FLT|ORG|ETD|DST|ETA|A\/C|MAXTOW|CFP|MSGS|DISPATCH|WORKSHEET|DESK|page)\b/i.test(line)) {
-        continue;
-      }
-
-      // Parse the raw dispatch format
-      const parts = line.split(/\s+/);
-
-      // We need at least: DD(0) TIME(1) SQ(2) ALC(3) FLT(4) ORG(5) ETD(6) DST(7) ETA(8)
-      if (parts.length < 9) continue;
-
-      // Extract fields by position
-      const dd = parts[0];
-      const time = parts[1];
-      const sq = parts[2];
-      const alc = parts[3];
-      const flt = parts[4];
-      const org = parts[5];
-      const etd = parts[6];
-      const dst = parts[7];
-      const eta = parts[8];
-
-      // Validate that we have reasonable values
-      if (!flt || !org || !etd || !dst || !eta) continue;
-
-      // Skip if FLT looks like a header or number that's too small
-      if (isNaN(parseInt(flt, 10)) || flt.length < 3) continue;
-
-      newFlights.push({
-        id: Date.now() + Math.random(),
-        flight: flt,
-        origin: normalizeICAO(org),
-        dest: normalizeICAO(dst),
-        takeoffAlt: '',
-        alt1: '',
-        alt2: '',
-        etd: normalizeTime(etd),
-        taxiOut: '',
-        burnoff: '',
-        duration: '',
-        eta: normalizeTime(eta),
-        outTime: '',
-        phase: 'planned',
-        triggers: new Set()
-      });
-    }
-
-    return newFlights;
-  }
-
-  function saveFlights() {
-    const flightsToSave = flights.map(f => ({ ...f, triggers: Array.from(f.triggers || []) }));
-    localStorage.setItem('ct_pro_flights', JSON.stringify(flightsToSave));
-  }
-
-  function loadFlights() {
-    const saved = localStorage.getItem('ct_pro_flights');
-    if (saved) {
-      try {
-        const loaded = JSON.parse(saved);
-        flights = loaded.map(f => ({ ...f, triggers: new Set(f.triggers || []) }));
-      } catch(e) {
-        flights = [];
-      }
-    }
-  }
-
-  function getTaxiOutSuggestion(origin) {
-    const history = flights.filter(f => f.origin === origin && f.taxiOut && f.phase !== 'planned')
-      .map(f => parseInt(f.taxiOut, 10)).filter(n => !isNaN(n)).slice(-5);
-    if (history.length < 3) return '';
-    return String(Math.round(history.reduce((a,b) => a+b, 0) / history.length));
-  }
-
   function calculateDurationAndETA(flight) {
-    if (!flight.taxiOut || !flight.burnoff) { flight.duration = ''; return; }
-    const totalMin = (parseInt(flight.taxiOut, 10) || 0) + (parseInt(flight.burnoff, 10) || 0);
-    flight.duration = String(totalMin);
-    if (flight.etd) flight.eta = addMinutesToZulu(flight.etd, totalMin);
-  }
-
-  async function fetchWeather(icaoList) {
-    if (!icaoList || !icaoList.length) return {};
-    const params = new URLSearchParams({
-      ids: icaoList.join(','),
-      ceil: '2000',
-      vis: '3',
-      metar: '1',
-      taf: '1',
-      alpha: '0',
-      filter: 'all'
-    });
-    try {
-      const res = await fetch(`${API_URL}?${params}`, { method: 'GET', mode: 'cors' });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const data = await res.json();
-      lastSuccessfulUpdate = new Date();
-      errorDisplay.classList.add('hidden');
-      const hh = pad2(lastSuccessfulUpdate.getUTCHours());
-      const mm = pad2(lastSuccessfulUpdate.getUTCMinutes());
-      lastUpdateEl.textContent = `Updated: ${hh}:${mm} UTC`;
-      const lookup = {};
-      if (data.results) data.results.forEach(r => { lookup[r.icao] = r; });
-      return lookup;
-    } catch(err) {
-      if (lastSuccessfulUpdate && (Date.now() - lastSuccessfulUpdate.getTime()) > ERROR_THRESHOLD_MS) {
-        errorDisplay.classList.remove('hidden');
-        const hh = pad2(lastSuccessfulUpdate.getUTCHours());
-        const mm = pad2(lastSuccessfulUpdate.getUTCMinutes());
-        errorTimeEl.textContent = `${hh}:${mm}`;
-      }
-      return weatherData;
+    if (!flight.etd || !flight.taxiOut || !flight.burnoff) {
+      flight.duration = '';
+      flight.eta = '';
+      return;
     }
+    const etdMins = parseInt(flight.etd.slice(0,2),10)*60 + parseInt(flight.etd.slice(2),10);
+    const totalMins = parseInt(flight.taxiOut,10) + parseInt(flight.burnoff,10);
+    const etaMins = (etdMins + totalMins) % (24*60);
+    const etaH = Math.floor(etaMins / 60);
+    const etaM = etaMins % 60;
+    flight.duration = String(totalMins);
+    flight.eta = pad2(etaH) + pad2(etaM);
   }
 
-  async function refreshWeather() {
-    const icaos = new Set();
-    flights.forEach(f => {
-      if (f.phase !== 'in') {
-        if (f.origin) icaos.add(f.origin);
-        if (f.dest) icaos.add(f.dest);
-        if (f.takeoffAlt) icaos.add(f.takeoffAlt);
-        if (f.alt1) icaos.add(f.alt1);
-        if (f.alt2) icaos.add(f.alt2);
-      }
-    });
-    if (icaos.size === 0) return;
-    weatherData = await fetchWeather(Array.from(icaos));
-    checkWeatherTriggers();
-    renderTable();
+  function getTaxiOutSuggestion(icao) {
+    const wx = weatherData[icao];
+    if (!wx || !wx.metar || !wx.metar.raw) return null;
+    const match = wx.metar.raw.match(/WIND\s+(\d{3}@\d+)/);
+    if (match) {
+      const wind = match[1];
+      const speed = parseInt(wind.split('@')[1], 10);
+      if (speed >= 15) return '20';
+      if (speed >= 10) return '18';
+      if (speed >= 5) return '15';
+    }
+    return '12';
   }
 
-  // ===== TAF parsing =====
-  const FM_SPLIT = /\bFM\d{6}\b/;
-  const FM_FIND = /FM(\d{6})/g;
-
-  function parseTafHeader(tafText) {
-    const m = tafText.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
-    if (!m) return null;
-    const now = new Date();
-    const Y = now.getUTCFullYear();
-    const M = now.getUTCMonth();
-    const startDay = parseInt(m[1], 10);
-    const startHour = parseInt(m[2], 10);
-    const endDay = parseInt(m[3], 10);
-    const endHour = parseInt(m[4], 10);
-    const start = new Date(Date.UTC(Y, M, startDay, startHour, 0, 0));
-    let end = new Date(Date.UTC(Y, M, endDay, endHour === 24 ? 0 : endHour, 0, 0));
-    if (endHour === 24) end = new Date(end.getTime() + 24 * 3600 * 1000);
-    return { start, end, Y, M };
-  }
-
-  function buildTafSegments(tafRaw) {
-    const header = parseTafHeader(tafRaw);
-    if (!header) return { segments: [], start: null, end: null };
-    const { start, end, Y, M } = header;
-    const parts = tafRaw.split(FM_SPLIT);
-    const fmMatches = [...tafRaw.matchAll(FM_FIND)];
-    const fmTimeAt = (fmIndex) => {
-      const fm = fmMatches[fmIndex];
-      const d = parseInt(fm[1].slice(0, 2), 10);
-      const h = parseInt(fm[1].slice(2, 4), 10);
-      const m = parseInt(fm[1].slice(4, 6), 10);
-      return new Date(Date.UTC(Y, M, d, h, m, 0));
+  function findWorstWeather(metar) {
+    const ceiling = metar.match(/\b(BKN|OVC|VV)(\d{3})\b/)?.[2];
+    const visibility = metar.match(/\b(\d+)SM\b/)?.[1] || metar.match(/\bP(\d+)SM\b/)?.[1];
+    return {
+      ceiling: ceiling ? parseInt(ceiling, 10) : null,
+      visibility: visibility ? parseInt(visibility, 10) : null
     };
-    const segments = [];
-    if (parts[0]) {
-      const firstEnd = fmMatches.length ? fmTimeAt(0) : end;
-      segments.push({ start, end: firstEnd, text: parts[0] });
-    }
-    for (let i = 0; i < fmMatches.length; i++) {
-      const segStart = fmTimeAt(i);
-      const segEnd = (i + 1 < fmMatches.length) ? fmTimeAt(i + 1) : end;
-      const text = parts[i + 1] || '';
-      segments.push({ start: segStart, end: segEnd, text });
-    }
-    return { segments, start, end };
-  }
-
-  function etaToUtcDateWithinTaf(etaHHMM, tafStart, tafEnd) {
-    const h = parseInt(etaHHMM.slice(0, 2), 10);
-    const m = parseInt(etaHHMM.slice(2), 10);
-    let candidate = new Date(Date.UTC(tafStart.getUTCFullYear(), tafStart.getUTCMonth(), tafStart.getUTCDate(), h, m, 0));
-    if (candidate < tafStart) candidate = new Date(candidate.getTime() + 24 * 3600 * 1000);
-    if (candidate >= tafEnd) candidate = new Date(candidate.getTime() - 24 * 3600 * 1000);
-    if (candidate >= tafStart && candidate < tafEnd) return candidate;
-    return null;
-  }
-
-  function getTafSegmentsForWindow(tafRaw, etaHHMM) {
-    const { segments, start, end } = buildTafSegments(tafRaw);
-    if (!segments.length) return [];
-
-    const etaDate = etaToUtcDateWithinTaf(etaHHMM, start, end);
-    if (!etaDate) return [];
-
-    const windowStart = new Date(etaDate.getTime() - 60 * 60 * 1000);
-    const windowEnd = new Date(etaDate.getTime() + 60 * 60 * 1000);
-
-    return segments.filter(seg => seg.end > windowStart && seg.start < windowEnd);
-  }
-
-  function formatTAFPretty(raw) {
-    return raw.replace(/\s+FM(\d{6})/g, '\nFM$1').replace(/\s+TEMPO/g, '\nTEMPO').replace(/\s+BECMG/g, '\nBECMG').replace(/\s+PROB(30|40)/g, '\nPROB$1');
-  }
-
-  function findWorstWeather(text) {
-    let worstCeiling = Infinity;
-    let worstVis = Infinity;
-
-    const ceilingMatches = text.match(/\b(BKN|OVC)(\d{3})\b/g) || [];
-    ceilingMatches.forEach(m => {
-      const height = parseInt(m.slice(-3), 10);
-      if (height < worstCeiling) worstCeiling = height;
-    });
-
-    const visMatches = text.match(/\b(\d+)SM\b/g) || [];
-    visMatches.forEach(m => {
-      const vis = parseInt(m, 10);
-      if (vis < worstVis) worstVis = vis;
-    });
-
-    const fracVisMatches = text.match(/\b(\d+)\/(\d+)SM\b/g) || [];
-    fracVisMatches.forEach(m => {
-      const parts = m.match(/(\d+)\/(\d+)/);
-      if (parts) {
-        const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
-        if (vis < worstVis) worstVis = vis;
-      }
-    });
-
-    return { ceiling: worstCeiling === Infinity ? null : worstCeiling, visibility: worstVis === Infinity ? null : worstVis };
-  }
-
-  function checkWeatherTriggers() {
-    flights.forEach(flight => {
-      flight.triggers.clear();
-      if (flight.phase === 'in') return;
-
-      const originWx = weatherData[flight.origin];
-      const destWx = weatherData[flight.dest];
-      const taltWx = flight.takeoffAlt ? weatherData[flight.takeoffAlt] : null;
-      const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
-      const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
-
-      if (flight.phase === 'planned') {
-        if (checkOriginTrigger(originWx)) {
-          if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
-          else flight.triggers.add(`${flight.origin}:origin-red`);
-        }
-      } else {
-        if (checkOriginTrigger(originWx)) flight.triggers.add(`${flight.origin}:origin-bold`);
-      }
-
-      const destTrigger = checkDestTrigger(destWx, flight);
-      const prevDestTrigger = flight.prevDestTrigger !== undefined ? flight.prevDestTrigger : destTrigger;
-
-      if (destTrigger) {
-        if (flight.phase === 'planned' && !flight.alt1 && !flight.alt2) {
-          flight.triggers.add(`${flight.dest}:dest-noalt`);
-        } else if (flight.phase === 'planned') {
-          flight.triggers.add(`${flight.dest}:dest`);
-        } else if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.dest}:dest-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.dest}:dest-out`);
-        }
-      }
-
-      if (flight.phase === 'out' && destWx && destWx.metar) {
-        const worst = findWorstWeather(destWx.metar.raw || '');
-        const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) < 600) || 
-                            (worst.visibility !== null && worst.visibility < 1);
-        if (metarTrigger) {
-          flight.triggers.add(`${flight.dest}:dest-out-metar`);
-        }
-      }
-
-      trackDestinationImprovement(flight, destWx, prevDestTrigger, destTrigger);
-      flight.prevDestTrigger = destTrigger;
-
-      if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) {
-        if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.alt1}:alt-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.alt1}:alt-out`);
-        }
-      }
-      if (alt2Wx && checkAlternateTrigger(alt2Wx, flight)) {
-        if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.alt2}:alt-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.alt2}:alt-out`);
-        }
-      }
-      if (taltWx && checkTakeoffAltTrigger(taltWx)) flight.triggers.add(`${flight.takeoffAlt}:talt`);
-    });
-  }
-
-  function trackDestinationImprovement(flight, destWx, prevTrigger, currentTrigger) {
-    if (!destWx || !destWx.taf || !destWx.taf.raw) return;
-
-    const currentIssueTime = extractTafIssueTime(destWx.taf.raw);
-    if (!currentIssueTime) return;
-
-    const cacheKey = `${flight.id}_${flight.dest}`;
-    const cached = destImprovementCache.get(cacheKey);
-
-    if (!cached) {
-      destImprovementCache.set(cacheKey, {
-        issueTime: currentIssueTime,
-        showIndicator: false,
-        wasTriggered: currentTrigger
-      });
-      return;
-    }
-
-    if (cached.issueTime === currentIssueTime) {
-      if (cached.showIndicator) {
-        flight.triggers.add(`${flight.dest}:improved`);
-      }
-      return;
-    }
-
-    const improved = prevTrigger && !currentTrigger;
-
-    destImprovementCache.set(cacheKey, {
-      issueTime: currentIssueTime,
-      showIndicator: improved,
-      wasTriggered: currentTrigger
-    });
-
-    if (improved) {
-      flight.triggers.add(`${flight.dest}:improved`);
-    }
-  }
-
-  function checkOriginTrigger(wx) {
-    if (!wx || !wx.metar) return false;
-    const metarText = wx.metar.raw || '';
-    const worst = findWorstWeather(metarText);
-    if (worst.visibility !== null && worst.visibility < 0.5) return true;
-    return false;
-  }
-
-  function checkDestTrigger(wx, flight) {
-    if (!wx || !flight.eta) return false;
-    const duration = parseInt(flight.duration, 10) || 999;
-
-    if (wx.taf && wx.taf.raw) {
-      const segs = getTafSegmentsForWindow(wx.taf.raw, flight.eta);
-      const windowText = segs.map(s => s.text).join(' ');
-
-      if (windowText) {
-        const worst = findWorstWeather(windowText);
-        if (worst.ceiling !== null && (worst.ceiling * 100) < 2000) return true;
-        if (worst.visibility !== null && worst.visibility < 3) return true;
-      }
-    }
-
-    if (duration < 60 && wx.metar) {
-      const worst = findWorstWeather(wx.metar.raw || '');
-      if (worst.ceiling !== null && (worst.ceiling * 100) < 2000) return true;
-      if (worst.visibility !== null && worst.visibility < 3) return true;
-    }
-
-    return false;
-  }
-
-  function checkAlternateTrigger(wx, flight) {
-    if (!wx) return false;
-    const duration = parseInt(flight.duration, 10) || 999;
-
-    if (wx.taf && wx.taf.raw && flight.eta) {
-      const segs = getTafSegmentsForWindow(wx.taf.raw, flight.eta);
-      const windowText = segs.map(s => s.text).join(' ');
-      if (windowText) {
-        const worst = findWorstWeather(windowText);
-        if (worst.ceiling !== null && (worst.ceiling * 100) < 600) return true;
-        if (worst.visibility !== null && worst.visibility < 1.5) return true;
-      }
-    }
-
-    if (duration < 60 && wx.metar) {
-      const worst = findWorstWeather(wx.metar.raw || '');
-      if (worst.ceiling !== null && (worst.ceiling * 100) < 600) return true;
-      if (worst.visibility !== null && worst.visibility < 1.5) return true;
-    }
-
-    return false;
-  }
-
-  function checkTakeoffAltTrigger(wx) {
-    if (!wx || !wx.metar) return false;
-    const metarText = wx.metar.raw || '';
-    const worst = findWorstWeather(metarText);
-    if (worst.ceiling !== null && (worst.ceiling * 100) < 6000) return true;
-    if (worst.visibility !== null && worst.visibility < 1.5) return true;
-    return false;
   }
 
   function getMetarIndicators(icao, phase) {
-    if (phase !== 'sent' || !icao) return '';
-
     const wx = weatherData[icao];
-    if (!wx || !wx.metar || !wx.metar.raw) return '';
+    if (!wx || !wx.metar) return '';
 
-    const metarText = wx.metar.raw;
+    const metarText = wx.metar.raw || '';
+    const { expired, critical } = checkMetarExpiredStatus(metarText);
+
     let indicators = '';
-
-    const expiredStatus = checkMetarExpiredStatus(metarText);
-    if (expiredStatus.critical) {
-      indicators += ' ⏰';
-    } else if (expiredStatus.expired) {
-      indicators += ' ⏲';
+    if (expired) {
+      indicators += critical ? 'Warning' : 'Warning';
     }
 
-    if (checkMissingMetarElements(metarText)) {
-      indicators += ' ?';
+    // Now checks missing elements from 'planned' phase onward
+    if (['planned', 'sent', 'out'].includes(phase) && checkMissingMetarElements(metarText)) {
+      indicators += 'Question';
     }
 
-    return indicators;
+    return indicators ? ` <span class="metar-indicator">${indicators}</span>` : '';
+  }
+
+  function showToast(message, type = 'info', timeout = 3000, action = null) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<div>${message}</div>`;
+    if (action) {
+      const btn = document.createElement('button');
+      btn.className = 'toast-btn';
+      btn.textContent = 'Undo';
+      btn.onclick = () => { action(); toast.remove(); };
+      toast.appendChild(btn);
+    }
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), timeout);
   }
 
   function showWeatherModal(icao) {
     const wx = weatherData[icao];
+    if (!wx) return showToast('No weather data', 'warning');
+
     const overlay = document.createElement('div');
     overlay.className = 'wx-modal-overlay';
     const modal = document.createElement('div');
     modal.className = 'wx-modal';
-    let content = '';
-    if (wx && wx.metar && wx.metar.raw) content += escapeHtml(wx.metar.raw);
-    if (wx && wx.taf && wx.taf.raw) {
-      if (content) content += '\n\n';
-      content += escapeHtml(formatTAFPretty(wx.taf.raw));
-    }
-    if (!content) content = 'No weather data available';
-    modal.innerHTML = `<div class="wx-modal-header"><button class="wx-modal-close" id="closeModal">×</button></div><div class="wx-modal-body">${content}</div>`;
+
+    const metar = wx.metar?.raw || 'No METAR';
+    const taf = wx.taf?.raw || 'No TAF';
+
+    modal.innerHTML = `
+      <div class="wx-modal-header">
+        <button class="wx-modal-close" id="closeWx">×</button>
+      </div>
+      <div class="wx-modal-body">
+<strong>${icao} METAR:</strong>
+${metar}
+
+<strong>TAF:</strong>
+${taf}
+      </div>
+    `;
+
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
-    const closeModal = () => overlay.remove();
-    modal.querySelector('#closeModal').addEventListener('click', closeModal);
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); }, { once: true });
+
+    modal.querySelector('#closeWx').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') overlay.remove(); }, { once: true });
   }
 
   function showFlightInfoModal(idx) {
@@ -1306,37 +870,43 @@
     const modal = document.createElement('div');
     modal.className = 'flight-info-modal';
 
-    const outTimeDisplay = flight.outTime ? formatZuluTime(flight.outTime) : '—';
-    const phaseDisplay = flight.phase.toUpperCase();
-
     modal.innerHTML = `
       <div class="flight-info-modal-header">
         <div class="flight-info-modal-title">${flight.flight}</div>
-        <button class="flight-info-modal-close" id="closeModal">×</button>
+        <button class="flight-info-modal-close" id="closeInfo">×</button>
       </div>
       <div class="flight-info-row">
-        <span class="flight-info-label">OUT Time</span>
-        <span class="flight-info-value">${outTimeDisplay}</span>
+        <div class="flight-info-label">Route</div>
+        <div class="flight-info-value">${flight.origin} → ${flight.dest}</div>
       </div>
       <div class="flight-info-row">
-        <span class="flight-info-label">Phase</span>
-        <span class="flight-info-value">${phaseDisplay}</span>
+        <div class="flight-info-label">ETD</div>
+        <div class="flight-info-value">${formatZuluTime(flight.etd)}</div>
+      </div>
+      <div class="flight-info-row">
+        <div class="flight-info-label">Taxi / Burn</div>
+        <div class="flight-info-value">${formatDuration(flight.taxiOut)} / ${formatDuration(flight.burnoff)}</div>
+      </div>
+      <div class="flight-info-row">
+        <div class="flight-info-label">Duration</div>
+        <div class="flight-info-value">${formatDuration(flight.duration)}</div>
+      </div>
+      <div class="flight-info-row">
+        <div class="flight-info-label">ETA</div>
+        <div class="flight-info-value">${formatZuluTime(flight.eta)}</div>
+      </div>
+      <div class="flight-info-row">
+        <div class="flight-info-label">Phase</div>
+        <div class="flight-info-value">${flight.phase.toUpperCase()}</div>
       </div>
     `;
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    const closeModal = () => overlay.remove();
-
-    modal.querySelector('#closeModal').addEventListener('click', closeModal);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeModal();
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
-    }, { once: true });
+    modal.querySelector('#closeInfo').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') overlay.remove(); }, { once: true });
   }
 
   function showUploadModal() {
@@ -1346,33 +916,38 @@
     modal.className = 'upload-modal';
 
     modal.innerHTML = `
-      <div class="upload-modal-title">Upload Flight List</div>
-      <label class="upload-modal-label">Paste Flight List (FLT ORG ETD DST ETA) – one flight per line:</label>
-      <textarea id="uploadTextarea" class="upload-modal-textarea" placeholder="5002 ORD 2218 LEX 2345
-5004 DEN 345 ATL 715
-5006 LAX 1915 JFK 345"></textarea>
+      <div class="upload-modal-title">Upload Dispatch File</div>
+      <label class="upload-modal-label">Select file (CSV, TXT, or paste below):</label>
+      <input type="file" id="fileInput" accept=".csv,.txt" style="margin-bottom:12px;">
+      <textarea id="pasteArea" class="upload-modal-textarea" placeholder="Or paste dispatch data here..."></textarea>
       <div class="upload-modal-actions">
-        <button class="btn btn-secondary" id="uploadCancelBtn">Cancel</button>
-        <button class="btn btn-success" id="uploadSubmitBtn">Submit</button>
+        <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+        <button class="btn btn-success" id="uploadBtn">Upload</button>
       </div>
     `;
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    const textarea = modal.querySelector('#uploadTextarea');
-    const cancelBtn = modal.querySelector('#uploadCancelBtn');
-    const submitBtn = modal.querySelector('#uploadSubmitBtn');
+    const fileInput = modal.querySelector('#fileInput');
+    const pasteArea = modal.querySelector('#pasteArea');
+    const cancelBtn = modal.querySelector('#cancelBtn');
+    const uploadBtn = modal.querySelector('#uploadBtn');
 
     const closeModal = () => overlay.remove();
 
-    const submit = () => {
-      const text = textarea.value.trim();
-      if (!text) {
-        showToast('Please enter flight data', 'warning');
-        return;
-      }
-      const parsed = parsePastedFlights(text);
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => pasteArea.value = e.target.result;
+      reader.readAsText(file);
+    });
+
+    uploadBtn.addEventListener('click', () => {
+      const text = pasteArea.value.trim();
+      if (!text) return showToast('No data to upload', 'warning');
+      const parsed = parseRawInput(text);
       if (parsed.length > 0) {
         flights = parsed;
         renderTable();
@@ -1382,27 +957,13 @@
       } else {
         showToast('No valid flights found', 'warning');
       }
-    };
-
-    textarea.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.ctrlKey) {
-        e.preventDefault();
-        submit();
-      }
     });
 
     cancelBtn.addEventListener('click', closeModal);
-    submitBtn.addEventListener('click', submit);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); }, { once: true });
 
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeModal();
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
-    }, { once: true });
-
-    textarea.focus();
+    pasteArea.focus();
   }
 
   function showSingleFlightModal() {
@@ -1414,126 +975,70 @@
     modal.innerHTML = `
       <div class="single-flight-modal-title">Add Single Flight</div>
       <div class="single-flight-form-group">
-        <label class="single-flight-label">Flight Number</label>
-        <input type="text" id="singleFlightInput" class="single-flight-input" placeholder="e.g., 5002">
+        <label class="single-flight-label">Flight</label>
+        <input type="text" id="fltInput" class="single-flight-input" placeholder="e.g., SKW3861">
       </div>
       <div class="single-flight-form-group">
         <label class="single-flight-label">Origin</label>
-        <input type="text" id="singleOriginInput" class="single-flight-input" placeholder="e.g., ORD">
+        <input type="text" id="orgInput" class="single-flight-input" placeholder="e.g., KMOT">
       </div>
       <div class="single-flight-form-group">
         <label class="single-flight-label">Destination</label>
-        <input type="text" id="singleDestInput" class="single-flight-input" placeholder="e.g., LEX">
+        <input type="text" id="destInput" class="single-flight-input" placeholder="e.g., KMSP">
       </div>
       <div class="single-flight-form-group">
-        <label class="single-flight-label">ETD (HHMM)</label>
-        <input type="text" id="singleETDInput" class="single-flight-input" placeholder="e.g., 2218">
-      </div>
-      <div class="single-flight-form-group">
-        <label class="single-flight-label">ETA (HHMM)</label>
-        <input type="text" id="singleETAInput" class="single-flight-input" placeholder="e.g., 2345">
+        <label class="single-flight-label">ETD (Zulu)</label>
+        <input type="text" id="etdInput" class="single-flight-input" placeholder="e.g., 1100">
       </div>
       <div class="single-flight-modal-actions">
-        <button class="btn btn-secondary" id="singleCancelBtn">Cancel</button>
-        <button class="btn btn-success" id="singleSubmitBtn">Add Flight</button>
+        <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+        <button class="btn btn-success" id="addBtn">Add</button>
       </div>
     `;
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    const fltInput = modal.querySelector('#singleFlightInput');
-    const orgInput = modal.querySelector('#singleOriginInput');
-    const destInput = modal.querySelector('#singleDestInput');
-    const etdInput = modal.querySelector('#singleETDInput');
-    const etaInput = modal.querySelector('#singleETAInput');
-    const cancelBtn = modal.querySelector('#singleCancelBtn');
-    const submitBtn = modal.querySelector('#singleSubmitBtn');
+    const fltInput = modal.querySelector('#fltInput');
+    const orgInput = modal.querySelector('#orgInput');
+    const destInput = modal.querySelector('#destInput');
+    const etdInput = modal.querySelector('#etdInput');
+    const cancelBtn = modal.querySelector('#cancelBtn');
+    const addBtn = modal.querySelector('#addBtn');
 
     const closeModal = () => overlay.remove();
 
-    const submit = () => {
-      const flt = fltInput.value.trim();
-      const org = orgInput.value.trim();
-      const dest = destInput.value.trim();
-      const etd = etdInput.value.trim();
-      const eta = etaInput.value.trim();
-
-      if (!flt || !org || !dest || !etd || !eta) {
-        showToast('Please fill in all fields', 'warning');
-        return;
-      }
-
-      const newFlight = {
-        id: Date.now() + Math.random(),
-        flight: flt,
-        origin: normalizeICAO(org),
-        dest: normalizeICAO(dest),
+    const add = () => {
+      const flight = {
+        flight: fltInput.value.trim().toUpperCase(),
+        origin: normalizeICAO(orgInput.value.trim()),
+        dest: normalizeICAO(destInput.value.trim()),
+        etd: normalizeTime(etdInput.value.trim()),
         takeoffAlt: '',
         alt1: '',
         alt2: '',
-        etd: normalizeTime(etd),
         taxiOut: '',
         burnoff: '',
         duration: '',
-        eta: normalizeTime(eta),
-        outTime: '',
+        eta: '',
         phase: 'planned',
         triggers: new Set()
       };
-
-      flights.unshift(newFlight);
-      renderTable();
-      refreshWeather();
-      closeModal();
-      showToast(`Flight ${flt} added`, 'success');
+      if (flight.flight && flight.origin && flight.dest && flight.etd) {
+        flights.push(flight);
+        renderTable();
+        refreshWeather();
+        closeModal();
+        showToast(`Added ${flight.flight}`, 'success');
+      } else {
+        showToast('All fields required', 'warning');
+      }
     };
 
-    fltInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        orgInput.focus();
-      }
-    });
-
-    orgInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        destInput.focus();
-      }
-    });
-
-    destInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        etdInput.focus();
-      }
-    });
-
-    etdInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        etaInput.focus();
-      }
-    });
-
-    etaInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        submit();
-      }
-    });
-
+    addBtn.addEventListener('click', add);
     cancelBtn.addEventListener('click', closeModal);
-    submitBtn.addEventListener('click', submit);
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeModal();
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
-    }, { once: true });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); }, { once: true });
 
     fltInput.focus();
   }
@@ -1886,7 +1391,7 @@
           ${flight.phase === 'sent' ? `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markOut(${actualIdx})">Out</button>` : ''}
           <button class="btn action-btn action-btn-remove" onclick="window.flightActions.remove(${actualIdx})">×</button>
         </td>
-        <td><span class="drag-handle">⋮⋮</span></td>
+        <td><span class="drag-handle">Vertical Dots</span></td>
       `;
 
       row.addEventListener('dragstart', handleDragStart);
@@ -2005,7 +1510,7 @@
     html += getMetarIndicators(icao, flight.phase);
 
     if (field === 'dest' && flight.triggers.has(`${icao}:improved`)) {
-      html += ' ↑';
+      html += ' Up Arrow';
     }
 
     return html;
