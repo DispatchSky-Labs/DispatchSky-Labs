@@ -1,3 +1,4 @@
+<!-- 11/05/25 backup --> 
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1098,13 +1099,10 @@
       const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
       const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
 
-      if (flight.phase === 'planned') {
-        if (checkOriginTrigger(originWx)) {
-          if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
-          else flight.triggers.add(`${flight.origin}:origin-red`);
-        }
-      } else {
-        if (checkOriginTrigger(originWx)) flight.triggers.add(`${flight.origin}:origin-bold`);
+      // Check origin for all phases, not just 'planned'
+      if (checkOriginTrigger(originWx)) {
+        if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
+        else flight.triggers.add(`${flight.origin}:origin-red`);
       }
 
       const destTrigger = checkDestTrigger(destWx, flight);
@@ -1255,7 +1253,8 @@
   }
 
   function getMetarIndicators(icao, phase) {
-    if (phase !== 'sent' || !icao) return '';
+    // FIXED: Now shows indicators for all phases starting from 'planned', not just 'sent'
+    if (!icao) return '';
 
     const wx = weatherData[icao];
     if (!wx || !wx.metar || !wx.metar.raw) return '';
