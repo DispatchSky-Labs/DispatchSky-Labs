@@ -1409,6 +1409,7 @@
 
   function showContextMenu(e) {
     e.preventDefault();
+    e.stopPropagation();
     closeContextMenu();
 
     const menu = document.createElement('div');
@@ -1435,23 +1436,32 @@
 
     document.body.appendChild(menu);
 
-    const rect = headerTitle.getBoundingClientRect();
-    menu.style.left = (rect.left) + 'px';
-    menu.style.top = (rect.bottom + 8) + 'px';
+    // Position the menu using clientX/clientY
+    const x = e.clientX || 0;
+    const y = e.clientY || 0;
 
-    const closeMenu = () => closeContextMenu();
-    document.addEventListener('click', closeMenu, { once: true });
-    document.addEventListener('contextmenu', closeMenu, { once: true });
+    menu.style.position = 'fixed';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+
+    // Close menu on outside click
+    setTimeout(() => {
+      document.addEventListener('click', closeContextMenu, { once: true });
+    }, 0);
   }
 
-  // Left-click handler
+  // Event listeners for header title
   headerTitle.addEventListener('click', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     showContextMenu(e);
   });
 
-  // Right-click handler (backup)
-  headerTitle.addEventListener('contextmenu', showContextMenu);
+  headerTitle.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showContextMenu(e);
+  });
 
   function updateTriggerCounts() {
     const columnTriggerCounts = {
@@ -1762,6 +1772,10 @@
 
   function updateStats() {
     statTotal.textContent = flights.length;
+  }
+
+  function startAutoRefresh() {
+    autoRefreshInterval = setInterval(refreshWeather, 5 * 60 * 1000);
   }
 
   window.flightActions = {
