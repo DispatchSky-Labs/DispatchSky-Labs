@@ -15,7 +15,7 @@ function checkMetarExpiredStatus(metarText) {
   if (day < 1 || day > 31 || hour > 23 || minute > 59) return { expired: false, critical: false };
 
   const now = new Date();
-  const currentYear = now.getUTCFullYear();
+  const currentYear = onow.getUTCFullYear();
   const currentMonth = now.getUTCMonth();
   const currentDay = now.getUTCDate();
 
