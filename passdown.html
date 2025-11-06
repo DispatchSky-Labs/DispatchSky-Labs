@@ -18,19 +18,11 @@
     }
     .theme-dark body { background:var(--bg); color:var(--fg); }
     .container { max-width:900px; margin:0 auto; }
-    h1 { margin:0 0 20px 0; font-size:20px; font-weight:600; }
-    .flight-block { margin-bottom:30px; padding:16px; background:#fff; border:1px solid var(--border); border-radius:6px; }
+    h1 { margin:0 0 16px 0; font-size:20px; font-weight:600; }
+    .flight-block { margin-bottom:24px; padding:16px; background:#fff; border:1px solid var(--border); border-radius:6px; }
     .theme-dark .flight-block { background:#1f2937; border-color:#374151; }
     .flight-header { font-weight:600; font-size:14px; margin-bottom:8px; }
-    .flight-info { margin-bottom:12px; }
-    .flight-info-line { margin-bottom:4px; }
-    .weather-section { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
-    .weather-header { font-weight:600; font-size:12px; margin-bottom:8px; color:var(--muted); }
-    .airport-weather { margin-bottom:12px; }
-    .airport-label { font-weight:600; font-size:12px; margin-bottom:4px; }
-    .metar { margin-bottom:4px; white-space:pre-wrap; word-break:break-word; font-size:12px; }
-    .taf { margin-bottom:4px; white-space:pre-wrap; word-break:break-word; font-size:12px; }
-    .metar.critical, .taf.critical { text-decoration:underline; }
+    .wx-line { white-space:pre-wrap; word-break:break-word; font-size:12px; margin:4px 0; }
     .no-data { text-align:center; color:var(--muted); padding:40px; }
   </style>
 </head>
@@ -44,150 +36,21 @@
     (function() {
       'use strict';
 
-      // Safely extract raw strings regardless of shape ({raw}, string, or missing)
+      function escapeHtml(text) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+      }
+
+      // Safely get raw string from {raw}, string, or missing
       function rawString(x) {
         if (!x) return '';
         if (typeof x === 'string') return x;
-        if (typeof x.raw === 'string') return x.raw;
+        if (x && typeof x.raw === 'string') return x.raw;
         return '';
       }
 
-      function escapeHtml(text) {
-        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-        return text.replace(/[&<>"']/g, m => map[m]);
-      }
-
-      function findWorstWeather(text) {
-        let worstCeiling = Infinity;
-        let worstVis = Infinity;
-
-        const ceilingMatches = text.match(/\b(BKN|OVC)(\d{3})\b/g) || [];
-        ceilingMatches.forEach(m => {
-          const height = parseInt(m.slice(-3), 10);
-          if (!Number.isNaN(height) && height < worstCeiling) worstCeiling = height;
-        });
-
-        const visMatches = text.match(/\b(\d+)SM\b/g) || [];
-        visMatches.forEach(m => {
-          const vis = parseInt(m, 10);
-          if (!Number.isNaN(vis) && vis < worstVis) worstVis = vis;
-        });
-
-        const fracVisMatches = text.match(/\b(\d+)\/(\d+)SM\b/g) || [];
-        fracVisMatches.forEach(m => {
-          const parts = m.match(/(\d+)\/(\d+)/);
-          if (parts) {
-            const num = parseInt(parts[1], 10);
-            const den = parseInt(parts[2], 10);
-            if (!Number.isNaN(num) && !Number.isNaN(den) && den !== 0) {
-              const vis = num / den;
-              if (vis < worstVis) worstVis = vis;
-            }
-          }
-        });
-
-        // Handle P6SM (greater than 6 SM) as 6 for "worst" comparisons
-        const p6 = text.match(/\bP6SM\b/) ? 6 : Infinity;
-        if (p6 < worstVis) worstVis = p6;
-
-        return {
-          ceiling: worstCeiling === Infinity ? null : worstCeiling,
-          visibility: worstVis === Infinity ? null : worstVis
-        };
-      }
-
-      function parseTafHeader(tafText) {
-        const m = tafText.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
-        if (!m) return null;
-        const now = new Date();
-        const Y = now.getUTCFullYear();
-        const M = now.getUTCMonth();
-        const startDay = parseInt(m[1], 10);
-        const startHour = parseInt(m[2], 10);
-        const endDay = parseInt(m[3], 10);
-        const endHour = parseInt(m[4], 10);
-        const start = new Date(Date.UTC(Y, M, startDay, startHour, 0, 0));
-        let end = new Date(Date.UTC(Y, M, endDay, endHour === 24 ? 0 : endHour, 0, 0));
-        if (endHour === 24) end = new Date(end.getTime() + 24 * 3600 * 1000);
-        return { start, end, Y, M };
-      }
-
-      const FM_SPLIT = /\bFM\d{6}\b/;
-      const FM_FIND = /FM(\d{6})/g;
-
-      function buildTafSegments(tafRaw) {
-        const header = parseTafHeader(tafRaw);
-        if (!header) return { segments: [], start: null, end: null };
-        const { start, end, Y, M } = header;
-        const parts = tafRaw.split(FM_SPLIT);
-        const fmMatches = [...tafRaw.matchAll(FM_FIND)];
-        const fmTimeAt = (fmIndex) => {
-          const fm = fmMatches[fmIndex];
-          const d = parseInt(fm[1].slice(0, 2), 10);
-          const h = parseInt(fm[1].slice(2, 4), 10);
-          const m = parseInt(fm[1].slice(4, 6), 10);
-          return new Date(Date.UTC(Y, M, d, h, m, 0));
-        };
-        const segments = [];
-        if (parts[0]) {
-          const firstEnd = fmMatches.length ? fmTimeAt(0) : end;
-          segments.push({ start, end: firstEnd, text: parts[0] });
-        }
-        for (let i = 0; i < fmMatches.length; i++) {
-          const segStart = fmTimeAt(i);
-          const segEnd = (i + 1 < fmMatches.length) ? fmTimeAt(i + 1) : end;
-          const text = parts[i + 1] || '';
-          segments.push({ start: segStart, end: segEnd, text });
-        }
-        return { segments, start, end };
-      }
-
-      function etaToUtcDateWithinTaf(etaHHMM, tafStart, tafEnd) {
-        if (!etaHHMM || etaHHMM.length < 3) return null;
-        const h = parseInt(etaHHMM.slice(0, 2), 10);
-        const m = parseInt(etaHHMM.slice(2), 10);
-        if (Number.isNaN(h) || Number.isNaN(m)) return null;
-        let candidate = new Date(Date.UTC(tafStart.getUTCFullYear(), tafStart.getUTCMonth(), tafStart.getUTCDate(), h, m, 0));
-        if (candidate < tafStart) candidate = new Date(candidate.getTime() + 24 * 3600 * 1000);
-        if (candidate >= tafEnd) candidate = new Date(candidate.getTime() - 24 * 3600 * 1000);
-        if (candidate >= tafStart && candidate < tafEnd) return candidate;
-        return null;
-      }
-
-      // Same underline logic as before, but tolerant of string/object shapes
-      function getTafSegmentsForWindow(tafRaw, etaHHMM) {
-        const { segments, start, end } = buildTafSegments(tafRaw);
-        if (!segments.length) return [];
-        const etaDate = etaToUtcDateWithinTaf(etaHHMM, start, end);
-        if (!etaDate) return [];
-        const windowStart = new Date(etaDate.getTime() - 60 * 60 * 1000);
-        const windowEnd = new Date(etaDate.getTime() + 60 * 60 * 1000);
-        return segments.filter(seg => seg.end > windowStart && seg.start < windowEnd);
-      }
-
-      function checkAlternateTrigger(wx, eta) {
-        if (!wx) return false;
-
-        const tafRaw = rawString(wx.taf);
-        const metarRaw = rawString(wx.metar);
-
-        if (tafRaw && eta) {
-          const segs = getTafSegmentsForWindow(tafRaw, eta);
-          const windowText = segs.map(s => s.text).join(' ');
-          if (windowText) {
-            const worst = findWorstWeather(windowText);
-            if (worst.ceiling !== null && (worst.ceiling * 100) < 600) return true;
-            if (worst.visibility !== null && worst.visibility < 1.5) return true;
-          }
-        }
-
-        if (metarRaw) {
-          const worst = findWorstWeather(metarRaw);
-          if (worst.ceiling !== null && (worst.ceiling * 100) < 600) return true;
-          if (worst.visibility !== null && worst.visibility < 1.5) return true;
-        }
-
-        return false;
+      function upper(str) {
+        return (str || '').toString().trim().toUpperCase();
       }
 
       const flightsData = localStorage.getItem('ct_pro_flights_for_passdown');
@@ -205,81 +68,66 @@
       let weather = {};
 
       try {
-        flights = JSON.parse(flightsData);
-        weather = JSON.parse(weatherData);
-      } catch(e) {
+        flights = JSON.parse(flightsData) || [];
+        weather = JSON.parse(weatherData) || {};
+      } catch (e) {
         content.innerHTML = '<div class="no-data">Error loading data</div>';
         applyTheme();
         return;
       }
 
-      if (!Array.isArray(flights) || flights.length === 0) {
-        content.innerHTML = '<div class="no-data">No flights</div>';
+      // Only list flights that have ALT1 or ALT2
+      const flightsWithAlternates = flights.filter(f => upper(f.alt1) || upper(f.alt2));
+
+      if (flightsWithAlternates.length === 0) {
+        content.innerHTML = '<div class="no-data">No flights with alternates</div>';
         applyTheme();
         return;
       }
 
-      const html = flights.map(flight => {
-        // Build flight info line with alternate types
-        let flightLine = `${flight.flight || ''} ${flight.origin || ''} ${flight.dest || ''}`;
-        if (flight.takeoffAlt) flightLine += ` T/ALT ${flight.takeoffAlt}`;
-        if (flight.alt1) flightLine += ` ALT1 ${flight.alt1}`;
-        if (flight.alt2) flightLine += ` ALT2 ${flight.alt2}`;
+      const html = flightsWithAlternates.map(f => {
+        const flightNum = escapeHtml(f.flight || '');
+        const origin = upper(f.origin);
+        const dest = upper(f.dest);
+        const alt1 = upper(f.alt1);
+        const alt2 = upper(f.alt2);
 
-        // Collect airports for weather (exclude origin) with their types
-        const airportsList = [];
-        if (flight.dest) airportsList.push({ airport: flight.dest, type: 'DEST' });
-        if (flight.takeoffAlt) airportsList.push({ airport: flight.takeoffAlt, type: 'T/ALT' });
-        if (flight.alt1) airportsList.push({ airport: flight.alt1, type: 'ALT1' });
-        if (flight.alt2) airportsList.push({ airport: flight.alt2, type: 'ALT2' });
+        // Header line: flight, origin, dest, then alternates (ALT1, ALT2 if present)
+        const headerCodes = [flightNum, origin, dest]
+          .concat(alt1 ? [alt1] : [])
+          .concat(alt2 ? [alt2] : [])
+          .join(' ');
 
-        // Build weather section
-        let weatherHtml = '';
-        if (airportsList.length > 0) {
-          weatherHtml = '<div class="weather-section"><div class="weather-header">WEATHER:</div>';
-          airportsList.forEach(({ airport, type }) => {
-            const wx = weather && weather[airport] ? weather[airport] : null;
-            if (wx) {
-              const metarRaw = rawString(wx.metar);
-              const tafRaw = rawString(wx.taf);
+        // Weather blocks: Destination first, then ALT1, then ALT2
+        const blocks = [];
+        const airportsInOrder = [
+          dest ? { icao: dest, label: dest } : null,
+          alt1 ? { icao: alt1, label: alt1 } : null,
+          alt2 ? { icao: alt2, label: alt2 } : null
+        ].filter(Boolean);
 
-              weatherHtml += '<div class="airport-weather">';
-              weatherHtml += `<div class="airport-label">${type} ${airport}:</div>`;
+        airportsInOrder.forEach(({ icao }) => {
+          const wx = weather[icao] || {};
+          const metar = rawString(wx.metar);
+          const taf = rawString(wx.taf);
 
-              // Check if this is an alternate with critical weather at ETA
-              const isAlternate = type !== 'DEST';
-              let isCritical = false;
-              if (isAlternate && flight.eta) {
-                isCritical = checkAlternateTrigger(wx, flight.eta);
-              }
-
-              if (metarRaw) {
-                const metarClass = isCritical ? 'metar critical' : 'metar';
-                weatherHtml += `<div class="${metarClass}">${escapeHtml(metarRaw)}</div>`;
-              }
-              if (tafRaw) {
-                const tafClass = isCritical ? 'taf critical' : 'taf';
-                weatherHtml += `<div class="${tafClass}">${escapeHtml(tafRaw)}</div>`;
-              }
-              weatherHtml += '</div>';
-            }
-          });
-          weatherHtml += '</div>';
-        }
+          if (metar) {
+            blocks.push(`<div class="wx-line">METAR ${icao} ${escapeHtml(metar)}</div>`);
+          }
+          if (taf) {
+            blocks.push(`<div class="wx-line">TAF ${icao} ${escapeHtml(taf)}</div>`);
+          }
+        });
 
         return `
           <div class="flight-block">
-            <div class="flight-header">${escapeHtml(flightLine)}</div>
-            <div class="flight-info">
-              <div class="flight-info-line">ETD: ${escapeHtml(flight.etd || '—')} ETA: ${escapeHtml(flight.eta || '—')}</div>
-            </div>
-            ${weatherHtml}
+            <div class="flight-header">${headerCodes}</div>
+            ${blocks.join('')}
           </div>
         `;
       }).join('');
 
       content.innerHTML = html;
-
       applyTheme();
 
       function applyTheme() {
