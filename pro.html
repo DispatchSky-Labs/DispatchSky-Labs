@@ -1078,6 +1078,26 @@
     return raw.replace(/\s+FM(\d{6})/g, '\nFM$1').replace(/\s+TEMPO/g, '\nTEMPO').replace(/\s+BECMG/g, '\nBECMG').replace(/\s+PROB(30|40)/g, '\nPROB$1');
   }
 
+  function formatMetarForPassdown(metarRaw) {
+    // Remove duplicate ICAO: "METAR KSEA METAR KSEA ..." -> "METAR KSEA ..."
+    return metarRaw.replace(/^(METAR\s+\w{4})\s+\1\s+/, '$1 ');
+  }
+
+  function formatTafForPassdown(tafRaw) {
+    if (!tafRaw) return '';
+
+    // Remove duplicate ICAO: "TAF KSEA TAF KSEA ..." -> "TAF KSEA ..."
+    let cleanTaf = tafRaw.replace(/^(TAF\s+\w{4})\s+\1\s+/, '$1 ');
+
+    // Add newlines and indentation for FM and PROB lines
+    cleanTaf = cleanTaf
+      .replace(/\s+(FM\d{6})/g, '\n  $1')
+      .replace(/\s+(PROB(?:30|40))/g, '\n  $1');
+
+    // Prefix with blank line
+    return '\n' + cleanTaf;
+  }
+
   function findWorstWeather(text) {
     let worstCeiling = Infinity;
     let worstVis = Infinity;
@@ -1821,42 +1841,41 @@
     });
 
     const passdownItem = document.createElement('button');
-passdownItem.className = 'context-menu-item';
-passdownItem.textContent = 'Passdown';
-passdownItem.addEventListener('click', () => {
-  closeContextMenu();
+    passdownItem.className = 'context-menu-item';
+    passdownItem.textContent = 'Passdown';
+    passdownItem.addEventListener('click', () => {
+      closeContextMenu();
 
-  // Minimal flight schema
-  const flightsToPass = flights.map(f => ({
-    flight: String(f.flight || ''),
-    origin: (f.origin || '').toUpperCase(),
-    dest: (f.dest || '').toUpperCase(),
-    takeoffAlt: (f.takeoffAlt || '').toUpperCase(),
-    alt1: (f.alt1 || '').toUpperCase(),
-    alt2: (f.alt2 || '').toUpperCase(),
-    etd: f.etd || '',
-    eta: f.eta || ''
-  }));
+      // Minimal flight schema
+      const flightsToPass = flights.map(f => ({
+        flight: String(f.flight || ''),
+        origin: (f.origin || '').toUpperCase(),
+        dest: (f.dest || '').toUpperCase(),
+        takeoffAlt: (f.takeoffAlt || '').toUpperCase(),
+        alt1: (f.alt1 || '').toUpperCase(),
+        alt2: (f.alt2 || '').toUpperCase(),
+        etd: f.etd || '',
+        eta: f.eta || ''
+      }));
 
-  // Clean weather: formatted TAF with line breaks
-  const weatherToPass = {};
-  flightsToPass.forEach(f => {
-    [f.dest, f.takeoffAlt, f.alt1, f.alt2].forEach(icao => {
-      if (!icao || weatherToPass[icao]) return;
-      const wx = weatherData[icao];
-      if (!wx) return;
-      weatherToPass[icao] = {
-        metar: wx.metar && typeof wx.metar.raw === 'string' ? { raw: wx.metar.raw } : null,
-        taf: wx.taf && typeof wx.taf.raw === 'string' ? { raw: formatTAFPretty(wx.taf.raw) } : null
-      };
+      // Clean weather: formatted METAR and TAF with line breaks
+      const weatherToPass = {};
+      flightsToPass.forEach(f => {
+        [f.dest, f.takeoffAlt, f.alt1, f.alt2].forEach(icao => {
+          if (!icao || weatherToPass[icao]) return;
+          const wx = weatherData[icao];
+          if (!wx) return;
+          weatherToPass[icao] = {
+            metar: wx.metar && typeof wx.metar.raw === 'string' ? { raw: formatMetarForPassdown(wx.metar.raw) } : null,
+            taf: wx.taf && typeof wx.taf.raw === 'string' ? { raw: formatTafForPassdown(wx.taf.raw) } : null
+          };
+        });
+      });
+
+      localStorage.setItem('ct_pro_flights_for_passdown', JSON.stringify(flightsToPass));
+      localStorage.setItem('ct_pro_weather_for_passdown', JSON.stringify(weatherToPass));
+      window.open('passdown.html', 'CieloTracker_Passdown');
     });
-  });
-
-  localStorage.setItem('ct_pro_flights_for_passdown', JSON.stringify(flightsToPass));
-  localStorage.setItem('ct_pro_weather_for_passdown', JSON.stringify(weatherToPass));
-  window.open('passdown.html', 'CieloTracker_Passdown');
-});
-
 
     const themeItem = document.createElement('button');
     themeItem.className = 'context-menu-item';
