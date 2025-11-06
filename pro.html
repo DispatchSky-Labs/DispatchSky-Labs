@@ -1,4 +1,3 @@
-<!-- 11/05/25 backup -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1826,11 +1825,34 @@
     passdownItem.textContent = 'Passdown';
     passdownItem.addEventListener('click', () => {
       closeContextMenu();
-      const flightsToPass = flights.map(f => ({ ...f, triggers: Array.from(f.triggers || []) }));
-      const weatherToPass = Object.keys(weatherData).reduce((acc, key) => {
-        acc[key] = weatherData[key];
-        return acc;
-      }, {});
+
+      // Minimal flight schema
+      const flightsToPass = flights.map(f => ({
+        flight: String(f.flight || ''),
+        origin: (f.origin || '').toUpperCase(),
+        dest: (f.dest || '').toUpperCase(),
+        takeoffAlt: (f.takeoffAlt || '').toUpperCase(),
+        alt1: (f.alt1 || '').toUpperCase(),
+        alt2: (f.alt2 || '').toUpperCase(),
+        etd: f.etd || '',
+        eta: f.eta || ''
+      }));
+
+      // Clean weather: only raw strings
+      const weatherToPass = {};
+      flightsToPass.forEach(f => {
+        [f.dest, f.takeoffAlt, f.alt1, f.alt2].forEach(icao => {
+          if (!icao || weatherToPass[icao]) return;
+          const wx = weatherData[icao];
+          if (!wx) return;
+          weatherToPass[icao] = {
+            metar: wx.metar && typeof wx.metar.raw === 'string' ? { raw: wx.metar.raw } : null,
+            taf: wx.taf && typeof wx.taf.raw === 'string' ? { raw: wx.taf.raw } : null
+          };
+        });
+      });
+
+      localStorage.setItem('ct_pro_flights_for_passdown', JSON.stringify(flightsToPass));
       localStorage.setItem('ct_pro_weather_for_passdown', JSON.stringify(weatherToPass));
       window.open('passdown.html', 'CieloTracker_Passdown');
     });
