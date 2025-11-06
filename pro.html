@@ -1821,41 +1821,42 @@
     });
 
     const passdownItem = document.createElement('button');
-    passdownItem.className = 'context-menu-item';
-    passdownItem.textContent = 'Passdown';
-    passdownItem.addEventListener('click', () => {
-      closeContextMenu();
+passdownItem.className = 'context-menu-item';
+passdownItem.textContent = 'Passdown';
+passdownItem.addEventListener('click', () => {
+  closeContextMenu();
 
-      // Minimal flight schema
-      const flightsToPass = flights.map(f => ({
-        flight: String(f.flight || ''),
-        origin: (f.origin || '').toUpperCase(),
-        dest: (f.dest || '').toUpperCase(),
-        takeoffAlt: (f.takeoffAlt || '').toUpperCase(),
-        alt1: (f.alt1 || '').toUpperCase(),
-        alt2: (f.alt2 || '').toUpperCase(),
-        etd: f.etd || '',
-        eta: f.eta || ''
-      }));
+  // Minimal flight schema
+  const flightsToPass = flights.map(f => ({
+    flight: String(f.flight || ''),
+    origin: (f.origin || '').toUpperCase(),
+    dest: (f.dest || '').toUpperCase(),
+    takeoffAlt: (f.takeoffAlt || '').toUpperCase(),
+    alt1: (f.alt1 || '').toUpperCase(),
+    alt2: (f.alt2 || '').toUpperCase(),
+    etd: f.etd || '',
+    eta: f.eta || ''
+  }));
 
-      // Clean weather: only raw strings
-      const weatherToPass = {};
-      flightsToPass.forEach(f => {
-        [f.dest, f.takeoffAlt, f.alt1, f.alt2].forEach(icao => {
-          if (!icao || weatherToPass[icao]) return;
-          const wx = weatherData[icao];
-          if (!wx) return;
-          weatherToPass[icao] = {
-            metar: wx.metar && typeof wx.metar.raw === 'string' ? { raw: wx.metar.raw } : null,
-            taf: wx.taf && typeof wx.taf.raw === 'string' ? { raw: wx.taf.raw } : null
-          };
-        });
-      });
-
-      localStorage.setItem('ct_pro_flights_for_passdown', JSON.stringify(flightsToPass));
-      localStorage.setItem('ct_pro_weather_for_passdown', JSON.stringify(weatherToPass));
-      window.open('passdown.html', 'CieloTracker_Passdown');
+  // Clean weather: formatted TAF with line breaks
+  const weatherToPass = {};
+  flightsToPass.forEach(f => {
+    [f.dest, f.takeoffAlt, f.alt1, f.alt2].forEach(icao => {
+      if (!icao || weatherToPass[icao]) return;
+      const wx = weatherData[icao];
+      if (!wx) return;
+      weatherToPass[icao] = {
+        metar: wx.metar && typeof wx.metar.raw === 'string' ? { raw: wx.metar.raw } : null,
+        taf: wx.taf && typeof wx.taf.raw === 'string' ? { raw: formatTAFPretty(wx.taf.raw) } : null
+      };
     });
+  });
+
+  localStorage.setItem('ct_pro_flights_for_passdown', JSON.stringify(flightsToPass));
+  localStorage.setItem('ct_pro_weather_for_passdown', JSON.stringify(weatherToPass));
+  window.open('passdown.html', 'CieloTracker_Passdown');
+});
+
 
     const themeItem = document.createElement('button');
     themeItem.className = 'context-menu-item';
