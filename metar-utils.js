@@ -56,6 +56,55 @@ function checkMissingMetarElements(metarText) {
   return !(hasWinds && hasVisibility && hasSkyConditions && hasTemperature && hasAltimeter);
 }
 
+// NEW: Helper function to escape special regex characters
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// NEW: Check for winds/gusts ≥40 kt and highlight in HTML
+function checkWindThreshold(metarText, htmlOutput, reasons) {
+  if (!metarText || !htmlOutput) return htmlOutput;
+
+  // Regex to match wind groups: VRB or direction, speed, optional gust, KT
+  // Examples: "30045KT", "VRB12G45KT", "18025G40KT"
+  const windRegex = /\b(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT\b/g;
+
+  let match;
+  let modifiedHtml = htmlOutput;
+  const triggeredWinds = [];
+
+  while ((match = windRegex.exec(metarText)) !== null) {
+    const fullToken = match[0]; // e.g., "30045KT" or "VRB12G45KT"
+    const direction = match[1]; // VRB or 3-digit direction
+    const speed = parseInt(match[2], 10); // Wind speed
+    const gust = match[4] ? parseInt(match[4], 10) : 0; // Gust speed (0 if none)
+
+    // Check if speed or gust meets threshold
+    if (speed >= 40 || gust >= 40) {
+      // Build reason string
+      const reasonText = gust > 0 
+        ? `Wind/Gust ≥40kt: ${speed}ktG${gust}kt`
+        : `Wind/Gust ≥40kt: ${speed}kt`;
+
+      triggeredWinds.push(reasonText);
+
+      // Escape the token for safe regex replacement
+      const escapedToken = escapeRegExp(fullToken);
+      const replaceRegex = new RegExp(`\\b${escapedToken}\\b`, 'g');
+
+      // Wrap the token with <span class="hit">
+      modifiedHtml = modifiedHtml.replace(replaceRegex, `<span class="hit">${fullToken}</span>`);
+    }
+  }
+
+  // Add all triggered wind reasons to the reasons array
+  if (reasons && triggeredWinds.length > 0) {
+    triggeredWinds.forEach(reason => reasons.push(reason));
+  }
+
+  return modifiedHtml;
+}
+
 function extractTafIssueTime(tafText) {
   if (!tafText) return null;
 
@@ -65,3 +114,15 @@ function extractTafIssueTime(tafText) {
 
   return null;
 }
+
+// Export functions for use in Cloud Functions (if using module.exports)
+// Uncomment if your backend uses Node.js modules:
+/*
+module.exports = {
+  checkMetarExpiredStatus,
+  checkMissingMetarElements,
+  checkWindThreshold,
+  escapeRegExp,
+  extractTafIssueTime
+};
+*/
