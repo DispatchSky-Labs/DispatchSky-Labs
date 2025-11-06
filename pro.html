@@ -1080,14 +1080,14 @@
 
   function formatMetarForPassdown(metarRaw) {
     // Remove duplicate ICAO: "METAR KSEA METAR KSEA ..." -> "METAR KSEA ..."
-    return metarRaw.replace(/^(METAR\s+\w{4})\s+\1\s+/, '$1 ');
+    return metarRaw.replace(/^(METAR\s+\w{4})\s+\1\s+/m, '$1 ');
   }
 
   function formatTafForPassdown(tafRaw) {
     if (!tafRaw) return '';
 
     // Remove duplicate ICAO: "TAF KSEA TAF KSEA ..." -> "TAF KSEA ..."
-    let cleanTaf = tafRaw.replace(/^(TAF\s+\w{4})\s+\1\s+/, '$1 ');
+    let cleanTaf = tafRaw.replace(/^(TAF\s+\w{4})\s+\1\s+/m, '$1 ');
 
     // Add newlines and indentation for FM and PROB lines
     cleanTaf = cleanTaf
