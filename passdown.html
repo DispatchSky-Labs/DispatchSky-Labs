@@ -44,6 +44,19 @@
     (function() {
       'use strict';
 
+      // Safely extract raw strings regardless of shape ({raw}, string, or missing)
+      function rawString(x) {
+        if (!x) return '';
+        if (typeof x === 'string') return x;
+        if (typeof x.raw === 'string') return x.raw;
+        return '';
+      }
+
+      function escapeHtml(text) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return text.replace(/[&<>"']/g, m => map[m]);
+      }
+
       function findWorstWeather(text) {
         let worstCeiling = Infinity;
         let worstVis = Infinity;
@@ -51,38 +64,36 @@
         const ceilingMatches = text.match(/\b(BKN|OVC)(\d{3})\b/g) || [];
         ceilingMatches.forEach(m => {
           const height = parseInt(m.slice(-3), 10);
-          if (height < worstCeiling) worstCeiling = height;
+          if (!Number.isNaN(height) && height < worstCeiling) worstCeiling = height;
         });
 
         const visMatches = text.match(/\b(\d+)SM\b/g) || [];
         visMatches.forEach(m => {
           const vis = parseInt(m, 10);
-          if (vis < worstVis) worstVis = vis;
+          if (!Number.isNaN(vis) && vis < worstVis) worstVis = vis;
         });
 
         const fracVisMatches = text.match(/\b(\d+)\/(\d+)SM\b/g) || [];
         fracVisMatches.forEach(m => {
           const parts = m.match(/(\d+)\/(\d+)/);
           if (parts) {
-            const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
-            if (vis < worstVis) worstVis = vis;
+            const num = parseInt(parts[1], 10);
+            const den = parseInt(parts[2], 10);
+            if (!Number.isNaN(num) && !Number.isNaN(den) && den !== 0) {
+              const vis = num / den;
+              if (vis < worstVis) worstVis = vis;
+            }
           }
         });
 
-        return { ceiling: worstCeiling === Infinity ? null : worstCeiling, visibility: worstVis === Infinity ? null : worstVis };
-      }
+        // Handle P6SM (greater than 6 SM) as 6 for "worst" comparisons
+        const p6 = text.match(/\bP6SM\b/) ? 6 : Infinity;
+        if (p6 < worstVis) worstVis = p6;
 
-      function getTafSegmentsForWindow(tafRaw, etaHHMM) {
-        const { segments, start, end } = buildTafSegments(tafRaw);
-        if (!segments.length) return [];
-
-        const etaDate = etaToUtcDateWithinTaf(etaHHMM, start, end);
-        if (!etaDate) return [];
-
-        const windowStart = new Date(etaDate.getTime() - 60 * 60 * 1000);
-        const windowEnd = new Date(etaDate.getTime() + 60 * 60 * 1000);
-
-        return segments.filter(seg => seg.end > windowStart && seg.start < windowEnd);
+        return {
+          ceiling: worstCeiling === Infinity ? null : worstCeiling,
+          visibility: worstVis === Infinity ? null : worstVis
+        };
       }
 
       function parseTafHeader(tafText) {
@@ -132,8 +143,10 @@
       }
 
       function etaToUtcDateWithinTaf(etaHHMM, tafStart, tafEnd) {
+        if (!etaHHMM || etaHHMM.length < 3) return null;
         const h = parseInt(etaHHMM.slice(0, 2), 10);
         const m = parseInt(etaHHMM.slice(2), 10);
+        if (Number.isNaN(h) || Number.isNaN(m)) return null;
         let candidate = new Date(Date.UTC(tafStart.getUTCFullYear(), tafStart.getUTCMonth(), tafStart.getUTCDate(), h, m, 0));
         if (candidate < tafStart) candidate = new Date(candidate.getTime() + 24 * 3600 * 1000);
         if (candidate >= tafEnd) candidate = new Date(candidate.getTime() - 24 * 3600 * 1000);
@@ -141,11 +154,25 @@
         return null;
       }
 
+      // Same underline logic as before, but tolerant of string/object shapes
+      function getTafSegmentsForWindow(tafRaw, etaHHMM) {
+        const { segments, start, end } = buildTafSegments(tafRaw);
+        if (!segments.length) return [];
+        const etaDate = etaToUtcDateWithinTaf(etaHHMM, start, end);
+        if (!etaDate) return [];
+        const windowStart = new Date(etaDate.getTime() - 60 * 60 * 1000);
+        const windowEnd = new Date(etaDate.getTime() + 60 * 60 * 1000);
+        return segments.filter(seg => seg.end > windowStart && seg.start < windowEnd);
+      }
+
       function checkAlternateTrigger(wx, eta) {
         if (!wx) return false;
 
-        if (wx.taf && wx.taf.raw && eta) {
-          const segs = getTafSegmentsForWindow(wx.taf.raw, eta);
+        const tafRaw = rawString(wx.taf);
+        const metarRaw = rawString(wx.metar);
+
+        if (tafRaw && eta) {
+          const segs = getTafSegmentsForWindow(tafRaw, eta);
           const windowText = segs.map(s => s.text).join(' ');
           if (windowText) {
             const worst = findWorstWeather(windowText);
@@ -154,8 +181,8 @@
           }
         }
 
-        if (wx.metar) {
-          const worst = findWorstWeather(wx.metar.raw || '');
+        if (metarRaw) {
+          const worst = findWorstWeather(metarRaw);
           if (worst.ceiling !== null && (worst.ceiling * 100) < 600) return true;
           if (worst.visibility !== null && worst.visibility < 1.5) return true;
         }
@@ -166,8 +193,11 @@
       const flightsData = localStorage.getItem('ct_pro_flights_for_passdown');
       const weatherData = localStorage.getItem('ct_pro_weather_for_passdown');
 
+      const content = document.querySelector('#passdownContent');
+
       if (!flightsData || !weatherData) {
-        document.querySelector('#passdownContent').innerHTML = '<div class="no-data">No flight data available</div>';
+        content.innerHTML = '<div class="no-data">No flight data available</div>';
+        applyTheme();
         return;
       }
 
@@ -178,20 +208,20 @@
         flights = JSON.parse(flightsData);
         weather = JSON.parse(weatherData);
       } catch(e) {
-        document.querySelector('#passdownContent').innerHTML = '<div class="no-data">Error loading data</div>';
+        content.innerHTML = '<div class="no-data">Error loading data</div>';
+        applyTheme();
         return;
       }
 
-      const content = document.querySelector('#passdownContent');
-
-      if (flights.length === 0) {
+      if (!Array.isArray(flights) || flights.length === 0) {
         content.innerHTML = '<div class="no-data">No flights</div>';
+        applyTheme();
         return;
       }
 
       const html = flights.map(flight => {
         // Build flight info line with alternate types
-        let flightLine = `${flight.flight} ${flight.origin} ${flight.dest}`;
+        let flightLine = `${flight.flight || ''} ${flight.origin || ''} ${flight.dest || ''}`;
         if (flight.takeoffAlt) flightLine += ` T/ALT ${flight.takeoffAlt}`;
         if (flight.alt1) flightLine += ` ALT1 ${flight.alt1}`;
         if (flight.alt2) flightLine += ` ALT2 ${flight.alt2}`;
@@ -208,8 +238,11 @@
         if (airportsList.length > 0) {
           weatherHtml = '<div class="weather-section"><div class="weather-header">WEATHER:</div>';
           airportsList.forEach(({ airport, type }) => {
-            const wx = weather[airport];
+            const wx = weather && weather[airport] ? weather[airport] : null;
             if (wx) {
+              const metarRaw = rawString(wx.metar);
+              const tafRaw = rawString(wx.taf);
+
               weatherHtml += '<div class="airport-weather">';
               weatherHtml += `<div class="airport-label">${type} ${airport}:</div>`;
 
@@ -220,13 +253,13 @@
                 isCritical = checkAlternateTrigger(wx, flight.eta);
               }
 
-              if (wx.metar && wx.metar.raw) {
+              if (metarRaw) {
                 const metarClass = isCritical ? 'metar critical' : 'metar';
-                weatherHtml += `<div class="${metarClass}">${escapeHtml(wx.metar.raw)}</div>`;
+                weatherHtml += `<div class="${metarClass}">${escapeHtml(metarRaw)}</div>`;
               }
-              if (wx.taf && wx.taf.raw) {
+              if (tafRaw) {
                 const tafClass = isCritical ? 'taf critical' : 'taf';
-                weatherHtml += `<div class="${tafClass}">${escapeHtml(wx.taf.raw)}</div>`;
+                weatherHtml += `<div class="${tafClass}">${escapeHtml(tafRaw)}</div>`;
               }
               weatherHtml += '</div>';
             }
@@ -236,9 +269,9 @@
 
         return `
           <div class="flight-block">
-            <div class="flight-header">${flightLine}</div>
+            <div class="flight-header">${escapeHtml(flightLine)}</div>
             <div class="flight-info">
-              <div class="flight-info-line">ETD: ${flight.etd || '—'} ETA: ${flight.eta || '—'}</div>
+              <div class="flight-info-line">ETD: ${escapeHtml(flight.etd || '—')} ETA: ${escapeHtml(flight.eta || '—')}</div>
             </div>
             ${weatherHtml}
           </div>
@@ -247,15 +280,13 @@
 
       content.innerHTML = html;
 
-      // Apply theme
-      const theme = localStorage.getItem('ct_pro_theme') || 'light';
-      if (theme === 'dark') {
-        document.body.classList.add('theme-dark');
-      }
+      applyTheme();
 
-      function escapeHtml(text) {
-        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-        return text.replace(/[&<>"']/g, m => map[m]);
+      function applyTheme() {
+        const theme = localStorage.getItem('ct_pro_theme') || 'light';
+        if (theme === 'dark') {
+          document.body.classList.add('theme-dark');
+        }
       }
     })();
   </script>
