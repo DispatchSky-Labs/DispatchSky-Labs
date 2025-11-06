@@ -1079,15 +1079,15 @@
   }
 
 function formatMetarForPassdown(metarRaw) {
-  // Remove duplicate ICAO more directly: "METAR KSEA METAR KSEA" -> "METAR KSEA"
-  return metarRaw.replace(/METAR\s+(\w{4})\s+METAR\s+\1\b/g, 'METAR $1');
+  // Handle "METAR KSEA METAR KSEA" with optional whitespace/newlines
+  return metarRaw.replace(/METAR\s+(\w{4})\s+METAR\s+\1/g, 'METAR $1');
 }
 
 function formatTafForPassdown(tafRaw) {
   if (!tafRaw) return '';
 
-  // Remove duplicate ICAO: "TAF KSEA TAF KSEA" -> "TAF KSEA"
-  let cleanTaf = tafRaw.replace(/TAF\s+(\w{4})\s+TAF\s+\1\b/g, 'TAF $1');
+  // Handle "TAF KSEA TAF KSEA" with optional whitespace/newlines
+  let cleanTaf = tafRaw.replace(/TAF\s+(\w{4})\s+TAF\s+\1/g, 'TAF $1');
 
   // Add newlines and indentation for FM and PROB lines
   cleanTaf = cleanTaf
