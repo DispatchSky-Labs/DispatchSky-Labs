@@ -1,4 +1,4 @@
-<!-- 11/05/25 backup --> 
+<!-- 11/05/25 backup -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -253,19 +253,6 @@
       font-weight:700;
       padding:2px 4px;
       border-radius:3px;
-    }
-
-    .icao-dest-no-alt {
-      background:#dc2626;
-      color:#fff;
-      font-weight:700;
-      padding:2px 4px;
-      border-radius:3px;
-    }
-
-    .icao-dest-alt-listed {
-      font-weight:700;
-      color:#ea580c;
     }
 
     .flt-cell {
@@ -636,8 +623,9 @@
   const API_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
   const ERROR_THRESHOLD_MS = 5 * 60 * 1000;
   const HEADER_KEYWORDS = ['FLT', 'ORG', 'ETD', 'DST', 'ETA', 'DEST', 'BURN', 'TAXI', 'DUR', 'OUT', 'PHASE', 'T/ALT', 'ALT1', 'ALT2'];
+
+  // New trigger terms (ETA hour only; METAR+TAF if < 60 min, TAF only otherwise)
   const TRIGGER_TERMS = ['TSRA', 'VCTS', 'FZRA', 'FZDZ', '+SN', 'PSN', 'FZFG', 'GR', 'UP', 'TS'];
-  const TRIGGER_REGEX = new RegExp(`\\b(${TRIGGER_TERMS.join('|')})\\b`, 'g');
 
   // ===== METAR Validation Utilities =====
   function checkMetarExpiredStatus(metarText) {
@@ -680,35 +668,6 @@
     const match = tafText.match(/TAF\s+[A-Z]{4}\s+(\d{6})Z/);
     if (match) return match[1];
     return null;
-  }
-
-  // ===== Trigger Term Detection =====
-  function hasTriggerTerm(text, etaHHMM, isMETAR = false) {
-    if (!text || !etaHHMM) return false;
-    const etaHour = parseInt(etaHHMM.slice(0, 2), 10);
-
-    // For METAR: check if term exists anywhere
-    if (isMETAR) {
-      return TRIGGER_REGEX.test(text);
-    }
-
-    // For TAF: check at ETA hour
-    const lines = text.split(/\n/);
-    for (const line of lines) {
-      const timeMatch = line.match(/FM(\d{2})(\d{2})|TEMPO (\d{2})(\d{2})|BECMG (\d{2})(\d{2})/);
-      if (timeMatch) {
-        let lineHour = null;
-        if (timeMatch[1]) lineHour = parseInt(timeMatch[1], 10);
-        else if (timeMatch[3]) lineHour = parseInt(timeMatch[3], 10);
-        else if (timeMatch[5]) lineHour = parseInt(timeMatch[5], 10);
-
-        // Check if this line covers the ETA hour
-        if (lineHour === etaHour) {
-          if (TRIGGER_REGEX.test(line)) return true;
-        }
-      }
-    }
-    return false;
   }
 
   // ===== State Variables =====
@@ -898,14 +857,18 @@
       const line = lines[i].trim();
       if (!line) continue;
 
+      // Skip header lines (contain "DD", "TIME", "SQ", "ALC", "FLT", etc.)
       if (/\b(DD|TIME|SQ|ALC|FLT|ORG|ETD|DST|ETA|A\/C|MAXTOW|CFP|MSGS|DISPATCH|WORKSHEET|DESK|page)\b/i.test(line)) {
         continue;
       }
 
+      // Parse the raw dispatch format
       const parts = line.split(/\s+/);
 
+      // We need at least: DD(0) TIME(1) SQ(2) ALC(3) FLT(4) ORG(5) ETD(6) DST(7) ETA(8)
       if (parts.length < 9) continue;
 
+      // Extract fields by position
       const dd = parts[0];
       const time = parts[1];
       const sq = parts[2];
@@ -916,8 +879,10 @@
       const dst = parts[7];
       const eta = parts[8];
 
+      // Validate that we have reasonable values
       if (!flt || !org || !etd || !dst || !eta) continue;
 
+      // Skip if FLT looks like a header or number that's too small
       if (isNaN(parseInt(flt, 10)) || flt.length < 3) continue;
 
       newFlights.push({
@@ -1094,6 +1059,22 @@
     return segments.filter(seg => seg.end > windowStart && seg.start < windowEnd);
   }
 
+  // NEW: get TAF base text at the exact ETA hour (no +/- window)
+  function getTafBaseTextAtEtaHour(tafRaw, etaHHMM) {
+    const { segments, start, end } = buildTafSegments(tafRaw);
+    if (!segments.length) return '';
+
+    const etaDate = etaToUtcDateWithinTaf(etaHHMM, start, end);
+    if (!etaDate) return '';
+
+    // Consider ETA hour only (ignore minutes)
+    const hourMark = new Date(etaDate);
+    hourMark.setUTCMinutes(0, 0, 0);
+
+    const baseSeg = segments.find(seg => seg.start <= hourMark && hourMark < seg.end);
+    return baseSeg ? baseSeg.text : '';
+  }
+
   function formatTAFPretty(raw) {
     return raw.replace(/\s+FM(\d{6})/g, '\nFM$1').replace(/\s+TEMPO/g, '\nTEMPO').replace(/\s+BECMG/g, '\nBECMG').replace(/\s+PROB(30|40)/g, '\nPROB$1');
   }
@@ -1126,6 +1107,36 @@
     return { ceiling: worstCeiling === Infinity ? null : worstCeiling, visibility: worstVis === Infinity ? null : worstVis };
   }
 
+  // ===== NEW: Trigger-term detection helpers =====
+
+  // Return unique trigger terms found in a METAR/TAF text (token-based; respects '+SN' exact)
+  function findTriggerTerms(text) {
+    if (!text) return [];
+    const tokens = text.toUpperCase().trim().split(/\s+/);
+    const out = new Set();
+    for (const tokRaw of tokens) {
+      const tok = tokRaw.replace(/[^\+\-A-Z]/g, ''); // strip non A-Z/+/- noise
+      if (!tok) continue;
+      // Exact '+SN'
+      if (tok === '+SN') { out.add('+SN'); continue; }
+      // For other terms, ignore leading intensity sign
+      const base = tok.replace(/^[\+\-]/, '');
+      for (const term of TRIGGER_TERMS) {
+        if (term === '+SN') continue;
+        if (base === term) out.add(term);
+      }
+    }
+    return Array.from(out);
+  }
+
+  // Parse METAR hour (HH) from 'DDHHMMZ'
+  function getMetarHourHH(metarRaw) {
+    if (!metarRaw) return null;
+    const m = metarRaw.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+    return m ? m[2] : null;
+  }
+
+  // ===== Trigger evaluation across flights =====
   function checkWeatherTriggers() {
     flights.forEach(flight => {
       flight.triggers.clear();
@@ -1137,43 +1148,10 @@
       const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
       const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
 
-      const duration = parseInt(flight.duration, 10) || 999;
-
       // Check origin for all phases, not just 'planned'
       if (checkOriginTrigger(originWx)) {
         if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
         else flight.triggers.add(`${flight.origin}:origin-red`);
-      }
-
-      // Check for trigger terms requiring alternate
-      let requiresAlternate = false;
-      if (destWx && flight.eta) {
-        // Check TAF (always for trigger terms)
-        if (destWx.taf && destWx.taf.raw) {
-          if (hasTriggerTerm(destWx.taf.raw, flight.eta, false)) {
-            requiresAlternate = true;
-            flight.triggers.add(`${flight.dest}:trigger-term-taf`);
-          }
-        }
-        // Check METAR if duration < 60 minutes
-        if (duration < 60 && destWx.metar && destWx.metar.raw) {
-          if (hasTriggerTerm(destWx.metar.raw, flight.eta, true)) {
-            requiresAlternate = true;
-            flight.triggers.add(`${flight.dest}:trigger-term-metar`);
-          }
-        }
-      }
-
-      if (requiresAlternate) {
-        if (flight.phase === 'planned' && !flight.alt1 && !flight.alt2) {
-          flight.triggers.add(`${flight.dest}:dest-noalt`);
-        } else if (flight.phase === 'planned') {
-          flight.triggers.add(`${flight.dest}:dest-alt-listed`);
-        } else if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.dest}:dest-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.dest}:dest-out`);
-        }
       }
 
       const destTrigger = checkDestTrigger(destWx, flight);
@@ -1199,6 +1177,32 @@
         if (metarTrigger) {
           flight.triggers.add(`${flight.dest}:dest-out-metar`);
         }
+      }
+
+      // NEW: Destination trigger-term detection at ETA hour
+      const durationMin = parseInt(flight.duration, 10);
+      const etaHHMM = flight.eta && flight.eta.length === 4 ? flight.eta : null;
+      let destTermHit = false;
+
+      if (destWx && etaHHMM) {
+        // TAF at ETA hour (always)
+        if (destWx.taf && destWx.taf.raw) {
+          const tafTextAtHour = getTafBaseTextAtEtaHour(destWx.taf.raw, etaHHMM);
+          const tafTerms = findTriggerTerms(tafTextAtHour);
+          if (tafTerms.length > 0) destTermHit = true;
+        }
+        // METAR at ETA hour only if duration < 60
+        if (!isNaN(durationMin) && durationMin < 60 && destWx.metar && destWx.metar.raw) {
+          const metarHH = getMetarHourHH(destWx.metar.raw);
+          if (metarHH && metarHH === etaHHMM.slice(0,2)) {
+            const metarTerms = findTriggerTerms(destWx.metar.raw);
+            if (metarTerms.length > 0) destTermHit = true;
+          }
+        }
+      }
+
+      if (destTermHit) {
+        flight.triggers.add(`${flight.dest}:dest-term`);
       }
 
       trackDestinationImprovement(flight, destWx, prevDestTrigger, destTrigger);
@@ -1823,7 +1827,6 @@
     passdownItem.addEventListener('click', () => {
       closeContextMenu();
       const flightsToPass = flights.map(f => ({ ...f, triggers: Array.from(f.triggers || []) }));
-      localStorage.setItem('ct_pro_flights_for_passdown', JSON.stringify(flightsToPass));
       const weatherToPass = Object.keys(weatherData).reduce((acc, key) => {
         acc[key] = weatherData[key];
         return acc;
@@ -1898,8 +1901,7 @@
         if (flight.triggers.has(`${flight.dest}:dest`) || flight.triggers.has(`${flight.dest}:dest-noalt`) || 
             flight.triggers.has(`${flight.dest}:dest-sent`) || flight.triggers.has(`${flight.dest}:dest-out`) ||
             flight.triggers.has(`${flight.dest}:dest-out-metar`) || flight.triggers.has(`${flight.dest}:improved`) ||
-            flight.triggers.has(`${flight.dest}:trigger-term-taf`) || flight.triggers.has(`${flight.dest}:trigger-term-metar`) ||
-            flight.triggers.has(`${flight.dest}:dest-alt-listed`)) {
+            flight.triggers.has(`${flight.dest}:dest-term`)) {
           columnTriggerCounts.dest++;
         }
         if (flight.triggers.has(`${flight.takeoffAlt}:talt`)) {
@@ -2032,29 +2034,30 @@
       if (flight.triggers.has(`${icao}:origin-red`)) triggerType = 'red';
       else if (flight.triggers.has(`${icao}:origin-bold`)) triggerType = 'bold';
     } else if (field === 'dest') {
-      const hasTriggerTerm = flight.triggers.has(`${icao}:trigger-term-taf`) || flight.triggers.has(`${icao}:trigger-term-metar`);
-      const hasRegularTrigger = flight.triggers.has(`${icao}:dest`) || flight.triggers.has(`${icao}:dest-noalt`) || flight.triggers.has(`${icao}:dest-sent`);
-
       if (flight.phase === 'out') {
         if (flight.triggers.has(`${icao}:dest-out-metar`)) triggerType = 'dest-out-critical';
       } else {
+        const hasTrigger = flight.triggers.has(`${icao}:dest`) || flight.triggers.has(`${icao}:dest-noalt`) || flight.triggers.has(`${icao}:dest-sent`);
+
         if (flight.phase === 'planned') {
           if (flight.triggers.has(`${icao}:dest-noalt`)) triggerType = 'red';
-          else if (hasTriggerTerm || hasRegularTrigger) {
-            if (flight.alt1 || flight.alt2) triggerType = 'dest-alt-listed';
-            else triggerType = 'red';
-          }
+          else if (hasTrigger) triggerType = 'bold';
         } else if (flight.phase === 'sent') {
           if (wx && wx.metar) {
             const worst = findWorstWeather(wx.metar.raw || '');
             const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) < 2000) || 
                                 (worst.visibility !== null && worst.visibility < 3);
-            if (metarTrigger || hasTriggerTerm) {
+            if (metarTrigger) {
               if (!flight.alt1 && !flight.alt2) triggerType = 'red';
-              else triggerType = 'dest-alt-listed';
+              else triggerType = 'bold';
             }
           }
         }
+      }
+      // NEW: apply dest-term styling regardless of phase (overlays unless 'dest-out-critical' already set)
+      if (flight.triggers.has(`${icao}:dest-term`) && triggerType !== 'dest-out-critical') {
+        if (!flight.alt1 && !flight.alt2) triggerType = 'red';
+        else triggerType = 'bold';
       }
     } else if (field === 'takeoffAlt') {
       if (flight.triggers.has(`${icao}:talt`)) triggerType = (flight.phase === 'planned' ? 'red' : 'bold');
@@ -2068,7 +2071,7 @@
 
     let html = icao;
     if (triggerType === 'red') {
-      html = `<span class="icao-trigger">${icao} ⚡</span>`;
+      html = `<span class="icao-trigger">${icao}</span>`;
     } else if (triggerType === 'bold') {
       html = `<span class="icao-bold">${icao}</span>`;
     } else if (triggerType === 'alt-critical') {
@@ -2077,13 +2080,14 @@
       html = `<span class="icao-alt-out">${icao}</span>`;
     } else if (triggerType === 'dest-out-critical') {
       html = `<span class="icao-dest-out-critical">${icao}</span>`;
-    } else if (triggerType === 'dest-alt-listed') {
-      html = `<span class="icao-dest-alt-listed">${icao} ⚡</span>`;
-    } else if (field === 'dest' && (flight.triggers.has(`${icao}:trigger-term-taf`) || flight.triggers.has(`${icao}:trigger-term-metar`))) {
-      html = `${icao} ⚡`;
     }
 
     html += getMetarIndicators(icao, flight.phase);
+
+    // NEW: show ⚡ when trigger terms hit at ETA for destination
+    if (field === 'dest' && flight.triggers.has(`${icao}:dest-term`)) {
+      html += ' ⚡';
+    }
 
     if (field === 'dest' && flight.triggers.has(`${icao}:improved`)) {
       html += ' ↑';
