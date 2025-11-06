@@ -1,7 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><!DOCTYPE html>
-<html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -134,6 +132,7 @@
     .icao-cell {
       font-weight: 600;
       font-size: 14px;
+      cursor: pointer;
     }
 
     .weather-cell {
@@ -350,7 +349,17 @@
   let lastTriggerState = new Map();
   let destinationImprovements = new Set();
 
-  // NEW: Helper function to check for winds ≥40kt in raw METAR text
+  function containsHit(html) {
+    return html && html.includes('class="hit"');
+  }
+
+  function getMetarHourHH(metarText) {
+    if (!metarText) return null;
+    const m = metarText.match(/\b\d{2}(\d{2})\d{2}Z\b/);
+    return m ? m[1] : null;
+  }
+
+  // NEW: Check if raw METAR contains winds ≥40kt
   function checkWindsInMetar(metarRaw) {
     if (!metarRaw) return false;
     const windRegex = /\b(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT\b/g;
@@ -365,16 +374,6 @@
       }
     }
     return false;
-  }
-
-  function containsHit(html) {
-    return html && html.includes('class="hit"');
-  }
-
-  function getMetarHourHH(metarText) {
-    if (!metarText) return null;
-    const m = metarText.match(/\b\d{2}(\d{2})\d{2}Z\b/);
-    return m ? m[1] : null;
   }
 
   function getTafBaseTextAtEtaHour(tafText, etaHHMM) {
@@ -498,17 +497,6 @@
         else flight.triggers.add(`${flight.origin}:origin-red`);
       }
 
-      // NEW: Client-side fallback for origin wind detection
-      if (originWx && originWx.metar && originWx.metar.raw) {
-        if (checkWindsInMetar(originWx.metar.raw)) {
-          if (flight.takeoffAlt) {
-            flight.triggers.add(`${flight.origin}:origin-bold`);
-          } else {
-            flight.triggers.add(`${flight.origin}:origin-red`);
-          }
-        }
-      }
-
       const destTrigger = checkDestTrigger(destWx, flight);
       const prevDestTrigger = flight.prevDestTrigger !== undefined ? flight.prevDestTrigger : destTrigger;
 
@@ -524,15 +512,17 @@
         }
       }
 
-      // NEW: Client-side fallback for destination wind detection at ETA
+      // NEW: Client-side fallback for destination wind detection at ETA (whole hours only)
       if (destWx && destWx.metar && destWx.metar.raw && flight.eta && flight.eta.length === 4) {
         const metarHH = getMetarHourHH(destWx.metar.raw);
         const etaHH = flight.eta.slice(0, 2);
 
+        // Check if METAR hour matches ETA hour exactly
         if (metarHH === etaHH && checkWindsInMetar(destWx.metar.raw)) {
-          // NEW: Add wind indicator to destination
+          // Mark that this destination has a wind trigger
           flight.hasWindTrigger = true;
 
+          // Add appropriate trigger based on phase and alternates
           if (flight.phase === 'planned') {
             if (!flight.alt1 && !flight.alt2) {
               flight.triggers.add(`${flight.dest}:dest-noalt`);
@@ -765,10 +755,15 @@
       <tr>
         <th>Flight #</th>
         <th>Origin</th>
+        <th>Origin WX</th>
         <th>Dest</th>
+        <th>Dest WX</th>
         <th>Alt1</th>
+        <th>Alt1 WX</th>
         <th>Alt2</th>
+        <th>Alt2 WX</th>
         <th>T/O Alt</th>
+        <th>T/O Alt WX</th>
         <th>ETD</th>
         <th>ETA</th>
         <th>Duration</th>
@@ -780,23 +775,18 @@
     const tbody = document.createElement('tbody');
     filteredFlights.forEach(flight => {
       const row = document.createElement('tr');
-
-      const originClass = getTriggerClass(flight, flight.origin, 'origin');
-      const destClass = getTriggerClass(flight, flight.dest, 'dest');
-      const alt1Class = getTriggerClass(flight, flight.alt1, 'alt');
-      const alt2Class = getTriggerClass(flight, flight.alt2, 'alt');
-      const taltClass = getTriggerClass(flight, flight.takeoffAlt, 'talt');
-
-      // NEW: Add wind emoji if destination has wind trigger
-      const destDisplay = flight.hasWindTrigger ? `${flight.dest} 🌬️` : flight.dest;
-
       row.innerHTML = `
         <td>${flight.flightNumber}</td>
-        <td class="icao-cell ${originClass}" onclick="showWeatherPopup('${flight.origin}')">${flight.origin}</td>
-        <td class="icao-cell ${destClass}" onclick="showWeatherPopup('${flight.dest}')">${destDisplay}</td>
-        <td class="icao-cell ${alt1Class}" onclick="showWeatherPopup('${flight.alt1}')">${flight.alt1 || '-'}</td>
-        <td class="icao-cell ${alt2Class}" onclick="showWeatherPopup('${flight.alt2}')">${flight.alt2 || '-'}</td>
-        <td class="icao-cell ${taltClass}" onclick="showWeatherPopup('${flight.takeoffAlt}')">${flight.takeoffAlt || '-'}</td>
+        <td class="icao-cell">${renderICAO(flight, 'origin')}</td>
+        <td class="weather-cell">${renderWeather(flight, 'origin')}</td>
+        <td class="icao-cell">${renderICAO(flight, 'dest')}</td>
+        <td class="weather-cell">${renderWeather(flight, 'dest')}</td>
+        <td class="icao-cell">${renderICAO(flight, 'alt1')}</td>
+        <td class="weather-cell">${renderWeather(flight, 'alt1')}</td>
+        <td class="icao-cell">${renderICAO(flight, 'alt2')}</td>
+        <td class="weather-cell">${renderWeather(flight, 'alt2')}</td>
+        <td class="icao-cell">${renderICAO(flight, 'takeoffAlt')}</td>
+        <td class="weather-cell">${renderWeather(flight, 'takeoffAlt')}</td>
         <td>${flight.etd || '-'}</td>
         <td>${flight.eta || '-'}</td>
         <td>${flight.duration || '-'}</td>
@@ -809,47 +799,75 @@
     container.appendChild(table);
   }
 
-  function getTriggerClass(flight, icao, type) {
-    if (!flight.triggers || !icao) return '';
+  function renderICAO(flight, field) {
+    const icao = flight[field];
+    if (!icao) return '-';
 
-    const triggers = Array.from(flight.triggers);
+    let html = icao;
+    let className = '';
 
-    if (type === 'origin') {
-      if (triggers.some(t => t === `${icao}:origin-red`)) return 'trigger-origin-red';
-      if (triggers.some(t => t === `${icao}:origin-bold`)) return 'trigger-origin-bold';
-    } else if (type === 'dest') {
-      if (triggers.some(t => t === `${icao}:dest-noalt`)) return 'trigger-dest-noalt';
-      if (triggers.some(t => t === `${icao}:dest-out-metar`)) return 'trigger-dest-out-metar';
-      if (triggers.some(t => t.startsWith(`${icao}:dest`))) return 'trigger-dest';
-    } else if (type === 'alt') {
-      if (triggers.some(t => t.startsWith(`${icao}:alt`))) return 'trigger-alt-sent';
-    } else if (type === 'talt') {
-      if (triggers.some(t => t === `${icao}:talt`)) return 'trigger-talt';
+    if (field === 'origin') {
+      if (flight.triggers.has(`${icao}:origin-red`)) className = 'trigger-origin-red';
+      else if (flight.triggers.has(`${icao}:origin-bold`)) className = 'trigger-origin-bold';
+    } else if (field === 'dest') {
+      if (flight.triggers.has(`${icao}:dest-noalt`)) className = 'trigger-dest-noalt';
+      else if (flight.triggers.has(`${icao}:dest-out-metar`)) className = 'trigger-dest-out-metar';
+      else if (flight.triggers.has(`${icao}:dest`)) className = 'trigger-dest';
+      else if (flight.triggers.has(`${icao}:dest-sent`)) className = 'trigger-dest-sent';
+      else if (flight.triggers.has(`${icao}:dest-out`)) className = 'trigger-dest-out';
+      else if (flight.triggers.has(`${icao}:dest-term`)) className = 'trigger-dest-term';
+    } else if (field === 'alt1' || field === 'alt2') {
+      if (flight.triggers.has(`${icao}:alt-sent`)) className = 'trigger-alt-sent';
+      else if (flight.triggers.has(`${icao}:alt-out`)) className = 'trigger-alt-out';
+    } else if (field === 'takeoffAlt') {
+      if (flight.triggers.has(`${icao}:talt`)) className = 'trigger-talt';
     }
 
-    return '';
+    if (className) {
+      html = `<span class="${className}">${html}</span>`;
+    }
+
+    if (field === 'dest' && flight.triggers.has(`${icao}:improved`)) {
+      html += ' ↑';
+    }
+
+    if (field === 'dest' && flight.triggers.has(`${icao}:dest-out-metar`)) {
+      html += ' ⚠';
+    }
+
+    // NEW: Add wind emoji if destination has high wind trigger
+    if (field === 'dest' && flight.hasWindTrigger) {
+      html += ' 🌬️';
+    }
+
+    return html;
   }
 
-  function showWeatherPopup(icao) {
-    if (!icao || icao === '-') return;
+  function renderWeather(flight, field) {
+    const icao = flight[field];
+    if (!icao) return '-';
 
     const wx = weatherData[icao];
-    if (!wx) {
-      showPopup('Weather Data', `No data available for ${icao}`, 'info');
-      return;
-    }
+    if (!wx) return 'Loading...';
 
-    let content = `<strong>${icao}</strong><br><br>`;
+    let html = '';
 
     if (wx.metar) {
-      content += `<strong>METAR:</strong><br>${wx.metar.raw || 'N/A'}<br><br>`;
+      html += '<strong>METAR:</strong><br>';
+      html += wx.metar.html || wx.metar.raw || 'N/A';
+      html += '<br><br>';
+    } else {
+      html += '<strong>METAR:</strong> N/A<br><br>';
     }
 
     if (wx.taf) {
-      content += `<strong>TAF:</strong><br>${wx.taf.raw || 'N/A'}`;
+      html += '<strong>TAF:</strong><br>';
+      html += wx.taf.html || wx.taf.raw || 'N/A';
+    } else {
+      html += '<strong>TAF:</strong> N/A';
     }
 
-    showPopup('Weather Details', content, 'info');
+    return html;
   }
 
   function updateStatus(message, isError = false) {
@@ -907,191 +925,6 @@
   }
 
   init();
-})();
-  </script>
-</body>
-</html>
-
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>CieloTracker Pro – Flight Weather Monitor</title>
-
-  <style>
-    /* ... [All existing styles remain unchanged] ... */
-  </style>
-</head>
-<body class="theme-light">
-
-  <!-- ... [All existing HTML structure remains unchanged] ... -->
-
-  <script>
-(function() {
-  'use strict';
-
-  // ... [All existing constants and variables remain unchanged] ...
-
-  // NEW: Helper function to check for winds ≥40kt in raw METAR text
-  function checkWindsInMetar(metarRaw) {
-    if (!metarRaw) return false;
-    // Regex matches: VRB or 3-digit direction, speed (2-3 digits), optional gust, KT
-    const windRegex = /\b(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT\b/g;
-    let match;
-
-    while ((match = windRegex.exec(metarRaw)) !== null) {
-      const speed = parseInt(match[2], 10);
-      const gust = match[4] ? parseInt(match[4], 10) : 0;
-
-      // Return true if wind or gust meets threshold
-      if (speed >= 40 || gust >= 40) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // ... [All existing utility functions remain unchanged] ...
-
-  // Modified function: checkWeatherTriggers
-  function checkWeatherTriggers() {
-    flights.forEach(flight => {
-      flight.triggers.clear();
-      if (flight.phase === 'in') return;
-
-      const originWx = weatherData[flight.origin];
-      const destWx = weatherData[flight.dest];
-      const taltWx = flight.takeoffAlt ? weatherData[flight.takeoffAlt] : null;
-      const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
-      const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
-
-      // Check origin for all phases, not just 'planned'
-      if (checkOriginTrigger(originWx)) {
-        if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
-        else flight.triggers.add(`${flight.origin}:origin-red`);
-      }
-
-      // NEW: Client-side fallback for origin wind detection
-      // Check if backend didn't catch it (defensive fallback)
-      if (originWx && originWx.metar && originWx.metar.raw) {
-        if (checkWindsInMetar(originWx.metar.raw)) {
-          if (flight.takeoffAlt) {
-            if (!flight.triggers.has(`${flight.origin}:origin-bold`)) {
-              flight.triggers.add(`${flight.origin}:origin-bold`);
-            }
-          } else {
-            if (!flight.triggers.has(`${flight.origin}:origin-red`)) {
-              flight.triggers.add(`${flight.origin}:origin-red`);
-            }
-          }
-        }
-      }
-
-      const destTrigger = checkDestTrigger(destWx, flight);
-      const prevDestTrigger = flight.prevDestTrigger !== undefined ? flight.prevDestTrigger : destTrigger;
-
-      if (destTrigger) {
-        if (flight.phase === 'planned' && !flight.alt1 && !flight.alt2) {
-          flight.triggers.add(`${flight.dest}:dest-noalt`);
-        } else if (flight.phase === 'planned') {
-          flight.triggers.add(`${flight.dest}:dest`);
-        } else if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.dest}:dest-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.dest}:dest-out`);
-        }
-      }
-
-      // NEW: Client-side fallback for destination wind detection at ETA
-      // Only check METAR at exact ETA hour (whole hours only, no rounding)
-      if (destWx && destWx.metar && destWx.metar.raw && flight.eta && flight.eta.length === 4) {
-        const metarHH = getMetarHourHH(destWx.metar.raw);
-        const etaHH = flight.eta.slice(0, 2); // Extract hour from ETA (e.g., "23" from "2345")
-
-        // Check if METAR hour matches ETA hour exactly
-        if (metarHH === etaHH) {
-          if (checkWindsInMetar(destWx.metar.raw)) {
-            // Add trigger based on phase and alternates
-            if (flight.phase === 'planned') {
-              if (!flight.alt1 && !flight.alt2) {
-                if (!flight.triggers.has(`${flight.dest}:dest-noalt`)) {
-                  flight.triggers.add(`${flight.dest}:dest-noalt`);
-                }
-              } else {
-                if (!flight.triggers.has(`${flight.dest}:dest`)) {
-                  flight.triggers.add(`${flight.dest}:dest`);
-                }
-              }
-            } else if (flight.phase === 'sent') {
-              if (!flight.triggers.has(`${flight.dest}:dest-sent`)) {
-                flight.triggers.add(`${flight.dest}:dest-sent`);
-              }
-            } else if (flight.phase === 'out') {
-              if (!flight.triggers.has(`${flight.dest}:dest-out`)) {
-                flight.triggers.add(`${flight.dest}:dest-out`);
-              }
-            }
-          }
-        }
-      }
-
-      if (flight.phase === 'out' && destWx && destWx.metar) {
-        const metarText = destWx.metar.raw || '';
-        const worst = findWorstWeather(metarText);
-        const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) <= 200) || 
-                            (worst.visibility !== null && worst.visibility <= 0.5);
-        if (metarTrigger) {
-          flight.triggers.add(`${flight.dest}:dest-out-metar`);
-        }
-      }
-
-      // Destination trigger-term detection at ETA hour
-      const durationMin = parseInt(flight.duration, 10);
-      const etaHHMM = flight.eta && flight.eta.length === 4 ? flight.eta : null;
-      let destTermHit = false;
-
-      if (destWx && etaHHMM) {
-        // TAF at ETA hour (always)
-        if (destWx.taf && destWx.taf.raw) {
-          const tafTextAtHour = getTafBaseTextAtEtaHour(destWx.taf.raw, etaHHMM);
-          const tafTerms = findTriggerTerms(tafTextAtHour);
-          if (tafTerms.length > 0) destTermHit = true;
-        }
-        // METAR at ETA hour only if duration < 60
-        if (!isNaN(durationMin) && durationMin < 60 && destWx.metar && destWx.metar.raw) {
-          const metarHH = getMetarHourHH(destWx.metar.raw);
-          if (metarHH && metarHH === etaHHMM.slice(0,2)) {
-            const metarTerms = findTriggerTerms(destWx.metar.raw);
-            if (metarTerms.length > 0) destTermHit = true;
-          }
-        }
-      }
-
-      if (destTermHit) {
-        flight.triggers.add(`${flight.dest}:dest-term`);
-      }
-
-      trackDestinationImprovement(flight, destWx, prevDestTrigger, destTrigger);
-      flight.prevDestTrigger = destTrigger;
-
-      if (alt1Wx && checkAlternateTrigger(alt1Wx, flight)) {
-        if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.alt1}:alt-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.alt1}:alt-out`);
-        }
-      }
-      if (alt2Wx && checkAlternateTrigger(alt2Wx, flight)) {
-        if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.alt2}:alt-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.alt2}:alt-out`);
-        }
-      }
-      if (taltWx && checkTakeoffAltTrigger(taltWx)) flight.triggers.add(`${flight.takeoffAlt}:talt`);
-    });
-  }
-
-  // ... [All remaining functions remain unchanged] ...
-
 })();
   </script>
 </body>
