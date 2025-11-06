@@ -6,357 +6,667 @@
   <title>CieloTracker Pro – Flight Weather Monitor</title>
 
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
+    :root { 
+      --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --border:#e5e7eb; 
+      --brand:#0f5fff; --danger:#ef4444; --success:#10b981; --warning:#f59e0b;
+      --trigger-bg:#ef4444; --trigger-text:#fff;
+    }
+
+    * { box-sizing:border-box; }
+
     body { 
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: #1a1a1a;
-      color: #e0e0e0;
-      padding: 20px;
-      line-height: 1.4;
+      margin:0; 
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; 
+      background:var(--bg); 
+      color:var(--fg); 
+      font-size:14px;
+      min-width:320px;
+      display:flex;
+      flex-direction:column;
+      height:100vh;
     }
 
-    body.theme-light {
-      background: #f5f5f5;
-      color: #333;
+    .theme-dark { 
+      --bg:#0b0f14; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; 
+      --trigger-bg:#7f1d1d; --trigger-text:#fca5a5;
     }
 
-    .container {
-      max-width: 1800px;
-      margin: 0 auto;
+    header { 
+      display:flex; 
+      align-items:center; 
+      justify-content:space-between; 
+      padding:12px 16px; 
+      border-bottom:1px solid var(--border);
+      flex-wrap:wrap;
+      gap:12px;
+      flex-shrink:0;
     }
 
-    h1 {
-      font-size: 28px;
-      font-weight: 600;
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      gap: 15px;
+    .header-left { 
+      font-size:18px; 
+      font-weight:600; 
+      white-space:nowrap; 
+      cursor:pointer;
+      user-select:none;
+      -webkit-user-select:none;
+      touch-action:manipulation;
+      padding:4px 8px;
+      border-radius:6px;
+      transition:background 0.2s;
     }
 
-    .controls {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-      align-items: center;
+    .header-left:hover {
+      background:rgba(0,0,0,0.08);
     }
 
-    button {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      transition: all 0.2s;
+    .theme-dark .header-left:hover {
+      background:rgba(255,255,255,0.08);
     }
 
-    .theme-dark button {
-      background: #2d2d2d;
-      color: #e0e0e0;
+    .header-center { 
+      display:flex; 
+      gap:16px; 
+      font-size:13px; 
+      color:var(--muted); 
+      flex-wrap:wrap; 
+      align-items:center; 
     }
 
-    .theme-light button {
-      background: #fff;
-      color: #333;
-      border: 1px solid #ddd;
+    .stat-item { display:flex; align-items:center; gap:4px; }
+    .stat-label { color:var(--muted); font-size:12px; }
+    .stat-value { font-weight:600; font-size:13px; }
+
+    .btn { 
+      height:32px; 
+      padding:0 16px; 
+      border:none; 
+      border-radius:6px; 
+      background:var(--brand); 
+      color:#fff; 
+      font-weight:600; 
+      cursor:pointer; 
+      font-size:13px;
+      transition:opacity 0.2s;
+      white-space:nowrap;
     }
 
-    button:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    .btn:hover { opacity:0.9; }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+    .btn-secondary { background:var(--muted); }
+    .btn-success { background:var(--success); }
+
+    #errorDisplay { 
+      padding:12px 16px; 
+      background:#fef2f2; 
+      color:var(--danger); 
+      border-left:4px solid var(--danger);
+      border-bottom:1px solid var(--border);
+      font-weight:600;
+      font-size:13px;
+      flex-shrink:0;
+    }
+    .theme-dark #errorDisplay { background:#7f1d1d; color:#fca5a5; }
+    #errorDisplay.hidden { display:none !important; }
+
+    .table-wrapper {
+      flex:1;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
     }
 
-    button.active {
-      background: #4CAF50;
-      color: white;
+    .table-container { 
+      flex:1;
+      overflow:auto;
+      -webkit-overflow-scrolling:touch;
     }
 
-    .theme-toggle {
-      background: #4CAF50 !important;
-      color: white !important;
+    table { 
+      width:100%; 
+      border-collapse:collapse; 
+      background:#fff;
+      font-size:13px;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 30px;
-      font-size: 13px;
-    }
+    .theme-dark table { background:#0d1218; }
 
-    .theme-dark table {
-      background: #2d2d2d;
-    }
-
-    .theme-light table {
-      background: white;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-
-    th {
-      padding: 12px 8px;
-      text-align: left;
-      font-weight: 600;
-      border-bottom: 2px solid #4CAF50;
+    thead {
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 100;
     }
 
-    .theme-dark th {
-      background: #1a1a1a;
+    th { 
+      background:#f3f4f6; 
+      padding:8px 4px; 
+      text-align:left; 
+      font-weight:600; 
+      font-size:12px;
+      border-bottom:2px solid var(--border);
+      white-space:nowrap;
+      user-select:none;
+      position: relative;
     }
 
-    .theme-light th {
-      background: #f9f9f9;
+    .theme-dark th { background:#1f2937; }
+
+    th .trigger-count {
+      color: var(--danger);
+      font-weight: 700;
+      margin-left: 4px;
+      font-size: 11px;
     }
 
-    td {
-      padding: 10px 8px;
-      vertical-align: top;
+    td { 
+      padding:6px 4px; 
+      border-bottom:1px solid var(--border); 
+      vertical-align:middle;
+      font-size:12px;
+      white-space:nowrap;
     }
 
-    .theme-dark td {
-      border-bottom: 1px solid #3d3d3d;
+    tbody tr:hover { 
+      background:#dbeafe;
     }
 
-    .theme-light td {
-      border-bottom: 1px solid #eee;
+    .theme-dark tbody tr:hover { 
+      background:#1e3a5f;
     }
 
-    tr:hover td {
-      background: rgba(76, 175, 80, 0.1);
-    }
-
-    .icao-cell {
-      font-weight: 600;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    .weather-cell {
-      font-family: 'Courier New', monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-width: 600px;
-    }
-
-    .hit {
-      background: #d32f2f;
-      color: white;
-      padding: 2px 4px;
-      border-radius: 3px;
-      font-weight: bold;
-    }
-
-    .theme-light .hit {
-      background: #d32f2f;
-      color: white;
-    }
-
-    .expired-metar {
-      color: #ff9800;
-      font-weight: bold;
-    }
-
-    .critical-expired {
-      color: #f44336;
-      font-weight: bold;
-      text-decoration: underline;
-    }
-
-    .missing-elements {
-      color: #9c27b0;
+    .taxi-burn-cell {
       font-style: italic;
-    }
-
-    .popup {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #323232;
-      color: white;
-      padding: 16px 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      z-index: 1000;
-      max-width: 400px;
-      animation: slideIn 0.3s ease-out;
-    }
-
-    .theme-light .popup {
-      background: white;
-      color: #333;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      border: 1px solid #ddd;
-    }
-
-    @keyframes slideIn {
-      from {
-        transform: translateX(400px);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    .popup-header {
-      font-weight: 600;
-      margin-bottom: 8px;
-      font-size: 15px;
-    }
-
-    .popup-content {
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .popup-close {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: none;
-      border: none;
-      color: inherit;
-      font-size: 20px;
       cursor: pointer;
+    }
+
+    .taxi-burn-cell:hover {
+      background: rgba(0,0,0,0.08);
+    }
+
+    .theme-dark .taxi-burn-cell:hover {
+      background: rgba(255,255,255,0.08);
+    }
+
+    .editable { 
+      cursor:text; 
+      min-width:40px;
+      padding:4px;
+      border-radius:4px;
+    }
+
+    .editable:hover { background:rgba(0,0,0,0.04); }
+    .theme-dark .editable:hover { background:rgba(255,255,255,0.06); }
+
+    .editable input { 
+      width:100%; 
+      min-width:50px;
+      border:1px solid var(--brand); 
+      background:transparent; 
+      font:inherit; 
+      color:inherit;
+      padding:3px;
+      border-radius:3px;
+    }
+
+    .editable input:focus { outline:2px solid var(--brand); }
+
+    .icao-cell { 
+      font-family:monospace;
+      font-weight:500;
+      cursor:text;
+      user-select:none;
+      touch-action:manipulation;
+      -webkit-user-select:none;
+      -webkit-touch-callout:none;
+    }
+
+    .icao-trigger { 
+      background:var(--trigger-bg); 
+      color:var(--trigger-text); 
+      font-weight:700;
+      padding:2px 4px;
+      border-radius:3px;
+    }
+
+    .icao-bold { 
+      font-weight:700; 
+      color:#f59e0b;
+    }
+
+    .icao-alt-critical {
+      background:#dc2626;
+      color:#fff;
+      font-weight:700;
+      padding:2px 4px;
+      border-radius:3px;
+    }
+
+    .icao-alt-out {
+      font-weight:700;
+      color:#ea580c;
+    }
+
+    .icao-dest-out-critical {
+      background:#dc2626;
+      color:#fff;
+      font-weight:700;
+      padding:2px 4px;
+      border-radius:3px;
+    }
+
+    .flt-cell {
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    .context-menu {
+      position:fixed;
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:8px;
+      box-shadow:0 4px 12px rgba(0,0,0,0.15);
+      z-index:3000;
+      min-width:180px;
+      animation:fadeIn 0.15s ease-out;
+    }
+
+    .theme-dark .context-menu {
+      background:#1f2937;
+      border-color:#374151;
+    }
+
+    @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+
+    .context-menu-item {
+      padding:10px 16px;
+      cursor:pointer;
+      font-size:13px;
+      color:var(--fg);
+      border:none;
+      background:transparent;
+      width:100%;
+      text-align:left;
+      transition:background 0.15s;
+    }
+
+    .context-menu-item:hover {
+      background:rgba(0,0,0,0.08);
+    }
+
+    .theme-dark .context-menu-item:hover {
+      background:rgba(255,255,255,0.1);
+    }
+
+    .context-menu-item:first-child {
+      border-radius:8px 8px 0 0;
+    }
+
+    .context-menu-item:last-child {
+      border-radius:0 0 8px 8px;
+    }
+
+    .context-menu-divider {
+      height:1px;
+      background:var(--border);
+      margin:4px 0;
+    }
+
+    .wx-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:2000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .wx-modal {
+      background:#fff; border-radius:12px; padding:20px;
+      width:100%; max-width:700px; max-height:80vh; overflow-y:auto;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    @keyframes slideUp { from{transform:translateY(20px);opacity:0;} to{transform:translateY(0);opacity:1;} }
+    .theme-dark .wx-modal { background:#1f2937; }
+
+    .wx-modal-header { display:flex; justify-content:flex-end; align-items:center; margin-bottom:16px; }
+    .wx-modal-close { background:transparent; border:none; font-size:28px; cursor:pointer; color:var(--muted); padding:0; width:36px; height:36px; border-radius:6px; }
+    .wx-modal-close:hover { background:rgba(0,0,0,0.1); }
+
+    .wx-modal-body {
+      font-family:monospace; font-size:13px; line-height:1.8; white-space:pre-wrap; word-break:break-word; color:var(--fg);
+      user-select:text; -webkit-user-select:text;
+    }
+
+    .flight-info-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:2000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .flight-info-modal {
+      background:#fff; border-radius:12px; padding:20px;
+      width:100%; max-width:400px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    .theme-dark .flight-info-modal { background:#1f2937; }
+
+    .flight-info-modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+    .flight-info-modal-title { font-size:16px; font-weight:600; color:var(--fg); }
+    .flight-info-modal-close { background:transparent; border:none; font-size:28px; cursor:pointer; color:var(--muted); padding:0; width:36px; height:36px; border-radius:6px; }
+    .flight-info-modal-close:hover { background:rgba(0,0,0,0.1); }
+
+    .flight-info-row {
+      display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border);
+    }
+
+    .flight-info-row:last-child { border-bottom:none; }
+
+    .flight-info-label { font-weight:600; color:var(--muted); font-size:12px; }
+    .flight-info-value { font-size:14px; color:var(--fg); font-family:monospace; }
+
+    .upload-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:3000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .upload-modal {
+      background:#fff; border-radius:12px; padding:24px;
+      width:100%; max-width:500px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    .theme-dark .upload-modal { background:#1f2937; }
+
+    .upload-modal-title {
+      font-size:16px; font-weight:600; margin-bottom:16px; color:var(--fg);
+    }
+
+    .upload-modal-label {
+      display:block; font-size:13px; font-weight:600; margin-bottom:8px; color:var(--fg);
+    }
+
+    .upload-modal-textarea {
+      width:100%; min-height:200px; padding:10px; border:1px solid var(--border); border-radius:6px;
+      font-size:13px; background:#fff; color:var(--fg); font-family:monospace; resize:vertical;
+    }
+
+    .theme-dark .upload-modal-textarea {
+      background:#111827; border-color:#374151; color:#e5e7eb;
+    }
+
+    .upload-modal-textarea:focus {
+      outline:2px solid var(--brand);
+    }
+
+    .upload-modal-actions {
+      display:flex; gap:10px; margin-top:20px; justify-content:flex-end;
+    }
+
+    .upload-modal-actions .btn {
+      height:36px; padding:0 16px; font-size:13px;
+    }
+
+    .single-flight-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:3000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .single-flight-modal {
+      background:#fff; border-radius:12px; padding:24px;
+      width:100%; max-width:400px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    .theme-dark .single-flight-modal { background:#1f2937; }
+
+    .single-flight-modal-title {
+      font-size:16px; font-weight:600; margin-bottom:20px; color:var(--fg);
+    }
+
+    .single-flight-form-group {
+      margin-bottom:16px;
+    }
+
+    .single-flight-label {
+      display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--fg);
+    }
+
+    .single-flight-input {
+      width:100%; padding:10px; border:1px solid var(--border); border-radius:6px;
+      font-size:13px; background:#fff; color:var(--fg); font-family:monospace;
+    }
+
+    .theme-dark .single-flight-input {
+      background:#111827; border-color:#374151; color:#e5e7eb;
+    }
+
+    .single-flight-input:focus {
+      outline:2px solid var(--brand);
+    }
+
+    .single-flight-modal-actions {
+      display:flex; gap:10px; margin-top:20px; justify-content:flex-end;
+    }
+
+    .single-flight-modal-actions .btn {
+      height:36px; padding:0 16px; font-size:13px;
+    }
+
+    .taxi-burn-modal-overlay {
+      position:fixed; inset:0;
+      background:rgba(0,0,0,0.5);
+      display:flex; align-items:center; justify-content:center;
+      z-index:3000; animation:fadeIn 0.2s; padding:20px;
+    }
+
+    .taxi-burn-modal {
+      background:#fff; border-radius:12px; padding:24px;
+      width:100%; max-width:400px;
+      box-shadow:0 10px 40px rgba(0,0,0,0.3);
+      position:relative; animation:slideUp 0.3s ease-out;
+    }
+    .theme-dark .taxi-burn-modal { background:#1f2937; }
+
+    .taxi-burn-modal-title {
+      font-size:16px; font-weight:600; margin-bottom:20px; color:var(--fg);
+    }
+
+    .taxi-burn-form-group {
+      margin-bottom:16px;
+    }
+
+    .taxi-burn-label {
+      display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--fg);
+    }
+
+    .taxi-burn-input {
+      width:100%; padding:10px; border:1px solid var(--border); border-radius:6px;
+      font-size:13px; background:#fff; color:var(--fg); font-family:monospace;
+    }
+
+    .theme-dark .taxi-burn-input {
+      background:#111827; border-color:#374151; color:#e5e7eb;
+    }
+
+    .taxi-burn-input:focus {
+      outline:2px solid var(--brand);
+    }
+
+    .taxi-burn-modal-actions {
+      display:flex; gap:10px; margin-top:20px; justify-content:flex-end;
+    }
+
+    .taxi-burn-modal-actions .btn {
+      height:36px; padding:0 16px; font-size:13px;
+    }
+
+    .toast {
+      position:fixed; top:20px; right:20px; background:#111; color:#fff;
+      padding:12px 16px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3);
+      z-index:2000; animation:slideIn 0.3s ease-out; max-width:400px; display:flex; align-items:center; gap:12px;
+    }
+    @keyframes slideIn { from{transform:translateX(400px);opacity:0;} to{transform:translateX(0);opacity:1;} }
+    .toast-success { background:var(--success); }
+    .toast-error { background:var(--danger); }
+    .toast-warning { background:var(--warning); }
+    .toast-info { background:var(--brand); }
+    .toast-btn { background:rgba(255,255,255,0.3); border:1px solid rgba(255,255,255,0.5); color:#fff; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:600; }
+    .toast-btn:hover { background:rgba(255,255,255,0.5); }
+
+    .loading { text-align:center; padding:40px; color:var(--muted); }
+
+    .action-btn { padding:3px 6px; height:auto; font-size:10px; min-width:40px; }
+
+    .action-btn-remove { background:transparent; color:var(--fg); border:1px solid var(--border); }
+    .action-btn-remove:hover { background:rgba(0,0,0,0.08); }
+    .theme-dark .action-btn-remove:hover { background:rgba(255,255,255,0.08); }
+
+    .drag-handle {
+      cursor: grab;
       padding: 4px 8px;
-    }
-
-    .trigger-origin-red {
-      background: #d32f2f;
-      color: white;
-      font-weight: bold;
-    }
-
-    .trigger-origin-bold {
-      background: inherit;
-      color: #ff6f00;
-      font-weight: bold;
-    }
-
-    .trigger-dest-noalt {
-      background: #d32f2f;
-      color: white;
-      font-weight: bold;
-    }
-
-    .trigger-dest, .trigger-dest-sent, .trigger-dest-out, .trigger-dest-term {
-      background: inherit;
-      color: #ff6f00;
-      font-weight: bold;
-    }
-
-    .trigger-dest-out-metar {
-      background: #b71c1c;
-      color: white;
-      font-weight: bold;
-    }
-
-    .trigger-alt-sent, .trigger-alt-out {
-      background: inherit;
-      color: #ff6f00;
-      font-weight: bold;
-    }
-
-    .trigger-talt {
-      background: inherit;
-      color: #ff6f00;
-      font-weight: bold;
-    }
-
-    .status {
-      margin-bottom: 15px;
-      padding: 10px;
-      border-radius: 6px;
-      font-size: 13px;
-    }
-
-    .theme-dark .status {
-      background: #2d2d2d;
-    }
-
-    .theme-light .status {
-      background: white;
-      border: 1px solid #ddd;
-    }
-
-    .loading {
-      text-align: center;
-      padding: 40px;
+      color: var(--muted);
       font-size: 16px;
-      color: #888;
+      user-select: none;
+      touch-action: none;
     }
 
-    .error {
-      color: #f44336;
-      padding: 20px;
-      text-align: center;
-      font-weight: 500;
+    .drag-handle:hover {
+      color: var(--fg);
+    }
+
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    tr.dragging {
+      opacity: 0.5;
+      background: var(--brand) !important;
+    }
+
+    tr.drag-over {
+      border-top: 3px solid var(--brand);
     }
 
     @media (max-width: 768px) {
-      body { padding: 10px; }
-      h1 { font-size: 22px; }
-      table { font-size: 11px; }
-      th, td { padding: 6px 4px; }
-      .weather-cell { font-size: 11px; }
-      .popup { right: 10px; max-width: calc(100% - 20px); }
+      body { font-size:12px; }
+      .header-left { font-size:16px; }
+      table { font-size:11px; }
+      th { font-size:10px; padding:6px 3px; }
+      td { font-size:11px; padding:4px 3px; }
+      .action-btn { font-size:9px; padding:2px 4px; min-width:35px; }
     }
+
+    @media (max-width: 480px) {
+      header { padding:8px 12px; }
+    }
+
+    .hidden { display:none !important; }
   </style>
 </head>
 <body class="theme-light">
-  <div class="container">
-    <h1>
-      <span>✈️ CieloTracker Pro</span>
-      <span style="font-size: 14px; color: #888; font-weight: normal;">Flight Weather Monitor</span>
-    </h1>
 
-    <div class="controls">
-      <button class="theme-toggle" onclick="toggleTheme()">🌓 Toggle Theme</button>
-      <button onclick="toggleFilter('all')" class="active" id="filter-all">All Flights</button>
-      <button onclick="toggleFilter('planned')" id="filter-planned">Planned</button>
-      <button onclick="toggleFilter('sent')" id="filter-sent">Sent</button>
-      <button onclick="toggleFilter('out')" id="filter-out">Out</button>
-      <button onclick="toggleFilter('in')" id="filter-in">In</button>
-      <button onclick="toggleFilter('triggers')" id="filter-triggers">Triggers Only</button>
-      <button onclick="manualRefresh()">🔄 Refresh</button>
+  <header>
+    <div class="header-left" id="headerTitle">CieloTracker <strong>Pro</strong></div>
+    <div class="header-center">
+      <span id="currentTime">--:-- UTC</span>
+      <span id="lastUpdate">Updated: --:-- UTC</span>
+      <div class="stat-item">
+        <span class="stat-label">Total:</span>
+        <span class="stat-value" id="statTotal">0</span>
+      </div>
     </div>
+  </header>
 
-    <div class="status" id="status">
-      Loading flight data...
+  <div id="errorDisplay" class="hidden">
+    ⚠️ Weather data unavailable for 5+ minutes. Last update: <span id="errorTime">--:--</span> UTC
+  </div>
+
+  <div class="table-wrapper">
+    <div class="table-container">
+      <table id="flightTable">
+        <thead>
+          <tr>
+            <th>FLT<span class="trigger-count" data-col="flight"></span></th>
+            <th>ORG<span class="trigger-count" data-col="origin"></span></th>
+            <th>DEST<span class="trigger-count" data-col="dest"></span></th>
+            <th>T/ALT<span class="trigger-count" data-col="takeoffAlt"></span></th>
+            <th>ALT1<span class="trigger-count" data-col="alt1"></span></th>
+            <th>ALT2<span class="trigger-count" data-col="alt2"></span></th>
+            <th>ETD<span class="trigger-count" data-col="etd"></span></th>
+            <th>TAXI<span class="trigger-count" data-col="taxiOut"></span></th>
+            <th>BURN<span class="trigger-count" data-col="burnoff"></span></th>
+            <th>DUR<span class="trigger-count" data-col="duration"></span></th>
+            <th>ETA<span class="trigger-count" data-col="eta"></span></th>
+            <th>Actions<span class="trigger-count" data-col="actions"></span></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="flightTableBody">
+          <tr><td colspan="13" class="loading">Left-click CieloTracker to upload flights</td></tr>
+        </tbody>
+      </table>
     </div>
-
-    <div id="tables-container"></div>
   </div>
 
   <script>
 (function() {
   'use strict';
 
-  const BACKEND_URL = 'https://us-central1-weather-app-442103.cloudfunctions.net/process-weather-data-clean';
-  const SHEET_ID = '1lOHbOZVRIoAjYiLEAOpYn6kEoA-lhxNRa98O5yvqb6c';
-  const POLLING_INTERVAL = 60000;
+  const API_URL = "https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
+  const ERROR_THRESHOLD_MS = 5 * 60 * 1000;
+  const HEADER_KEYWORDS = ['FLT', 'ORG', 'ETD', 'DST', 'ETA', 'DEST', 'BURN', 'TAXI', 'DUR', 'OUT', 'PHASE', 'T/ALT', 'ALT1', 'ALT2'];
 
-  let flights = [];
-  let weatherData = {};
-  let currentFilter = 'all';
-  let pollTimer = null;
-  let lastTriggerState = new Map();
-  let destinationImprovements = new Set();
+  // New trigger terms (ETA hour only; METAR+TAF if < 60 min, TAF only otherwise)
+  const TRIGGER_TERMS = ['TSRA', 'VCTS', 'FZRA', 'FZDZ', '+SN', 'PSN', 'FZFG', 'GR', 'UP', 'TS'];
 
-  function containsHit(html) {
-    return html && html.includes('class="hit"');
+  // ===== METAR Validation Utilities =====
+  function checkMetarExpiredStatus(metarText) {
+    if (!metarText) return { expired: false, critical: false };
+    const match = metarText.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+    if (!match) return { expired: false, critical: false };
+    const day = parseInt(match[1], 10);
+    const hour = parseInt(match[2], 10);
+    const minute = parseInt(match[3], 10);
+    if (day < 1 || day > 31 || hour > 23 || minute > 59) return { expired: false, critical: false };
+    const now = new Date();
+    const currentYear = now.getUTCFullYear();
+    const currentMonth = now.getUTCMonth();
+    const currentDay = now.getUTCDate();
+    let metarDate = new Date(Date.UTC(currentYear, currentMonth, day, hour, minute));
+    if (day > currentDay + 15) {
+      metarDate = new Date(Date.UTC(currentYear, currentMonth - 1, day, hour, minute));
+    } else if (day < currentDay - 15) {
+      metarDate = new Date(Date.UTC(currentYear, currentMonth + 1, day, hour, minute));
+    }
+    const ageInMs = now - metarDate;
+    const ageInMinutes = ageInMs / (1000 * 60);
+    const expired = ageInMinutes > 60;
+    const critical = ageInMinutes > 75;
+    return { expired, critical };
   }
 
-  function getMetarHourHH(metarText) {
-    if (!metarText) return null;
-    const m = metarText.match(/\b\d{2}(\d{2})\d{2}Z\b/);
-    return m ? m[1] : null;
+  function checkMissingMetarElements(metarText) {
+    if (!metarText) return true;
+    const hasWinds = /\b(\d{3}|VRB)\d{2}(G\d{2})?KT\b|\bCALM\b/.test(metarText);
+    const hasVisibility = /\b(P?\d+SM|\d+\/\d+SM)\b/.test(metarText);
+    const hasSkyConditions = /\b(FEW|SCT|BKN|OVC|CLR|CLEAR|SKC|VV|CAVOK)\d*\b/.test(metarText);
+    const hasTemperature = /\b(M?\d{2})\/(M?\d{2})?\b/.test(metarText);
+    const hasAltimeter = /\bA\d{4}\b/.test(metarText);
+    return !(hasWinds && hasVisibility && hasSkyConditions && hasTemperature && hasAltimeter);
+  }
+
+  function extractTafIssueTime(tafText) {
+    if (!tafText) return null;
+    const match = tafText.match(/TAF\s+[A-Z]{4}\s+(\d{6})Z/);
+    if (match) return match[1];
+    return null;
   }
 
   // NEW: Check if raw METAR contains winds ≥40kt
@@ -376,556 +686,486 @@
     return false;
   }
 
-  function getTafBaseTextAtEtaHour(tafText, etaHHMM) {
-    if (!tafText || !etaHHMM || etaHHMM.length !== 4) return '';
-    const etaHH = parseInt(etaHHMM.slice(0, 2), 10);
-    const lines = tafText.split(/\n/).filter(l => l.trim());
-    let baseText = '';
-    let currentHour = -1;
+  // ===== State Variables =====
+  let flights = [];
+  let weatherData = {};
+  let lastSuccessfulUpdate = null;
+  let autoRefreshInterval = null;
+  const destImprovementCache = new Map();
+  let draggedIndex = null;
 
-    for (const line of lines) {
-      const fmMatch = line.match(/\bFM(\d{2})\d{4}\b/);
-      if (fmMatch) {
-        currentHour = parseInt(fmMatch[1], 10);
-        if (currentHour === etaHH) baseText = line;
-        else if (currentHour > etaHH) break;
+  const $ = (sel) => document.querySelector(sel);
+  const headerTitle = $('#headerTitle');
+  const flightTableBody = $('#flightTableBody');
+  const currentTimeEl = $('#currentTime');
+  const lastUpdateEl = $('#lastUpdate');
+  const errorDisplay = $('#errorDisplay');
+  const errorTimeEl = $('#errorTime');
+  const statTotal = $('#statTotal');
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function getCurrentZulu() { const now = new Date(); return `${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}`; }
+
+  function normalizeTime(time) {
+    if (!time) return '';
+    const cleaned = time.replace(/[^\d]/g, '');
+    if (!cleaned) return '';
+
+    let hours = 0, minutes = 0;
+
+    if (cleaned.length === 1) {
+      minutes = parseInt(cleaned, 10);
+    } else if (cleaned.length === 2) {
+      const num = parseInt(cleaned, 10);
+      if (num <= 59) {
+        minutes = num;
       } else {
-        const validMatch = line.match(/\b\d{4}\/\d{4}\b/);
-        if (validMatch && currentHour === etaHH) baseText += ' ' + line;
+        hours = Math.floor(num / 100);
+        minutes = num % 100;
       }
-    }
-    return baseText.trim();
-  }
-
-  function findTriggerTerms(text) {
-    if (!text) return [];
-    const terms = ['TSRA', 'TSGR', '+TSRA', 'FZRA', '+FZRA', 'FZDZ', 'PL', 'GR', 'GS', 'SN', '+SN', 'BLSN', 'SQ', 'FC', 'DS', 'SS', '+SS', 'VA'];
-    return terms.filter(t => text.includes(t));
-  }
-
-  function findWorstWeather(metarText) {
-    if (!metarText) return { ceiling: null, visibility: null };
-
-    let worstCeiling = null;
-    const ceilingRegex = /\b(BKN|OVC)(\d{3})\b/g;
-    let match;
-    while ((match = ceilingRegex.exec(metarText)) !== null) {
-      const ceil = parseInt(match[2], 10);
-      if (worstCeiling === null || ceil < worstCeiling) worstCeiling = ceil;
-    }
-
-    let worstVis = null;
-    const visRegex = /\b(\d+(?:\/\d+)?)SM\b/g;
-    while ((match = visRegex.exec(metarText)) !== null) {
-      const visStr = match[1];
-      let vis;
-      if (visStr.includes('/')) {
-        const parts = visStr.split('/');
-        vis = parseFloat(parts[0]) / parseFloat(parts[1]);
-      } else {
-        vis = parseFloat(visStr);
-      }
-      if (worstVis === null || vis < worstVis) worstVis = vis;
-    }
-
-    return { ceiling: worstCeiling, visibility: worstVis };
-  }
-
-  function checkOriginTrigger(wx) {
-    if (!wx || !wx.metar) return false;
-    const html = wx.metar.html || '';
-    const raw = wx.metar.raw || '';
-    return containsHit(html) || findTriggerTerms(raw).length > 0;
-  }
-
-  function checkDestTrigger(wx, flight) {
-    if (!wx) return false;
-    const metarHtml = wx.metar ? wx.metar.html || '' : '';
-    const metarRaw = wx.metar ? wx.metar.raw || '' : '';
-    const tafHtml = wx.taf ? wx.taf.html || '' : '';
-    const tafRaw = wx.taf ? wx.taf.raw || '' : '';
-
-    const metarHit = containsHit(metarHtml) || findTriggerTerms(metarRaw).length > 0;
-
-    let tafHit = false;
-    if (flight.eta && flight.eta.length === 4) {
-      const tafAtEta = getTafBaseTextAtEtaHour(tafRaw, flight.eta);
-      const tafTerms = findTriggerTerms(tafAtEta);
-      tafHit = tafTerms.length > 0 || (tafAtEta && containsHit(tafHtml));
+    } else if (cleaned.length === 3) {
+      hours = parseInt(cleaned.slice(0, 1), 10);
+      minutes = parseInt(cleaned.slice(1), 10);
     } else {
-      tafHit = containsHit(tafHtml);
+      hours = parseInt(cleaned.slice(0, 2), 10);
+      minutes = parseInt(cleaned.slice(2), 10);
     }
 
-    return metarHit || tafHit;
+    hours = hours % 24;
+    minutes = minutes % 60;
+
+    return pad2(hours) + pad2(minutes);
   }
 
-  function checkAlternateTrigger(wx) {
-    if (!wx || !wx.metar) return false;
-    const html = wx.metar.html || '';
-    const raw = wx.metar.raw || '';
-    return containsHit(html) || findTriggerTerms(raw).length > 0;
+  function formatDuration(minutes) {
+    if (!minutes && minutes !== 0) return '';
+    const min = parseInt(minutes, 10);
+    if (isNaN(min)) return '';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${pad2(h)}${pad2(m)}`;
   }
 
-  function checkTakeoffAltTrigger(wx) {
-    if (!wx || !wx.metar) return false;
-    const html = wx.metar.html || '';
-    const raw = wx.metar.raw || '';
-    return containsHit(html) || findTriggerTerms(raw).length > 0;
-  }
-
-  function trackDestinationImprovement(flight, destWx, prevTrigger, currentTrigger) {
-    if (flight.phase !== 'out') return;
-    if (prevTrigger === true && currentTrigger === false) {
-      destinationImprovements.add(flight.flightNumber);
+  function parseDurationInput(input) {
+    if (!input) return '';
+    const cleaned = input.replace(/[^\d]/g, '');
+    if (!cleaned) return '';
+    let minutes = 0;
+    if (cleaned.length <= 2) {
+      minutes = parseInt(cleaned, 10);
+    } else {
+      const hours = parseInt(cleaned.slice(0, -2), 10);
+      const mins = parseInt(cleaned.slice(-2), 10);
+      minutes = hours * 60 + mins;
     }
+    return String(minutes);
   }
 
-  function checkWeatherTriggers() {
-    flights.forEach(flight => {
-      flight.triggers = flight.triggers || new Set();
-      flight.triggers.clear();
-      if (flight.phase === 'in') return;
-
-      const originWx = weatherData[flight.origin];
-      const destWx = weatherData[flight.dest];
-      const taltWx = flight.takeoffAlt ? weatherData[flight.takeoffAlt] : null;
-      const alt1Wx = flight.alt1 ? weatherData[flight.alt1] : null;
-      const alt2Wx = flight.alt2 ? weatherData[flight.alt2] : null;
-
-      if (checkOriginTrigger(originWx)) {
-        if (flight.takeoffAlt) flight.triggers.add(`${flight.origin}:origin-bold`);
-        else flight.triggers.add(`${flight.origin}:origin-red`);
-      }
-
-      const destTrigger = checkDestTrigger(destWx, flight);
-      const prevDestTrigger = flight.prevDestTrigger !== undefined ? flight.prevDestTrigger : destTrigger;
-
-      if (destTrigger) {
-        if (flight.phase === 'planned' && !flight.alt1 && !flight.alt2) {
-          flight.triggers.add(`${flight.dest}:dest-noalt`);
-        } else if (flight.phase === 'planned') {
-          flight.triggers.add(`${flight.dest}:dest`);
-        } else if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.dest}:dest-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.dest}:dest-out`);
-        }
-      }
-
-      // NEW: Client-side fallback for destination wind detection at ETA (whole hours only)
-      if (destWx && destWx.metar && destWx.metar.raw && flight.eta && flight.eta.length === 4) {
-        const metarHH = getMetarHourHH(destWx.metar.raw);
-        const etaHH = flight.eta.slice(0, 2);
-
-        // Check if METAR hour matches ETA hour exactly
-        if (metarHH === etaHH && checkWindsInMetar(destWx.metar.raw)) {
-          // Mark that this destination has a wind trigger
-          flight.hasWindTrigger = true;
-
-          // Add appropriate trigger based on phase and alternates
-          if (flight.phase === 'planned') {
-            if (!flight.alt1 && !flight.alt2) {
-              flight.triggers.add(`${flight.dest}:dest-noalt`);
-            } else {
-              flight.triggers.add(`${flight.dest}:dest`);
-            }
-          } else if (flight.phase === 'sent') {
-            flight.triggers.add(`${flight.dest}:dest-sent`);
-          } else if (flight.phase === 'out') {
-            flight.triggers.add(`${flight.dest}:dest-out`);
-          }
-        }
-      }
-
-      if (flight.phase === 'out' && destWx && destWx.metar) {
-        const metarText = destWx.metar.raw || '';
-        const worst = findWorstWeather(metarText);
-        const metarTrigger = (worst.ceiling !== null && (worst.ceiling * 100) <= 200) || 
-                            (worst.visibility !== null && worst.visibility <= 0.5);
-        if (metarTrigger) {
-          flight.triggers.add(`${flight.dest}:dest-out-metar`);
-        }
-      }
-
-      const durationMin = parseInt(flight.duration, 10);
-      const etaHHMM = flight.eta && flight.eta.length === 4 ? flight.eta : null;
-      let destTermHit = false;
-
-      if (destWx && etaHHMM) {
-        if (destWx.taf && destWx.taf.raw) {
-          const tafTextAtHour = getTafBaseTextAtEtaHour(destWx.taf.raw, etaHHMM);
-          const tafTerms = findTriggerTerms(tafTextAtHour);
-          if (tafTerms.length > 0) destTermHit = true;
-        }
-        if (!isNaN(durationMin) && durationMin < 60 && destWx.metar && destWx.metar.raw) {
-          const metarHH = getMetarHourHH(destWx.metar.raw);
-          if (metarHH && metarHH === etaHHMM.slice(0,2)) {
-            const metarTerms = findTriggerTerms(destWx.metar.raw);
-            if (metarTerms.length > 0) destTermHit = true;
-          }
-        }
-      }
-
-      if (destTermHit) {
-        flight.triggers.add(`${flight.dest}:dest-term`);
-      }
-
-      trackDestinationImprovement(flight, destWx, prevDestTrigger, destTrigger);
-      flight.prevDestTrigger = destTrigger;
-
-      if (alt1Wx && checkAlternateTrigger(alt1Wx)) {
-        if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.alt1}:alt-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.alt1}:alt-out`);
-        }
-      }
-      if (alt2Wx && checkAlternateTrigger(alt2Wx)) {
-        if (flight.phase === 'sent') {
-          flight.triggers.add(`${flight.alt2}:alt-sent`);
-        } else if (flight.phase === 'out') {
-          flight.triggers.add(`${flight.alt2}:alt-out`);
-        }
-      }
-      if (taltWx && checkTakeoffAltTrigger(taltWx)) flight.triggers.add(`${flight.takeoffAlt}:talt`);
-    });
+  function formatZuluTime(hhmm) {
+    if (!hhmm || hhmm.length !== 4) return hhmm || '';
+    return `${hhmm.slice(0,2)}:${hhmm.slice(2)}`;
   }
 
-  function checkForTriggerChanges() {
-    const newTriggers = [];
-    const clearedTriggers = [];
+  function addMinutesToZulu(hhmm, minutes) {
+    if (!hhmm || hhmm.length !== 4) return '';
+    let h = parseInt(hhmm.slice(0,2), 10);
+    let m = parseInt(hhmm.slice(2), 10);
+    m += parseInt(minutes, 10) || 0;
+    while (m >= 60) { m -= 60; h++; }
+    while (m < 0) { m += 60; h--; }
+    while (h >= 24) h -= 24;
+    while (h < 0) h += 24;
+    return pad2(h) + pad2(m);
+  }
 
-    flights.forEach(flight => {
-      if (flight.phase === 'in') return;
+  function normalizeICAO(iata) {
+    if (!iata || iata.length < 3) return iata;
+    const clean = iata.trim().toUpperCase();
+    if (clean.length === 4) return clean;
+    if (clean[0] === 'Y') return 'C' + clean;
+    return 'K' + clean;
+  }
 
-      const currentTriggers = Array.from(flight.triggers || []);
-      const flightKey = flight.flightNumber;
-      const lastTriggers = lastTriggerState.get(flightKey) || [];
+  function showToast(message, type = 'info', duration = 3000, undoCallback = null) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    const msgSpan = document.createElement('span');
+    msgSpan.textContent = message;
+    toast.appendChild(msgSpan);
+    if (undoCallback) {
+      const undoBtn = document.createElement('button');
+      undoBtn.className = 'toast-btn';
+      undoBtn.textContent = 'Undo';
+      undoBtn.addEventListener('click', () => { undoCallback(); toast.remove(); });
+      toast.appendChild(undoBtn);
+    }
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), duration);
+  }
 
-      currentTriggers.forEach(t => {
-        if (!lastTriggers.includes(t)) {
-          newTriggers.push({ flight: flightKey, trigger: t, dest: flight.dest });
-        }
+  function updateClock() {
+    const now = new Date();
+    currentTimeEl.textContent = `${pad2(now.getUTCHours())}:${pad2(now.getUTCMinutes())} UTC`;
+  }
+
+  function startClock() {
+    updateClock();
+    const now = new Date();
+    const msToNextMinute = (60 - now.getUTCSeconds()) * 1000 - now.getUTCMilliseconds();
+    setTimeout(() => { updateClock(); setInterval(updateClock, 60000); }, msToNextMinute);
+  }
+
+  function applyTheme(theme) {
+    document.body.className = theme === 'dark' ? 'theme-dark' : 'theme-light';
+    localStorage.setItem('ct_pro_theme', theme);
+  }
+
+  function getTheme() {
+    return localStorage.getItem('ct_pro_theme') || 'light';
+  }
+
+  function toggleTheme() {
+    const current = getTheme();
+    const newTheme = current === 'dark' ? 'light' : 'dark';
+    applyTheme(newTheme);
+    closeContextMenu();
+  }
+
+  function parsePastedFlights(text) {
+    const lines = text.trim().split('\n');
+    const newFlights = [];
+    let startIdx = 0;
+    if (lines.length > 0) {
+      const firstLine = lines[0].trim().split(/[\s\t]+/);
+      if (firstLine.some(word => HEADER_KEYWORDS.includes(word.toUpperCase()))) startIdx = 1;
+    }
+    for (let i = startIdx; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const parts = lines[i].trim().split(/[\s\t]+/);
+      if (parts.length < 5) continue;
+      const [flt, org, etd, dst, eta] = parts;
+      newFlights.push({
+        id: Date.now() + Math.random(),
+        flight: flt,
+        origin: normalizeICAO(org),
+        dest: normalizeICAO(dst),
+        takeoffAlt: '',
+        alt1: '',
+        alt2: '',
+        etd: normalizeTime(etd),
+        taxiOut: '',
+        burnoff: '',
+        duration: '',
+        eta: normalizeTime(eta),
+        outTime: '',
+        phase: 'planned',
+        triggers: new Set()
       });
+    }
+    return newFlights;
+  }
 
-      lastTriggers.forEach(t => {
-        if (!currentTriggers.includes(t)) {
-          clearedTriggers.push({ flight: flightKey, trigger: t, dest: flight.dest });
-        }
+  function parseRawInput(text) {
+    const lines = text.trim().split('\n');
+    const newFlights = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // Skip header lines (contain "DD", "TIME", "SQ", "ALC", "FLT", etc.)
+      if (/\b(DD|TIME|SQ|ALC|FLT|ORG|ETD|DST|ETA|A\/C|MAXTOW|CFP|MSGS|DISPATCH|WORKSHEET|DESK|page)\b/i.test(line)) {
+        continue;
+      }
+
+      // Parse the raw dispatch format
+      const parts = line.split(/\s+/);
+
+      // We need at least: DD(0) TIME(1) SQ(2) ALC(3) FLT(4) ORG(5) ETD(6) DST(7) ETA(8)
+      if (parts.length < 9) continue;
+
+      // Extract fields by position
+      const dd = parts[0];
+      const time = parts[1];
+      const sq = parts[2];
+      const alc = parts[3];
+      const flt = parts[4];
+      const org = parts[5];
+      const etd = parts[6];
+      const dst = parts[7];
+      const eta = parts[8];
+
+      // Validate that we have reasonable values
+      if (!flt || !org || !etd || !dst || !eta) continue;
+
+      // Skip if FLT looks like a header or number that's too small
+      if (isNaN(parseInt(flt, 10)) || flt.length < 3) continue;
+
+      newFlights.push({
+        id: Date.now() + Math.random(),
+        flight: flt,
+        origin: normalizeICAO(org),
+        dest: normalizeICAO(dst),
+        takeoffAlt: '',
+        alt1: '',
+        alt2: '',
+        etd: normalizeTime(etd),
+        taxiOut: '',
+        burnoff: '',
+        duration: '',
+        eta: normalizeTime(eta),
+        outTime: '',
+        phase: 'planned',
+        triggers: new Set()
       });
+    }
 
-      lastTriggerState.set(flightKey, currentTriggers);
+    return newFlights;
+  }
+
+  function saveFlights() {
+    const flightsToSave = flights.map(f => ({ ...f, triggers: Array.from(f.triggers || []) }));
+    localStorage.setItem('ct_pro_flights', JSON.stringify(flightsToSave));
+  }
+
+  function loadFlights() {
+    const saved = localStorage.getItem('ct_pro_flights');
+    if (saved) {
+      try {
+        const loaded = JSON.parse(saved);
+        flights = loaded.map(f => ({ ...f, triggers: new Set(f.triggers || []) }));
+      } catch(e) {
+        flights = [];
+      }
+    }
+  }
+
+  function getTaxiOutSuggestion(origin) {
+    const history = flights.filter(f => f.origin === origin && f.taxiOut && f.phase !== 'planned')
+      .map(f => parseInt(f.taxiOut, 10)).filter(n => !isNaN(n)).slice(-5);
+    if (history.length < 3) return '';
+    return String(Math.round(history.reduce((a,b) => a+b, 0) / history.length));
+  }
+
+  function calculateDurationAndETA(flight) {
+    if (!flight.taxiOut || !flight.burnoff) { flight.duration = ''; return; }
+    const totalMin = (parseInt(flight.taxiOut, 10) || 0) + (parseInt(flight.burnoff, 10) || 0);
+    flight.duration = String(totalMin);
+    if (flight.etd) flight.eta = addMinutesToZulu(flight.etd, totalMin);
+  }
+
+  async function fetchWeather(icaoList) {
+    if (!icaoList || !icaoList.length) return {};
+    const params = new URLSearchParams({
+      ids: icaoList.join(','),
+      ceil: '2000',
+      vis: '3',
+      metar: '1',
+      taf: '1',
+      alpha: '0',
+      filter: 'all'
     });
-
-    if (newTriggers.length > 0) {
-      showPopup('New Triggers Detected', 
-        newTriggers.map(t => `${t.flight}: ${t.trigger}`).join('<br>'),
-        'trigger');
-    }
-
-    if (clearedTriggers.length > 0) {
-      showPopup('Triggers Cleared', 
-        clearedTriggers.map(t => `${t.flight}: ${t.trigger}`).join('<br>'),
-        'cleared');
-    }
-
-    if (destinationImprovements.size > 0) {
-      const improved = Array.from(destinationImprovements);
-      showPopup('Weather Improved', 
-        `Destinations improved for: ${improved.join(', ')}`,
-        'improved');
-      destinationImprovements.clear();
-    }
-  }
-
-  function showPopup(title, message, type) {
-    const existing = document.querySelectorAll('.popup');
-    existing.forEach(p => p.remove());
-
-    const popup = document.createElement('div');
-    popup.className = 'popup';
-    popup.innerHTML = `
-      <button class="popup-close" onclick="this.parentElement.remove()">×</button>
-      <div class="popup-header">${title}</div>
-      <div class="popup-content">${message}</div>
-    `;
-    document.body.appendChild(popup);
-
-    setTimeout(() => popup.remove(), 10000);
-  }
-
-  async function fetchFlightData() {
     try {
-      const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Sheet1?key=AIzaSyDSLqri6RKgLV9vE3sO98fXHB4V-Ol7Fj4`);
-      if (!response.ok) throw new Error('Failed to fetch flight data');
-
-      const data = await response.json();
-      const rows = data.values || [];
-
-      if (rows.length < 2) {
-        updateStatus('No flight data available');
-        return;
+      const res = await fetch(`${API_URL}?${params}`, { method: 'GET', mode: 'cors' });
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      const data = await res.json();
+      lastSuccessfulUpdate = new Date();
+      errorDisplay.classList.add('hidden');
+      const hh = pad2(lastSuccessfulUpdate.getUTCHours());
+      const mm = pad2(lastSuccessfulUpdate.getUTCMinutes());
+      lastUpdateEl.textContent = `Updated: ${hh}:${mm} UTC`;
+      const lookup = {};
+      if (data.results) data.results.forEach(r => { lookup[r.icao] = r; });
+      return lookup;
+    } catch(err) {
+      if (lastSuccessfulUpdate && (Date.now() - lastSuccessfulUpdate.getTime()) > ERROR_THRESHOLD_MS) {
+        errorDisplay.classList.remove('hidden');
+        const hh = pad2(lastSuccessfulUpdate.getUTCHours());
+        const mm = pad2(lastSuccessfulUpdate.getUTCMinutes());
+        errorTimeEl.textContent = `${hh}:${mm}`;
       }
-
-      const headers = rows[0].map(h => h.toLowerCase().trim());
-      flights = [];
-
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const flight = {};
-
-        headers.forEach((header, idx) => {
-          flight[header] = row[idx] || '';
-        });
-
-        if (flight.flightnumber) {
-          flight.flightNumber = flight.flightnumber;
-          flight.phase = (flight.phase || '').toLowerCase();
-          flight.triggers = new Set();
-          flights.push(flight);
-        }
-      }
-
-      updateStatus(`Loaded ${flights.length} flights`);
-      await fetchWeatherData();
-    } catch (error) {
-      console.error('Error fetching flight data:', error);
-      updateStatus(`Error: ${error.message}`, true);
+      return weatherData;
     }
   }
 
-  async function fetchWeatherData() {
+  async function refreshWeather() {
     const icaos = new Set();
     flights.forEach(f => {
-      if (f.origin) icaos.add(f.origin);
-      if (f.dest) icaos.add(f.dest);
-      if (f.alt1) icaos.add(f.alt1);
-      if (f.alt2) icaos.add(f.alt2);
-      if (f.takeoffAlt) icaos.add(f.takeoffAlt);
+      if (f.phase !== 'in') {
+        if (f.origin) icaos.add(f.origin);
+        if (f.dest) icaos.add(f.dest);
+        if (f.takeoffAlt) icaos.add(f.takeoffAlt);
+        if (f.alt1) icaos.add(f.alt1);
+        if (f.alt2) icaos.add(f.alt2);
+      }
+    });
+    if (icaos.size === 0) return;
+    weatherData = await fetchWeather(Array.from(icaos));
+    checkWeatherTriggers();
+    renderTable();
+  }
+
+  // ===== TAF parsing =====
+  const FM_SPLIT = /\bFM\d{6}\b/;
+  const FM_FIND = /FM(\d{6})/g;
+
+  function parseTafHeader(tafText) {
+    const m = tafText.match(/\b(\d{2})(\d{2})\/(\d{2})(\d{2})\b/);
+    if (!m) return null;
+    const now = new Date();
+    const Y = now.getUTCFullYear();
+    const M = now.getUTCMonth();
+    const startDay = parseInt(m[1], 10);
+    const startHour = parseInt(m[2], 10);
+    const endDay = parseInt(m[3], 10);
+    const endHour = parseInt(m[4], 10);
+    const start = new Date(Date.UTC(Y, M, startDay, startHour, 0, 0));
+    let end = new Date(Date.UTC(Y, M, endDay, endHour === 24 ? 0 : endHour, 0, 0));
+    if (endHour === 24) end = new Date(end.getTime() + 24 * 3600 * 1000);
+    return { start, end, Y, M };
+  }
+
+  function buildTafSegments(tafRaw) {
+    const header = parseTafHeader(tafRaw);
+    if (!header) return { segments: [], start: null, end: null };
+    const { start, end, Y, M } = header;
+    const parts = tafRaw.split(FM_SPLIT);
+    const fmMatches = [...tafRaw.matchAll(FM_FIND)];
+    const fmTimeAt = (fmIndex) => {
+      const fm = fmMatches[fmIndex];
+      const d = parseInt(fm[1].slice(0, 2), 10);
+      const h = parseInt(fm[1].slice(2, 4), 10);
+      const m = parseInt(fm[1].slice(4, 6), 10);
+      return new Date(Date.UTC(Y, M, d, h, m, 0));
+    };
+    const segments = [];
+    if (parts[0]) {
+      const firstEnd = fmMatches.length ? fmTimeAt(0) : end;
+      segments.push({ start, end: firstEnd, text: parts[0] });
+    }
+    for (let i = 0; i < fmMatches.length; i++) {
+      const segStart = fmTimeAt(i);
+      const segEnd = (i + 1 < fmMatches.length) ? fmTimeAt(i + 1) : end;
+      const text = parts[i + 1] || '';
+      segments.push({ start: segStart, end: segEnd, text });
+    }
+    return { segments, start, end };
+  }
+
+  function etaToUtcDateWithinTaf(etaHHMM, tafStart, tafEnd) {
+    const h = parseInt(etaHHMM.slice(0, 2), 10);
+    const m = parseInt(etaHHMM.slice(2), 10);
+    let candidate = new Date(Date.UTC(tafStart.getUTCFullYear(), tafStart.getUTCMonth(), tafStart.getUTCDate(), h, m, 0));
+    if (candidate < tafStart) candidate = new Date(candidate.getTime() + 24 * 3600 * 1000);
+    if (candidate >= tafEnd) candidate = new Date(candidate.getTime() - 24 * 3600 * 1000);
+    if (candidate >= tafStart && candidate < tafEnd) return candidate;
+    return null;
+  }
+
+  function getTafSegmentsForWindow(tafRaw, etaHHMM) {
+    const { segments, start, end } = buildTafSegments(tafRaw);
+    if (!segments.length) return [];
+
+    const etaDate = etaToUtcDateWithinTaf(etaHHMM, start, end);
+    if (!etaDate) return [];
+
+    const windowStart = new Date(etaDate.getTime() - 60 * 60 * 1000);
+    const windowEnd = new Date(etaDate.getTime() + 60 * 60 * 1000);
+
+    return segments.filter(seg => seg.end > windowStart && seg.start < windowEnd);
+  }
+
+  // NEW: get TAF base text at the exact ETA hour (no +/- window)
+  function getTafBaseTextAtEtaHour(tafRaw, etaHHMM) {
+    const { segments, start, end } = buildTafSegments(tafRaw);
+    if (!segments.length) return '';
+
+    const etaDate = etaToUtcDateWithinTaf(etaHHMM, start, end);
+    if (!etaDate) return '';
+
+    // Consider ETA hour only (ignore minutes)
+    const hourMark = new Date(etaDate);
+    hourMark.setUTCMinutes(0, 0, 0);
+
+    const baseSeg = segments.find(seg => seg.start <= hourMark && hourMark < seg.end);
+    return baseSeg ? baseSeg.text : '';
+  }
+
+  function formatTAFPretty(raw) {
+    return raw.replace(/\s+FM(\d{6})/g, '\nFM$1').replace(/\s+TEMPO/g, '\nTEMPO').replace(/\s+BECMG/g, '\nBECMG').replace(/\s+PROB(30|40)/g, '\nPROB$1');
+  }
+
+function formatMetarForPassdown(metarRaw) {
+  // Handle "METAR KSEA METAR KSEA" with optional whitespace/newlines
+  return metarRaw.replace(/METAR\s+(\w{4})\s+METAR\s+\1/g, 'METAR $1');
+}
+
+function formatTafForPassdown(tafRaw) {
+  if (!tafRaw) return '';
+
+  // Handle "TAF KSEA TAF KSEA" with optional whitespace/newlines
+  let cleanTaf = tafRaw.replace(/TAF\s+(\w{4})\s+TAF\s+\1/g, 'TAF $1');
+
+  // Add newlines and indentation for FM and PROB lines
+  cleanTaf = cleanTaf
+    .replace(/\s+(FM\d{6})/g, '\n  $1')
+    .replace(/\s+(PROB(?:30|40))/g, '\n  $1');
+
+  // Prefix with blank line
+  return '\n' + cleanTaf;
+}
+
+
+  function findWorstWeather(text) {
+    let worstCeiling = Infinity;
+    let worstVis = Infinity;
+
+    const ceilingMatches = text.match(/\b(BKN|OVC)(\d{3})\b/g) || [];
+    ceilingMatches.forEach(m => {
+      const height = parseInt(m.slice(-3), 10);
+      if (height < worstCeiling) worstCeiling = height;
     });
 
-    if (icaos.size === 0) {
-      updateStatus('No ICAOs to fetch');
-      renderTable();
-      return;
-    }
-
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ icaos: Array.from(icaos) })
-      });
-
-      if (!response.ok) throw new Error('Backend request failed');
-
-      const data = await response.json();
-      weatherData = data.stations || {};
-
-      checkWeatherTriggers();
-      checkForTriggerChanges();
-      renderTable();
-
-      const now = new Date().toLocaleTimeString();
-      updateStatus(`Last updated: ${now} | ${flights.length} flights | ${icaos.size} stations`);
-    } catch (error) {
-      console.error('Error fetching weather:', error);
-      updateStatus(`Weather fetch error: ${error.message}`, true);
-    }
-  }
-
-  function renderTable() {
-    const container = document.getElementById('tables-container');
-    container.innerHTML = '';
-
-    const filteredFlights = flights.filter(f => {
-      if (currentFilter === 'all') return true;
-      if (currentFilter === 'triggers') return f.triggers && f.triggers.size > 0;
-      return f.phase === currentFilter;
+    const visMatches = text.match(/\b(\d+)SM\b/g) || [];
+    visMatches.forEach(m => {
+      const vis = parseInt(m, 10);
+      if (vis < worstVis) worstVis = vis;
     });
 
-    if (filteredFlights.length === 0) {
-      container.innerHTML = '<div class="loading">No flights match the current filter</div>';
-      return;
-    }
-
-    const table = document.createElement('table');
-    const thead = document.createElement('thead');
-    thead.innerHTML = `
-      <tr>
-        <th>Flight #</th>
-        <th>Origin</th>
-        <th>Origin WX</th>
-        <th>Dest</th>
-        <th>Dest WX</th>
-        <th>Alt1</th>
-        <th>Alt1 WX</th>
-        <th>Alt2</th>
-        <th>Alt2 WX</th>
-        <th>T/O Alt</th>
-        <th>T/O Alt WX</th>
-        <th>ETD</th>
-        <th>ETA</th>
-        <th>Duration</th>
-        <th>Phase</th>
-      </tr>
-    `;
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    filteredFlights.forEach(flight => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${flight.flightNumber}</td>
-        <td class="icao-cell">${renderICAO(flight, 'origin')}</td>
-        <td class="weather-cell">${renderWeather(flight, 'origin')}</td>
-        <td class="icao-cell">${renderICAO(flight, 'dest')}</td>
-        <td class="weather-cell">${renderWeather(flight, 'dest')}</td>
-        <td class="icao-cell">${renderICAO(flight, 'alt1')}</td>
-        <td class="weather-cell">${renderWeather(flight, 'alt1')}</td>
-        <td class="icao-cell">${renderICAO(flight, 'alt2')}</td>
-        <td class="weather-cell">${renderWeather(flight, 'alt2')}</td>
-        <td class="icao-cell">${renderICAO(flight, 'takeoffAlt')}</td>
-        <td class="weather-cell">${renderWeather(flight, 'takeoffAlt')}</td>
-        <td>${flight.etd || '-'}</td>
-        <td>${flight.eta || '-'}</td>
-        <td>${flight.duration || '-'}</td>
-        <td>${flight.phase}</td>
-      `;
-      tbody.appendChild(row);
-    });
-
-    table.appendChild(tbody);
-    container.appendChild(table);
-  }
-
-  function renderICAO(flight, field) {
-    const icao = flight[field];
-    if (!icao) return '-';
-
-    let html = icao;
-    let className = '';
-
-    if (field === 'origin') {
-      if (flight.triggers.has(`${icao}:origin-red`)) className = 'trigger-origin-red';
-      else if (flight.triggers.has(`${icao}:origin-bold`)) className = 'trigger-origin-bold';
-    } else if (field === 'dest') {
-      if (flight.triggers.has(`${icao}:dest-noalt`)) className = 'trigger-dest-noalt';
-      else if (flight.triggers.has(`${icao}:dest-out-metar`)) className = 'trigger-dest-out-metar';
-      else if (flight.triggers.has(`${icao}:dest`)) className = 'trigger-dest';
-      else if (flight.triggers.has(`${icao}:dest-sent`)) className = 'trigger-dest-sent';
-      else if (flight.triggers.has(`${icao}:dest-out`)) className = 'trigger-dest-out';
-      else if (flight.triggers.has(`${icao}:dest-term`)) className = 'trigger-dest-term';
-    } else if (field === 'alt1' || field === 'alt2') {
-      if (flight.triggers.has(`${icao}:alt-sent`)) className = 'trigger-alt-sent';
-      else if (flight.triggers.has(`${icao}:alt-out`)) className = 'trigger-alt-out';
-    } else if (field === 'takeoffAlt') {
-      if (flight.triggers.has(`${icao}:talt`)) className = 'trigger-talt';
-    }
-
-    if (className) {
-      html = `<span class="${className}">${html}</span>`;
-    }
-
-    if (field === 'dest' && flight.triggers.has(`${icao}:improved`)) {
-      html += ' ↑';
-    }
-
-    if (field === 'dest' && flight.triggers.has(`${icao}:dest-out-metar`)) {
-      html += ' ⚠';
-    }
-
-    // NEW: Add wind emoji if destination has high wind trigger
-    if (field === 'dest' && flight.hasWindTrigger) {
-      html += ' 🌬️';
-    }
-
-    return html;
-  }
-
-  function renderWeather(flight, field) {
-    const icao = flight[field];
-    if (!icao) return '-';
-
-    const wx = weatherData[icao];
-    if (!wx) return 'Loading...';
-
-    let html = '';
-
-    if (wx.metar) {
-      html += '<strong>METAR:</strong><br>';
-      html += wx.metar.html || wx.metar.raw || 'N/A';
-      html += '<br><br>';
-    } else {
-      html += '<strong>METAR:</strong> N/A<br><br>';
-    }
-
-    if (wx.taf) {
-      html += '<strong>TAF:</strong><br>';
-      html += wx.taf.html || wx.taf.raw || 'N/A';
-    } else {
-      html += '<strong>TAF:</strong> N/A';
-    }
-
-    return html;
-  }
-
-  function updateStatus(message, isError = false) {
-    const status = document.getElementById('status');
-    status.textContent = message;
-    status.className = isError ? 'status error' : 'status';
-  }
-
-  window.toggleFilter = function(filter) {
-    currentFilter = filter;
-
-    document.querySelectorAll('.controls button').forEach(btn => {
-      if (btn.id === `filter-${filter}`) {
-        btn.classList.add('active');
-      } else if (btn.id && btn.id.startsWith('filter-')) {
-        btn.classList.remove('active');
+    const fracVisMatches = text.match(/\b(\d+)\/(\d+)SM\b/g) || [];
+    fracVisMatches.forEach(m => {
+      const parts = m.match(/(\d+)\/(\d+)/);
+      if (parts) {
+        const vis = parseInt(parts[1], 10) / parseInt(parts[2], 10);
+        if (vis < worstVis) worstVis = vis;
       }
     });
 
-    renderTable();
-  };
-
-  window.toggleTheme = function() {
-    const body = document.body;
-    if (body.classList.contains('theme-light')) {
-      body.classList.remove('theme-light');
-      body.classList.add('theme-dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      body.classList.remove('theme-dark');
-      body.classList.add('theme-light');
-      localStorage.setItem('theme', 'light');
-    }
-  };
-
-  window.manualRefresh = function() {
-    updateStatus('Refreshing...');
-    fetchFlightData();
-  };
-
-  function startPolling() {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(fetchFlightData, POLLING_INTERVAL);
+    return { ceiling: worstCeiling === Infinity ? null : worstCeiling, visibility: worstVis === Infinity ? null : worstVis };
   }
 
-  function init() {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark') {
-      document.body.classList.remove('theme-light');
-      document.body.classList.add('theme-dark');
-    }
+  // ===== NEW: Trigger-term detection helpers =====
 
-    fetchFlightData();
-    startPolling();
+  // Return unique trigger terms found in a METAR/TAF text (token-based; respects '+SN' exact)
+  function findTriggerTerms(text) {
+    if (!text) return [];
+    const tokens = text.toUpperCase().trim().split(/\s+/);
+    const out = new Set();
+    for (const tokRaw of tokens) {
+      const tok = tokRaw.replace(/[^\+\-A-Z]/g, ''); // strip non A-Z/+/- noise
+      if (!tok) continue;
+      // Exact '+SN'
+      if (tok === '+SN') { out.add('+SN'); continue; }
+      // For other terms, ignore leading intensity sign
+      const base = tok.replace(/^[\+\-]/, '');
+      for (const term of TRIGGER_TERMS) {
+        if (term === '+SN') continue;
+        if (base === term) out.add(term);
+      }
+    }
+    return Array.from(out);
   }
 
-  init();
-})();
-  </script>
-</body>
-</html>
+  // Parse METAR hour (HH) from 'DDHHMMZ'
+  function getMetarHourHH(metarRaw) {
+    if
