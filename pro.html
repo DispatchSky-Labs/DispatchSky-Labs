@@ -1427,14 +1427,34 @@ function formatTafForPassdown(tafRaw) {
       content += escapeHtml(formatTAFPretty(wx.taf.raw));
     }
     if (!content) content = 'No weather data available';
-    modal.innerHTML = `<div class="wx-modal-header"><button class="wx-modal-close" id="closeModal">×</button></div><div class="wx-modal-body">${content}</div>`;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    const closeModal = () => overlay.remove();
-    modal.querySelector('#closeModal').addEventListener('click', closeModal);
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); }, { once: true });
+modal.innerHTML = `
+  <div class="flight-info-modal-header">
+    <div class="flight-info-modal-title">${flight.flight}</div>
+    <button class="flight-info-modal-close" id="closeModal">×</button>
+  </div>
+  <div class="flight-info-row">
+    <span class="flight-info-label">OUT Time</span>
+    <span class="flight-info-value">${outTimeDisplay}</span>
+  </div>
+  <div class="flight-info-row">
+    <span class="flight-info-label">Phase</span>
+    <span class="flight-info-value">${phaseDisplay}</span>
+  </div>
+  ${flight.phase === 'out' ? '<button class="btn btn-secondary" id="rtgBtn" style="width:100%; margin-top:12px;">RTG (Return to Gate)</button>' : ''}
+`;
   }
+
+  const rtgBtn = modal.querySelector('#rtgBtn');
+if (rtgBtn) {
+  rtgBtn.addEventListener('click', () => {
+    flights[idx].phase = 'planned';
+    flights[idx].outTime = '';
+    checkWeatherTriggers();
+    renderTable();
+    closeModal();
+    showToast(`${flights[idx].flight} returned to PLANNED phase`, 'success');
+  });
+}
 
   function showFlightInfoModal(idx) {
     const flight = flights[idx];
@@ -1512,9 +1532,25 @@ function formatTafForPassdown(tafRaw) {
       const parsed = parsePastedFlights(text);
       if (parsed.length > 0) {
         flights = parsed;
-        renderTable();
-        refreshWeather();
-        closeModal();
+// Update just the affected cells - NO WEATHER REFRESH NEEDED
+const taxiCell = document.querySelector(`[data-idx="${idx}"][data-field="taxiOut"]`);
+const burnCell = document.querySelector(`[data-idx="${idx}"][data-field="burnoff"]`);
+const durationCell = document.querySelector(`tr[data-index="${idx}"] td:nth-child(10)`);
+const etaCell = document.querySelector(`tr[data-index="${idx}"] td:nth-child(11)`);
+const actionsCell = document.querySelector(`tr[data-index="${idx}"] td:nth-child(12)`);
+
+if (taxiCell) taxiCell.textContent = formatDuration(flights[idx].taxiOut);
+if (burnCell) burnCell.textContent = formatDuration(flights[idx].burnoff);
+if (durationCell) durationCell.textContent = formatDuration(flights[idx].duration);
+if (etaCell) etaCell.textContent = formatZuluTime(flights[idx].eta);
+
+if (actionsCell && flights[idx].phase === 'sent') {
+  actionsCell.innerHTML = `<button class="btn btn-secondary action-btn" onclick="window.flightActions.markOut(${idx})">Out</button>
+    <button class="btn action-btn action-btn-remove" onclick="window.flightActions.remove(${idx})">×</button>`;
+}
+
+saveFlights();
+closeModal();
         showToast(`Loaded ${parsed.length} flights`, 'success');
       } else {
         showToast('No valid flights found', 'warning');
@@ -1928,13 +1964,29 @@ function formatTafForPassdown(tafRaw) {
       toggleTheme();
     });
 
+const clearAllItem = document.createElement('button');
+clearAllItem.className = 'context-menu-item';
+clearAllItem.textContent = 'Clear All Flights';
+clearAllItem.style.color = 'var(--danger)';
+clearAllItem.addEventListener('click', () => {
+  closeContextMenu();
+  if (confirm('Are you sure you want to clear all flights? This cannot be undone.')) {
+    flights = [];
+    weatherData = {};
+    destImprovementCache.clear();
+    renderTable();
+    showToast('All flights cleared', 'success');
+  }
+});
+    
     menu.appendChild(uploadItem);
     menu.appendChild(singleFlightItem);
     menu.appendChild(rawInputItem);
     menu.appendChild(summaryItem);
     menu.appendChild(passdownItem);
     menu.appendChild(themeItem);
-
+    menu.appendChild(clearAllItem);
+    
     document.body.appendChild(menu);
 
     const x = e.clientX || 0;
@@ -2293,9 +2345,12 @@ function formatTafForPassdown(tafRaw) {
     statTotal.textContent = flights.length;
   }
 
-  function startAutoRefresh() {
-    autoRefreshInterval = setInterval(refreshWeather, 5 * 60 * 1000);
-  }
+function startAutoRefresh() {
+  if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+  autoRefreshInterval = setInterval(() => {
+    refreshWeather();
+  }, 60 * 1000);
+}
 
   window.flightActions = {
     markSent(idx) {
