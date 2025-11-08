@@ -547,19 +547,27 @@ function formatTafForPassdown(tafRaw){
   return'\n'+cleanTaf;
 }
 function findWorstWeather(text){
+  if(!text)return{ceiling:null,visibility:null};
   let worstCeiling=Infinity;
   let worstVis=Infinity;
+  const vvMatches=text.match(/\bVV(\d{3})\b/g)||[];
+  vvMatches.forEach(m=>{
+    const height=parseInt(m.slice(2),10);
+    if(height<worstCeiling)worstCeiling=height;
+  });
   const ceilingMatches=text.match(/\b(BKN|OVC)(\d{3})\b/g)||[];
   ceilingMatches.forEach(m=>{
     const height=parseInt(m.slice(-3),10);
     if(height<worstCeiling)worstCeiling=height;
   });
-  const visMatches=text.match(/\b(\d+)SM\b/g)||[];
+  const visMatches=text.match(/\b(P?)(\d+)SM\b/g)||[];
   visMatches.forEach(m=>{
-    const vis=parseInt(m,10);
+    const pFlag=m.includes('P');
+    const vis=parseInt(m.match(/(\d+)/)[1],10);
+    if(pFlag)return;
     if(vis<worstVis)worstVis=vis;
   });
-  const fracVisMatches=text.match(/\b(\d+)\/(\d+)SM\b/g)||[];
+  const fracVisMatches=text.match(/\b(P?)(\d+)\/(\d+)SM\b/g)||[];
   fracVisMatches.forEach(m=>{
     const parts=m.match(/(\d+)\/(\d+)/);
     if(parts){
@@ -615,12 +623,12 @@ function checkDestRequiresAlternate(wx,flight){
     const etaHH=etaHHMM.slice(0,2);
     if(metarHH===etaHH){
       if(checkWindsInMetar(wx.metar.raw))return true;
+      const metarTerms=findTriggerTerms(wx.metar.raw);
+      if(metarTerms.length>0)return true;
       if(durationMin<60){
         const worst=findWorstWeather(wx.metar.raw);
         if(worst.ceiling!==null&&(worst.ceiling*100)<2000)return true;
         if(worst.visibility!==null&&worst.visibility<3)return true;
-        const metarTerms=findTriggerTerms(wx.metar.raw);
-        if(metarTerms.length>0)return true;
       }
     }
   }
@@ -670,6 +678,36 @@ function checkAlternateAtEta(wx,etaHHMM,flight){
   
   return false;
 }
+function checkAlternateAdverseWeather(wx,etaHHMM){
+  if(!wx||!etaHHMM)return false;
+  const etaHH=etaHHMM.slice(0,2);
+  
+  if(wx.metar&&wx.metar.raw){
+    const metarHH=getMetarHourHH(wx.metar.raw);
+    if(metarHH===etaHH){
+      const metarTerms=findTriggerTerms(wx.metar.raw);
+      if(metarTerms.length>0)return true;
+    }
+  }
+  
+  if(wx.taf&&wx.taf.raw){
+    const tafTextAtHour=getTafBaseTextAtEtaHour(wx.taf.raw,etaHHMM);
+    const tafTerms=findTriggerTerms(tafTextAtHour);
+    if(tafTerms.length>0)return true;
+  }
+  
+  return false;
+}
+function checkAlternateBelowApproachMins(wx,etaHHMM){
+  if(!wx||!wx.metar||!wx.metar.raw||!etaHHMM)return false;
+  const metarHH=getMetarHourHH(wx.metar.raw);
+  const etaHH=etaHHMM.slice(0,2);
+  if(metarHH!==etaHH)return false;
+  const worst=findWorstWeather(wx.metar.raw);
+  if(worst.ceiling!==null&&(worst.ceiling*100)<=600)return true;
+  if(worst.visibility!==null&&worst.visibility<=0.5)return true;
+  return false;
+}
 function checkTakeoffAltRequired(originWx,flight){
   if(!originWx||!originWx.metar||!originWx.metar.raw||!flight.etd)return false;
   const worst=findWorstWeather(originWx.metar.raw);
@@ -683,6 +721,12 @@ function checkWeatherTriggers(){
     flight.hasAdverseWeather=false;
     flight.destRequiresAlt=false;
     flight.destBelowApproachMins=false;
+    flight.alt1HasAdverseWeather=false;
+    flight.alt1BelowApproachMins=false;
+    flight.alt2HasAdverseWeather=false;
+    flight.alt2BelowApproachMins=false;
+    flight.taltHasAdverseWeather=false;
+    flight.taltBelowApproachMins=false;
     
     const originWx=weatherData[flight.origin];
     const destWx=weatherData[flight.dest];
@@ -739,14 +783,35 @@ function checkWeatherTriggers(){
       }
     }
     
-    if(alt1Wx&&etaHHMM&&checkAlternateAtEta(alt1Wx,etaHHMM,flight)){
-      flight.triggers.add(`${flight.alt1}:alt-critical`);
+    if(alt1Wx&&etaHHMM){
+      if(checkAlternateAtEta(alt1Wx,etaHHMM,flight)){
+        flight.triggers.add(`${flight.alt1}:alt-critical`);
+      }
+      flight.alt1HasAdverseWeather=checkAlternateAdverseWeather(alt1Wx,etaHHMM);
+      flight.alt1BelowApproachMins=checkAlternateBelowApproachMins(alt1Wx,etaHHMM);
+    }else{
+      flight.alt1HasAdverseWeather=false;
+      flight.alt1BelowApproachMins=false;
     }
-    if(alt2Wx&&etaHHMM&&checkAlternateAtEta(alt2Wx,etaHHMM,flight)){
-      flight.triggers.add(`${flight.alt2}:alt-critical`);
+    if(alt2Wx&&etaHHMM){
+      if(checkAlternateAtEta(alt2Wx,etaHHMM,flight)){
+        flight.triggers.add(`${flight.alt2}:alt-critical`);
+      }
+      flight.alt2HasAdverseWeather=checkAlternateAdverseWeather(alt2Wx,etaHHMM);
+      flight.alt2BelowApproachMins=checkAlternateBelowApproachMins(alt2Wx,etaHHMM);
+    }else{
+      flight.alt2HasAdverseWeather=false;
+      flight.alt2BelowApproachMins=false;
     }
-    if(taltWx&&etaHHMM&&checkAlternateAtEta(taltWx,etaHHMM,flight)){
-      flight.triggers.add(`${flight.takeoffAlt}:talt-critical`);
+    if(taltWx&&etaHHMM){
+      if(checkAlternateAtEta(taltWx,etaHHMM,flight)){
+        flight.triggers.add(`${flight.takeoffAlt}:talt-critical`);
+      }
+      flight.taltHasAdverseWeather=checkAlternateAdverseWeather(taltWx,etaHHMM);
+      flight.taltBelowApproachMins=checkAlternateBelowApproachMins(taltWx,etaHHMM);
+    }else{
+      flight.taltHasAdverseWeather=false;
+      flight.taltBelowApproachMins=false;
     }
   });
 }
@@ -1248,6 +1313,15 @@ function renderICAO(flight,field){
     if(flight.hasAdverseWeather)html+=' ⚡';
     if(flight.hasWindTrigger)html+=' 🌬️';
     if(flight.destBelowApproachMins)html+=' ⚠';
+  }else if(field==='alt1'){
+    if(flight.alt1HasAdverseWeather)html+=' ⚡';
+    if(flight.alt1BelowApproachMins)html+=' ⚠';
+  }else if(field==='alt2'){
+    if(flight.alt2HasAdverseWeather)html+=' ⚡';
+    if(flight.alt2BelowApproachMins)html+=' ⚠';
+  }else if(field==='takeoffAlt'){
+    if(flight.taltHasAdverseWeather)html+=' ⚡';
+    if(flight.taltBelowApproachMins)html+=' ⚠';
   }
   
   return html;
