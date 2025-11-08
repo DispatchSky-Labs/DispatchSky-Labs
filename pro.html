@@ -643,12 +643,19 @@ function checkAlternateAtEta(wx,etaHHMM,flight){
   const durationMin=flight?parseInt(flight.duration,10):999;
   
   if(wx.taf&&wx.taf.raw){
-    const tafSegs=getTafSegmentsForWindow(wx.taf.raw,etaHHMM);
-    const windowText=tafSegs.map(s=>s.text).join(' ');
-    if(windowText){
-      const worst=findWorstWeather(windowText);
-      if(worst.ceiling!==null&&(worst.ceiling*100)<600)return true;
-      if(worst.visibility!==null&&worst.visibility<1.5)return true;
+    const{segments,start,end}=buildTafSegments(wx.taf.raw);
+    if(segments.length>0){
+      const etaDate=etaToUtcDateWithinTaf(etaHHMM,start,end);
+      if(etaDate){
+        const hourMark=new Date(etaDate);
+        hourMark.setUTCMinutes(0,0,0);
+        const exactSeg=segments.find(seg=>seg.start<=hourMark&&hourMark<seg.end);
+        if(exactSeg&&exactSeg.text){
+          const worst=findWorstWeather(exactSeg.text);
+          if(worst.ceiling!==null&&(worst.ceiling*100)<600)return true;
+          if(worst.visibility!==null&&worst.visibility<1.5)return true;
+        }
+      }
     }
   }
   
