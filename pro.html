@@ -637,14 +637,30 @@ function checkDestBelowApproachMins(wx,etaHHMM){
   if(worst.visibility!==null&&worst.visibility<=0.5)return true;
   return false;
 }
-function checkAlternateAtEta(wx,etaHHMM){
+function checkAlternateAtEta(wx,etaHHMM,flight){
   if(!wx||!etaHHMM)return false;
-  const metarHH=getMetarHourHH(wx.metar?.raw||'');
   const etaHH=etaHHMM.slice(0,2);
-  if(metarHH!==etaHH)return false;
-  const worst=findWorstWeather(wx.metar?.raw||'');
-  if(worst.ceiling!==null&&(worst.ceiling*100)<600)return true;
-  if(worst.visibility!==null&&worst.visibility<1.5)return true;
+  const durationMin=flight?parseInt(flight.duration,10):999;
+  
+  if(wx.taf&&wx.taf.raw){
+    const tafSegs=getTafSegmentsForWindow(wx.taf.raw,etaHHMM);
+    const windowText=tafSegs.map(s=>s.text).join(' ');
+    if(windowText){
+      const worst=findWorstWeather(windowText);
+      if(worst.ceiling!==null&&(worst.ceiling*100)<600)return true;
+      if(worst.visibility!==null&&worst.visibility<1.5)return true;
+    }
+  }
+  
+  if(durationMin<60&&wx.metar&&wx.metar.raw){
+    const metarHH=getMetarHourHH(wx.metar.raw);
+    if(metarHH===etaHH){
+      const worst=findWorstWeather(wx.metar.raw);
+      if(worst.ceiling!==null&&(worst.ceiling*100)<600)return true;
+      if(worst.visibility!==null&&worst.visibility<1.5)return true;
+    }
+  }
+  
   return false;
 }
 function checkTakeoffAltRequired(originWx,flight){
@@ -716,13 +732,13 @@ function checkWeatherTriggers(){
       }
     }
     
-    if(alt1Wx&&etaHHMM&&checkAlternateAtEta(alt1Wx,etaHHMM)){
+    if(alt1Wx&&etaHHMM&&checkAlternateAtEta(alt1Wx,etaHHMM,flight)){
       flight.triggers.add(`${flight.alt1}:alt-critical`);
     }
-    if(alt2Wx&&etaHHMM&&checkAlternateAtEta(alt2Wx,etaHHMM)){
+    if(alt2Wx&&etaHHMM&&checkAlternateAtEta(alt2Wx,etaHHMM,flight)){
       flight.triggers.add(`${flight.alt2}:alt-critical`);
     }
-    if(taltWx&&etaHHMM&&checkAlternateAtEta(taltWx,etaHHMM)){
+    if(taltWx&&etaHHMM&&checkAlternateAtEta(taltWx,etaHHMM,flight)){
       flight.triggers.add(`${flight.takeoffAlt}:talt-critical`);
     }
   });
