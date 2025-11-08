@@ -22,6 +22,7 @@
     .btn:disabled{opacity:0.5;cursor:not-allowed}
     .btn-secondary{background:var(--muted)}
     .btn-success{background:var(--success)}
+    .btn-warning{background:var(--warning)}
     #errorDisplay{padding:12px 16px;background:#fef2f2;color:var(--danger);border-left:4px solid var(--danger);border-bottom:1px solid var(--border);font-weight:600;font-size:13px;flex-shrink:0}
     .theme-dark #errorDisplay{background:#7f1d1d;color:#fca5a5}
     #errorDisplay.hidden{display:none!important}
@@ -32,10 +33,13 @@
     thead{position:sticky;top:0;z-index:100}
     th{background:#f3f4f6;padding:8px 4px;text-align:left;font-weight:600;font-size:12px;border-bottom:2px solid var(--border);white-space:nowrap;user-select:none;position:relative}
     .theme-dark th{background:#1f2937}
-    th .trigger-count{color:var(--danger);font-weight:700;margin-left:4px;font-size:11px}
+    th .trigger-count{font-weight:700;margin-left:4px;font-size:11px}
+    th .trigger-count .orange-count{color:#f59e0b}
+    th .trigger-count .white-count{color:#fff;background:#dc2626;padding:1px 4px;border-radius:3px;margin-left:2px}
     td{padding:6px 4px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:12px;white-space:nowrap}
     tbody tr:hover{background:#dbeafe}
     .theme-dark tbody tr:hover{background:#1e3a5f}
+    tbody tr.faded{opacity:0.6}
     .taxi-burn-cell{font-style:italic;cursor:pointer}
     .taxi-burn-cell:hover{background:rgba(0,0,0,0.08)}
     .theme-dark .taxi-burn-cell:hover{background:rgba(255,255,255,0.08)}
@@ -48,8 +52,6 @@
     .icao-trigger{background:var(--trigger-bg);color:var(--trigger-text);font-weight:700;padding:2px 4px;border-radius:3px}
     .icao-bold{font-weight:700;color:#f59e0b}
     .icao-alt-critical{background:#dc2626;color:#fff;font-weight:700;padding:2px 4px;border-radius:3px}
-    .icao-alt-out{font-weight:700;color:#ea580c}
-    .icao-dest-out-critical{background:#dc2626;color:#fff;font-weight:700;padding:2px 4px;border-radius:3px}
     .flt-cell{cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation}
     .context-menu{position:fixed;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:3000;min-width:180px;animation:fadeIn 0.15s ease-out}
     .theme-dark .context-menu{background:#1f2937;border-color:#374151}
@@ -59,36 +61,29 @@
     .theme-dark .context-menu-item:hover{background:rgba(255,255,255,0.1)}
     .context-menu-item:first-child{border-radius:8px 8px 0 0}
     .context-menu-item:last-child{border-radius:0 0 8px 8px}
-    .context-menu-divider{height:1px;background:var(--border);margin:4px 0}
-    .wx-modal-overlay,.flight-info-modal-overlay,.upload-modal-overlay,.single-flight-modal-overlay,.taxi-burn-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:2000;animation:fadeIn 0.2s;padding:20px}
-    .upload-modal-overlay,.single-flight-modal-overlay,.taxi-burn-modal-overlay{z-index:3000}
-    .wx-modal,.flight-info-modal,.upload-modal,.single-flight-modal,.taxi-burn-modal{background:#fff;border-radius:12px;padding:20px;width:100%;max-width:700px;max-height:80vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);position:relative;animation:slideUp 0.3s ease-out}
-    .flight-info-modal,.upload-modal,.single-flight-modal,.taxi-burn-modal{max-width:500px;max-height:none;overflow-y:visible;padding:24px}
-    .flight-info-modal{max-width:400px}
-    .single-flight-modal,.taxi-burn-modal{max-width:400px}
+    .wx-modal-overlay,.upload-modal-overlay,.single-flight-modal-overlay,.taxi-burn-modal-overlay,.delay-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:2000;animation:fadeIn 0.2s;padding:20px}
+    .upload-modal-overlay,.single-flight-modal-overlay,.taxi-burn-modal-overlay,.delay-modal-overlay{z-index:3000}
+    .wx-modal,.upload-modal,.single-flight-modal,.taxi-burn-modal,.delay-modal{background:#fff;border-radius:12px;padding:20px;width:100%;max-width:700px;max-height:80vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);position:relative;animation:slideUp 0.3s ease-out}
+    .upload-modal,.single-flight-modal,.taxi-burn-modal,.delay-modal{max-width:500px;max-height:none;overflow-y:visible;padding:24px}
+    .single-flight-modal,.taxi-burn-modal,.delay-modal{max-width:400px}
     @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
-    .theme-dark .wx-modal,.theme-dark .flight-info-modal,.theme-dark .upload-modal,.theme-dark .single-flight-modal,.theme-dark .taxi-burn-modal{background:#1f2937}
-    .wx-modal-header,.flight-info-modal-header{display:flex;justify-content:flex-end;align-items:center;margin-bottom:16px}
-    .flight-info-modal-header{justify-content:space-between}
-    .wx-modal-close,.flight-info-modal-close{background:transparent;border:none;font-size:28px;cursor:pointer;color:var(--muted);padding:0;width:36px;height:36px;border-radius:6px}
-    .wx-modal-close:hover,.flight-info-modal-close:hover{background:rgba(0,0,0,0.1)}
+    .theme-dark .wx-modal,.theme-dark .upload-modal,.theme-dark .single-flight-modal,.theme-dark .taxi-burn-modal,.theme-dark .delay-modal{background:#1f2937}
+    .wx-modal-header{display:flex;justify-content:flex-end;align-items:center;margin-bottom:16px}
+    .wx-modal-close{background:transparent;border:none;font-size:28px;cursor:pointer;color:var(--muted);padding:0;width:36px;height:36px;border-radius:6px}
+    .wx-modal-close:hover{background:rgba(0,0,0,0.1)}
     .wx-modal-body{font-family:monospace;font-size:13px;line-height:1.8;white-space:pre-wrap;word-break:break-word;color:var(--fg);user-select:text;-webkit-user-select:text}
-    .flight-info-modal-title{font-size:16px;font-weight:600;color:var(--fg)}
-    .flight-info-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}
-    .flight-info-row:last-child{border-bottom:none}
-    .flight-info-label{font-weight:600;color:var(--muted);font-size:12px}
-    .flight-info-value{font-size:14px;color:var(--fg);font-family:monospace}
-    .upload-modal-title,.single-flight-modal-title,.taxi-burn-modal-title{font-size:16px;font-weight:600;margin-bottom:16px;color:var(--fg)}
-    .single-flight-modal-title,.taxi-burn-modal-title{margin-bottom:20px}
-    .upload-modal-label,.single-flight-label,.taxi-burn-label{display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--fg)}
-    .single-flight-label,.taxi-burn-label{margin-bottom:6px}
-    .upload-modal-textarea,.single-flight-input,.taxi-burn-input{width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;color:var(--fg);font-family:monospace;resize:vertical}
+    .upload-modal-title,.single-flight-modal-title,.taxi-burn-modal-title,.delay-modal-title{font-size:16px;font-weight:600;margin-bottom:16px;color:var(--fg)}
+    .single-flight-modal-title,.taxi-burn-modal-title,.delay-modal-title{margin-bottom:20px}
+    .upload-modal-label,.single-flight-label,.taxi-burn-label,.delay-modal-label{display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--fg)}
+    .single-flight-label,.taxi-burn-label,.delay-modal-label{margin-bottom:6px}
+    .upload-modal-textarea,.single-flight-input,.taxi-burn-input,.delay-modal-input{width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;color:var(--fg);font-family:monospace;resize:vertical}
     .upload-modal-textarea{min-height:200px}
-    .theme-dark .upload-modal-textarea,.theme-dark .single-flight-input,.theme-dark .taxi-burn-input{background:#111827;border-color:#374151;color:#e5e7eb}
-    .upload-modal-textarea:focus,.single-flight-input:focus,.taxi-burn-input:focus{outline:2px solid var(--brand)}
-    .upload-modal-actions,.single-flight-modal-actions,.taxi-burn-modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
-    .upload-modal-actions .btn,.single-flight-modal-actions .btn,.taxi-burn-modal-actions .btn{height:36px;padding:0 16px;font-size:13px}
-    .single-flight-form-group,.taxi-burn-form-group{margin-bottom:16px}
+    .delay-modal-input{resize:none}
+    .theme-dark .upload-modal-textarea,.theme-dark .single-flight-input,.theme-dark .taxi-burn-input,.theme-dark .delay-modal-input{background:#111827;border-color:#374151;color:#e5e7eb}
+    .upload-modal-textarea:focus,.single-flight-input:focus,.taxi-burn-input:focus,.delay-modal-input:focus{outline:2px solid var(--brand)}
+    .upload-modal-actions,.single-flight-modal-actions,.taxi-burn-modal-actions,.delay-modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
+    .upload-modal-actions .btn,.single-flight-modal-actions .btn,.taxi-burn-modal-actions .btn,.delay-modal-actions .btn{height:36px;padding:0 16px;font-size:13px}
+    .single-flight-form-group,.taxi-burn-form-group,.delay-modal-form-group{margin-bottom:16px}
     .toast{position:fixed;top:20px;right:20px;background:#111;color:#fff;padding:12px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:2000;animation:slideIn 0.3s ease-out;max-width:400px;display:flex;align-items:center;gap:12px}
     @keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
     .toast-success{background:var(--success)}
@@ -99,9 +94,6 @@
     .toast-btn:hover{background:rgba(255,255,255,0.5)}
     .loading{text-align:center;padding:40px;color:var(--muted)}
     .action-btn{padding:3px 6px;height:auto;font-size:10px;min-width:40px}
-    .action-btn-remove{background:transparent;color:var(--fg);border:1px solid var(--border)}
-    .action-btn-remove:hover{background:rgba(0,0,0,0.08)}
-    .theme-dark .action-btn-remove:hover{background:rgba(255,255,255,0.08)}
     .drag-handle{cursor:grab;padding:4px 8px;color:var(--muted);font-size:16px;user-select:none;touch-action:none}
     .drag-handle:hover{color:var(--fg)}
     .drag-handle:active{cursor:grabbing}
@@ -158,17 +150,21 @@
 'use strict';
 const API_URL="https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
 const ERROR_THRESHOLD_MS=5*60*1000;
-const HEADER_KEYWORDS=['FLT','ORG','ETD','DST','ETA','DEST','BURN','TAXI','DUR','OUT','PHASE','T/ALT','ALT1','ALT2'];
-const TRIGGER_TERMS=['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS'];
+const HEADER_KEYWORDS=['FLT','ORG','ETD','DST','ETA','DEST','BURN','TAXI','DUR','T/ALT','ALT1','ALT2'];
+const TRIGGER_TERMS=['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS','SQ'];
 const FM_SPLIT=/\bFM\d{6}\b/;
 const FM_FIND=/FM(\d{6})/g;
+const ALWAYS_ON_CHECK_INTERVAL=30*1000;
+const AUTO_REMOVE_DELAY=15*60*1000;
 
 let flights=[];
 let weatherData={};
 let lastSuccessfulUpdate=null;
 let autoRefreshInterval=null;
+let alwaysOnCheckInterval=null;
 const destImprovementCache=new Map();
 let draggedIndex=null;
+const autoRemoveTimeouts=new Map();
 
 const $=(sel)=>document.querySelector(sel);
 const $$=(sel)=>document.querySelectorAll(sel);
@@ -182,6 +178,21 @@ const statTotal=$('#statTotal');
 
 function pad2(n){return String(n).padStart(2,'0')}
 function getCurrentZulu(){const now=new Date();return `${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}`}
+function zuluToMinutes(hhmm){
+  if(!hhmm||hhmm.length!==4)return null;
+  const h=parseInt(hhmm.slice(0,2),10);
+  const m=parseInt(hhmm.slice(2),10);
+  return h*60+m;
+}
+function minutesToZulu(minutes){
+  const h=Math.floor(minutes/60)%24;
+  const m=minutes%60;
+  return pad2(h)+pad2(m);
+}
+function getCurrentZuluMinutes(){
+  const now=new Date();
+  return now.getUTCHours()*60+now.getUTCMinutes();
+}
 function normalizeTime(time){
   if(!time)return '';
   const cleaned=time.replace(/[^\d]/g,'');
@@ -258,6 +269,7 @@ function showToast(message,type='info',duration=3000,undoCallback=null){
 function updateClock(){
   const now=new Date();
   currentTimeEl.textContent=`${pad2(now.getUTCHours())}:${pad2(now.getUTCMinutes())} UTC`;
+  checkFlightTimes();
 }
 function startClock(){
   updateClock();
@@ -302,9 +314,8 @@ function parsePastedFlights(text){
       burnoff:'',
       duration:'',
       eta:normalizeTime(eta),
-      outTime:'',
-      phase:'planned',
-      triggers:new Set()
+      triggers:new Set(),
+      autoRemoveScheduled:false
     });
   }
   return newFlights;
@@ -334,9 +345,8 @@ function parseRawInput(text){
       burnoff:'',
       duration:'',
       eta:normalizeTime(eta),
-      outTime:'',
-      phase:'planned',
-      triggers:new Set()
+      triggers:new Set(),
+      autoRemoveScheduled:false
     });
   }
   return newFlights;
@@ -350,12 +360,12 @@ function loadFlights(){
   if(saved){
     try{
       const loaded=JSON.parse(saved);
-      flights=loaded.map(f=>({...f,triggers:new Set(f.triggers||[])}));
+      flights=loaded.map(f=>({...f,triggers:new Set(f.triggers||[]),autoRemoveScheduled:false}));
     }catch(e){flights=[]}
   }
 }
 function getTaxiOutSuggestion(origin){
-  const history=flights.filter(f=>f.origin===origin&&f.taxiOut&&f.phase!=='planned').map(f=>parseInt(f.taxiOut,10)).filter(n=>!isNaN(n)).slice(-5);
+  const history=flights.filter(f=>f.origin===origin&&f.taxiOut).map(f=>parseInt(f.taxiOut,10)).filter(n=>!isNaN(n)).slice(-5);
   if(history.length<3)return '';
   return String(Math.round(history.reduce((a,b)=>a+b,0)/history.length));
 }
@@ -401,13 +411,11 @@ async function fetchWeather(icaoList){
 async function refreshWeather(){
   const icaos=new Set();
   flights.forEach(f=>{
-    if(f.phase!=='in'){
-      if(f.origin)icaos.add(f.origin);
-      if(f.dest)icaos.add(f.dest);
-      if(f.takeoffAlt)icaos.add(f.takeoffAlt);
-      if(f.alt1)icaos.add(f.alt1);
-      if(f.alt2)icaos.add(f.alt2);
-    }
+    if(f.origin)icaos.add(f.origin);
+    if(f.dest)icaos.add(f.dest);
+    if(f.takeoffAlt)icaos.add(f.takeoffAlt);
+    if(f.alt1)icaos.add(f.alt1);
+    if(f.alt2)icaos.add(f.alt2);
   });
   if(icaos.size===0)return;
   weatherData=await fetchWeather(Array.from(icaos));
@@ -582,74 +590,141 @@ function getMetarHourHH(metarRaw){
   const m=metarRaw.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
   return m?m[2]:null;
 }
+function checkDestRequiresAlternate(wx,flight){
+  if(!wx||!flight.eta)return false;
+  const etaHHMM=flight.eta&&flight.eta.length===4?flight.eta:null;
+  if(!etaHHMM)return false;
+  const durationMin=parseInt(flight.duration,10);
+  
+  const tafSegs=getTafSegmentsForWindow(wx.taf?.raw||'',etaHHMM);
+  const windowText=tafSegs.map(s=>s.text).join(' ');
+  if(windowText){
+    const worst=findWorstWeather(windowText);
+    if(worst.ceiling!==null&&(worst.ceiling*100)<2000)return true;
+    if(worst.visibility!==null&&worst.visibility<3)return true;
+  }
+  
+  if(wx.taf&&wx.taf.raw){
+    const tafTextAtHour=getTafBaseTextAtEtaHour(wx.taf.raw,etaHHMM);
+    const tafTerms=findTriggerTerms(tafTextAtHour);
+    if(tafTerms.length>0)return true;
+  }
+  
+  if(wx.metar&&wx.metar.raw){
+    const metarHH=getMetarHourHH(wx.metar.raw);
+    const etaHH=etaHHMM.slice(0,2);
+    if(metarHH===etaHH){
+      if(checkWindsInMetar(wx.metar.raw))return true;
+      if(durationMin<60){
+        const worst=findWorstWeather(wx.metar.raw);
+        if(worst.ceiling!==null&&(worst.ceiling*100)<2000)return true;
+        if(worst.visibility!==null&&worst.visibility<3)return true;
+        const metarTerms=findTriggerTerms(wx.metar.raw);
+        if(metarTerms.length>0)return true;
+      }
+    }
+  }
+  
+  return false;
+}
+function checkDestBelowApproachMins(wx,etaHHMM){
+  if(!wx||!wx.metar||!wx.metar.raw||!etaHHMM)return false;
+  const metarHH=getMetarHourHH(wx.metar.raw);
+  const etaHH=etaHHMM.slice(0,2);
+  if(metarHH!==etaHH)return false;
+  const worst=findWorstWeather(wx.metar.raw);
+  if(worst.ceiling!==null&&(worst.ceiling*100)<=200)return true;
+  if(worst.visibility!==null&&worst.visibility<=0.5)return true;
+  return false;
+}
+function checkAlternateAtEta(wx,etaHHMM){
+  if(!wx||!etaHHMM)return false;
+  const metarHH=getMetarHourHH(wx.metar?.raw||'');
+  const etaHH=etaHHMM.slice(0,2);
+  if(metarHH!==etaHH)return false;
+  const worst=findWorstWeather(wx.metar?.raw||'');
+  if(worst.ceiling!==null&&(worst.ceiling*100)<600)return true;
+  if(worst.visibility!==null&&worst.visibility<1.5)return true;
+  return false;
+}
+function checkTakeoffAltRequired(originWx,flight){
+  if(!originWx||!originWx.metar||!originWx.metar.raw||!flight.etd)return false;
+  const worst=findWorstWeather(originWx.metar.raw);
+  if(worst.visibility!==null&&worst.visibility<1)return true;
+  return false;
+}
 function checkWeatherTriggers(){
   flights.forEach(flight=>{
     flight.triggers.clear();
-    if(flight.phase==='in')return;
+    flight.hasWindTrigger=false;
+    flight.hasAdverseWeather=false;
+    flight.destRequiresAlt=false;
+    flight.destBelowApproachMins=false;
+    
     const originWx=weatherData[flight.origin];
     const destWx=weatherData[flight.dest];
     const taltWx=flight.takeoffAlt?weatherData[flight.takeoffAlt]:null;
     const alt1Wx=flight.alt1?weatherData[flight.alt1]:null;
     const alt2Wx=flight.alt2?weatherData[flight.alt2]:null;
-    if(checkOriginTrigger(originWx)){
-      if(flight.takeoffAlt)flight.triggers.add(`${flight.origin}:origin-bold`);
-      else flight.triggers.add(`${flight.origin}:origin-red`);
-    }
-    const destTrigger=checkDestTrigger(destWx,flight);
-    const prevDestTrigger=flight.prevDestTrigger!==undefined?flight.prevDestTrigger:destTrigger;
-    if(destTrigger){
-      if(flight.phase==='planned'&&!flight.alt1&&!flight.alt2)flight.triggers.add(`${flight.dest}:dest-noalt`);
-      else if(flight.phase==='planned')flight.triggers.add(`${flight.dest}:dest`);
-      else if(flight.phase==='sent')flight.triggers.add(`${flight.dest}:dest-sent`);
-      else if(flight.phase==='out')flight.triggers.add(`${flight.dest}:dest-out`);
-    }
-    if(flight.phase==='out'&&destWx&&destWx.metar){
-      const metarText=destWx.metar.raw||'';
-      const worst=findWorstWeather(metarText);
-      const metarTrigger=(worst.ceiling!==null&&(worst.ceiling*100)<=200)||(worst.visibility!==null&&worst.visibility<=0.5);
-      if(metarTrigger)flight.triggers.add(`${flight.dest}:dest-out-metar`);
-    }
-    const durationMin=parseInt(flight.duration,10);
+    
     const etaHHMM=flight.eta&&flight.eta.length===4?flight.eta:null;
-    let destTermHit=false;
+    const etdHHMM=flight.etd&&flight.etd.length===4?flight.etd:null;
+    const currentMinutes=getCurrentZuluMinutes();
+    const etdMinutes=etdHHMM?zuluToMinutes(etdHHMM):null;
+    const minutesPastEtd=etdMinutes!==null?currentMinutes-etdMinutes:null;
+    
+    flight.destRequiresAlt=checkDestRequiresAlternate(destWx,flight);
+    flight.destBelowApproachMins=destWx&&etaHHMM?checkDestBelowApproachMins(destWx,etaHHMM):false;
+    
+    if(flight.destRequiresAlt){
+      if(!flight.alt1&&!flight.alt2)flight.triggers.add(`${flight.dest}:dest-noalt`);
+      else flight.triggers.add(`${flight.dest}:dest`);
+    }
+    
+    if(flight.destBelowApproachMins)flight.triggers.add(`${flight.dest}:dest-approach-mins`);
+    
     if(destWx&&etaHHMM){
-      if(destWx.taf&&destWx.taf.raw){
-        const tafTextAtHour=getTafBaseTextAtEtaHour(destWx.taf.raw,etaHHMM);
-        const tafTerms=findTriggerTerms(tafTextAtHour);
-        if(tafTerms.length>0)destTermHit=true;
-      }
-      if(!isNaN(durationMin)&&durationMin<60&&destWx.metar&&destWx.metar.raw){
-        const metarHH=getMetarHourHH(destWx.metar.raw);
-        if(metarHH&&metarHH===etaHHMM.slice(0,2)){
+      const metarHH=getMetarHourHH(destWx.metar?.raw||'');
+      const etaHH=etaHHMM.slice(0,2);
+      if(metarHH===etaHH){
+        if(checkWindsInMetar(destWx.metar.raw))flight.hasWindTrigger=true;
+        if(destWx.taf&&destWx.taf.raw){
+          const tafTextAtHour=getTafBaseTextAtEtaHour(destWx.taf.raw,etaHHMM);
+          const tafTerms=findTriggerTerms(tafTextAtHour);
+          if(tafTerms.length>0)flight.hasAdverseWeather=true;
+        }
+        if(!flight.hasAdverseWeather&&destWx.metar&&destWx.metar.raw){
           const metarTerms=findTriggerTerms(destWx.metar.raw);
-          if(metarTerms.length>0)destTermHit=true;
+          if(metarTerms.length>0)flight.hasAdverseWeather=true;
         }
       }
     }
-    if(destTermHit)flight.triggers.add(`${flight.dest}:dest-term`);
-    if(destWx&&destWx.metar&&destWx.metar.raw&&etaHHMM){
-      const metarHH=getMetarHourHH(destWx.metar.raw);
-      const etaHH=etaHHMM.slice(0,2);
-      if(metarHH===etaHH&&checkWindsInMetar(destWx.metar.raw)){
-        flight.hasWindTrigger=true;
-        if(flight.phase==='planned'){
-          if(!flight.alt1&&!flight.alt2)flight.triggers.add(`${flight.dest}:dest-noalt`);
-          else flight.triggers.add(`${flight.dest}:dest`);
-        }else if(flight.phase==='sent')flight.triggers.add(`${flight.dest}:dest-sent`);
-        else if(flight.phase==='out')flight.triggers.add(`${flight.dest}:dest-out`);
+    
+    const prevDestTrigger=flight.prevDestTrigger!==undefined?flight.prevDestTrigger:flight.destRequiresAlt;
+    trackDestinationImprovement(flight,destWx,prevDestTrigger,flight.destRequiresAlt);
+    flight.prevDestTrigger=flight.destRequiresAlt;
+    
+    if(checkTakeoffAltRequired(originWx,flight)){
+      if(minutesPastEtd===null||minutesPastEtd<0){
+        if(!flight.takeoffAlt)flight.triggers.add(`${flight.origin}:origin-red`);
+        else flight.triggers.add(`${flight.origin}:origin-bold`);
+      }else if(minutesPastEtd>=15){
+        flight.triggers.add(`${flight.origin}:origin-bold`);
+      }else{
+        if(!flight.takeoffAlt)flight.triggers.add(`${flight.origin}:origin-red`);
+        else flight.triggers.add(`${flight.origin}:origin-bold`);
       }
     }
-    trackDestinationImprovement(flight,destWx,prevDestTrigger,destTrigger);
-    flight.prevDestTrigger=destTrigger;
-    if(alt1Wx&&checkAlternateTrigger(alt1Wx,flight)){
-      if(flight.phase==='sent')flight.triggers.add(`${flight.alt1}:alt-sent`);
-      else if(flight.phase==='out')flight.triggers.add(`${flight.alt1}:alt-out`);
+    
+    if(alt1Wx&&etaHHMM&&checkAlternateAtEta(alt1Wx,etaHHMM)){
+      flight.triggers.add(`${flight.alt1}:alt-critical`);
     }
-    if(alt2Wx&&checkAlternateTrigger(alt2Wx,flight)){
-      if(flight.phase==='sent')flight.triggers.add(`${flight.alt2}:alt-sent`);
-      else if(flight.phase==='out')flight.triggers.add(`${flight.alt2}:alt-out`);
+    if(alt2Wx&&etaHHMM&&checkAlternateAtEta(alt2Wx,etaHHMM)){
+      flight.triggers.add(`${flight.alt2}:alt-critical`);
     }
-    if(taltWx&&checkTakeoffAltTrigger(taltWx))flight.triggers.add(`${flight.takeoffAlt}:talt`);
+    if(taltWx&&etaHHMM&&checkAlternateAtEta(taltWx,etaHHMM)){
+      flight.triggers.add(`${flight.takeoffAlt}:talt-critical`);
+    }
   });
 }
 function trackDestinationImprovement(flight,destWx,prevTrigger,currentTrigger){
@@ -663,67 +738,14 @@ function trackDestinationImprovement(flight,destWx,prevTrigger,currentTrigger){
     return;
   }
   if(cached.issueTime===currentIssueTime){
-    if(cached.showIndicator)flight.triggers.add(`${flight.dest}:improved`);
+    if(cached.showIndicator&&!currentTrigger)flight.triggers.add(`${flight.dest}:improved`);
     return;
   }
   const improved=prevTrigger&&!currentTrigger;
   destImprovementCache.set(cacheKey,{issueTime:currentIssueTime,showIndicator:improved,wasTriggered:currentTrigger});
   if(improved)flight.triggers.add(`${flight.dest}:improved`);
 }
-function checkOriginTrigger(wx){
-  if(!wx||!wx.metar)return false;
-  const metarText=wx.metar.raw||'';
-  const worst=findWorstWeather(metarText);
-  if(worst.visibility!==null&&worst.visibility<0.5)return true;
-  return false;
-}
-function checkDestTrigger(wx,flight){
-  if(!wx||!flight.eta)return false;
-  const duration=parseInt(flight.duration,10)||999;
-  if(wx.taf&&wx.taf.raw){
-    const segs=getTafSegmentsForWindow(wx.taf.raw,flight.eta);
-    const windowText=segs.map(s=>s.text).join(' ');
-    if(windowText){
-      const worst=findWorstWeather(windowText);
-      if(worst.ceiling!==null&&(worst.ceiling*100)<2000)return true;
-      if(worst.visibility!==null&&worst.visibility<3)return true;
-    }
-  }
-  if(duration<60&&wx.metar){
-    const worst=findWorstWeather(wx.metar.raw||'');
-    if(worst.ceiling!==null&&(worst.ceiling*100)<2000)return true;
-    if(worst.visibility!==null&&worst.visibility<3)return true;
-  }
-  return false;
-}
-function checkAlternateTrigger(wx,flight){
-  if(!wx)return false;
-  const duration=parseInt(flight.duration,10)||999;
-  if(wx.taf&&wx.taf.raw&&flight.eta){
-    const segs=getTafSegmentsForWindow(wx.taf.raw,flight.eta);
-    const windowText=segs.map(s=>s.text).join(' ');
-    if(windowText){
-      const worst=findWorstWeather(windowText);
-      if(worst.ceiling!==null&&(worst.ceiling*100)<600)return true;
-      if(worst.visibility!==null&&worst.visibility<1.5)return true;
-    }
-  }
-  if(duration<60&&wx.metar){
-    const worst=findWorstWeather(wx.metar.raw||'');
-    if(worst.ceiling!==null&&(worst.ceiling*100)<600)return true;
-    if(worst.visibility!==null&&worst.visibility<1.5)return true;
-  }
-  return false;
-}
-function checkTakeoffAltTrigger(wx){
-  if(!wx||!wx.metar)return false;
-  const metarText=wx.metar.raw||'';
-  const worst=findWorstWeather(metarText);
-  if(worst.ceiling!==null&&(worst.ceiling*100)<6000)return true;
-  if(worst.visibility!==null&&worst.visibility<1.5)return true;
-  return false;
-}
-function getMetarIndicators(icao,phase){
+function getMetarIndicators(icao){
   if(!icao)return'';
   const wx=weatherData[icao];
   if(!wx)return'';
@@ -753,22 +775,6 @@ function showWeatherModal(icao){
   }
   if(!content)content='No weather data available';
   modal.innerHTML=`<div class="wx-modal-header"><button class="wx-modal-close" id="closeModal">×</button></div><div class="wx-modal-body">${content}</div>`;
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-  const closeModal=()=>overlay.remove();
-  modal.querySelector('#closeModal').addEventListener('click',closeModal);
-  overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal()});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()},{once:true});
-}
-function showFlightInfoModal(idx){
-  const flight=flights[idx];
-  const overlay=document.createElement('div');
-  overlay.className='flight-info-modal-overlay';
-  const modal=document.createElement('div');
-  modal.className='flight-info-modal';
-  const outTimeDisplay=flight.outTime?formatZuluTime(flight.outTime):'—';
-  const phaseDisplay=flight.phase.toUpperCase();
-  modal.innerHTML=`<div class="flight-info-modal-header"><div class="flight-info-modal-title">${flight.flight}</div><button class="flight-info-modal-close" id="closeModal">×</button></div><div class="flight-info-row"><span class="flight-info-label">OUT Time</span><span class="flight-info-value">${outTimeDisplay}</span></div><div class="flight-info-row"><span class="flight-info-label">Phase</span><span class="flight-info-value">${phaseDisplay}</span></div>`;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   const closeModal=()=>overlay.remove();
@@ -832,7 +838,7 @@ function showSingleFlightModal(){
     const etd=etdInput.value.trim();
     const eta=etaInput.value.trim();
     if(!flt||!org||!dest||!etd||!eta){showToast('Please fill in all fields','warning');return}
-    const newFlight={id:Date.now()+Math.random(),flight:flt,origin:normalizeICAO(org),dest:normalizeICAO(dest),takeoffAlt:'',alt1:'',alt2:'',etd:normalizeTime(etd),taxiOut:'',burnoff:'',duration:'',eta:normalizeTime(eta),outTime:'',phase:'planned',triggers:new Set()};
+    const newFlight={id:Date.now()+Math.random(),flight:flt,origin:normalizeICAO(org),dest:normalizeICAO(dest),takeoffAlt:'',alt1:'',alt2:'',etd:normalizeTime(etd),taxiOut:'',burnoff:'',duration:'',eta:normalizeTime(eta),triggers:new Set(),autoRemoveScheduled:false};
     flights.unshift(newFlight);
     renderTable();
     refreshWeather();
@@ -908,9 +914,6 @@ function showTaxiBurnModal(idx){
       flights[idx].taxiOut=getTaxiOutSuggestion(flights[idx].origin);
     }
     calculateDurationAndETA(flights[idx]);
-    if((flights[idx].burnoff||flights[idx].taxiOut)&&flights[idx].taxiOut&&flights[idx].burnoff&&flights[idx].phase==='planned'){
-      flights[idx].phase='sent';
-    }
     renderTable();
     refreshWeather();
     closeModal();
@@ -924,6 +927,88 @@ function showTaxiBurnModal(idx){
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()},{once:true});
   taxiOutInput.focus();
   taxiOutInput.select();
+}
+function showDelayModal(idx){
+  const flight=flights[idx];
+  const overlay=document.createElement('div');
+  overlay.className='delay-modal-overlay';
+  const modal=document.createElement('div');
+  modal.className='delay-modal';
+  const title=`Delay ${flight.flight}`;
+  modal.innerHTML=`<div class="delay-modal-title">${title}</div><div class="delay-modal-form-group"><label class="delay-modal-label">Remaining flight time (minutes)</label><input type="text" id="delayInput" class="delay-modal-input" placeholder="e.g., 240"></div><div class="delay-modal-actions"><button class="btn btn-secondary" id="delayCancelBtn">Cancel</button><button class="btn btn-success" id="delaySubmitBtn">Update ETA</button></div>`;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const delayInput=modal.querySelector('#delayInput');
+  const cancelBtn=modal.querySelector('#delayCancelBtn');
+  const submitBtn=modal.querySelector('#delaySubmitBtn');
+  const closeModal=()=>overlay.remove();
+  const submit=()=>{
+    const delayValue=delayInput.value.trim();
+    if(!delayValue){showToast('Please enter remaining flight time','warning');return}
+    const minutes=parseInt(parseDurationInput(delayValue),10);
+    if(isNaN(minutes)||minutes<=0){showToast('Please enter a valid number of minutes','warning');return}
+    const currentMinutes=getCurrentZuluMinutes();
+    const newEtaMinutes=(currentMinutes+minutes)%(24*60);
+    flights[idx].eta=minutesToZulu(newEtaMinutes);
+    flights[idx].isPastEta=false;
+    flights[idx].minutesPastEta=0;
+    if(flights[idx].autoRemoveScheduled){
+      const timeoutId=autoRemoveTimeouts.get(flights[idx].id);
+      if(timeoutId)clearTimeout(timeoutId);
+      autoRemoveTimeouts.delete(flights[idx].id);
+      flights[idx].autoRemoveScheduled=false;
+    }
+    renderTable();
+    closeModal();
+    showToast(`ETA updated to ${formatZuluTime(flights[idx].eta)}`,'success');
+  };
+  delayInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submit()}});
+  cancelBtn.addEventListener('click',closeModal);
+  submitBtn.addEventListener('click',submit);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()},{once:true});
+  delayInput.focus();
+  delayInput.select();
+}
+function checkFlightTimes(){
+  flights.forEach(flight=>{
+    if(!flight.eta)return;
+    const etaMinutes=zuluToMinutes(flight.eta);
+    if(etaMinutes===null)return;
+    const currentMinutes=getCurrentZuluMinutes();
+    let diff=etaMinutes-currentMinutes;
+    if(diff<-12*60)diff+=24*60;
+    else if(diff>12*60)diff-=24*60;
+    
+    if(diff<0){
+      flight.isPastEta=true;
+      flight.minutesPastEta=Math.abs(diff);
+      if(flight.minutesPastEta>=30&&!flight.autoRemoveScheduled){
+        flight.autoRemoveScheduled=true;
+        const delayBeforeRemove=Math.max(0,AUTO_REMOVE_DELAY-(flight.minutesPastEta-30)*60*1000);
+        const timeoutId=setTimeout(()=>{
+          const idx=flights.findIndex(f=>f.id===flight.id);
+          if(idx>=0){
+            flights.splice(idx,1);
+            autoRemoveTimeouts.delete(flight.id);
+            renderTable();
+            showToast(`Flight ${flight.flight} auto-removed`,'info');
+          }
+        },delayBeforeRemove);
+        autoRemoveTimeouts.set(flight.id,timeoutId);
+      }
+    }else{
+      flight.isPastEta=false;
+      flight.minutesPastEta=0;
+      if(flight.autoRemoveScheduled){
+        const timeoutId=autoRemoveTimeouts.get(flight.id);
+        if(timeoutId)clearTimeout(timeoutId);
+        autoRemoveTimeouts.delete(flight.id);
+        flight.autoRemoveScheduled=false;
+      }
+    }
+  });
+  renderTable();
 }
 function closeContextMenu(){
   const existing=$('.context-menu');
@@ -1010,20 +1095,38 @@ headerTitle.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();
 headerTitle.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();showContextMenu(e)});
 function updateTriggerCounts(){
   const columnTriggerCounts={flight:0,origin:0,dest:0,takeoffAlt:0,alt1:0,alt2:0,etd:0,taxiOut:0,burnoff:0,duration:0,eta:0,actions:0};
+  const orangeCounts={flight:0,origin:0,dest:0,takeoffAlt:0,alt1:0,alt2:0,etd:0,taxiOut:0,burnoff:0,duration:0,eta:0,actions:0};
+  const whiteCounts={flight:0,origin:0,dest:0,takeoffAlt:0,alt1:0,alt2:0,etd:0,taxiOut:0,burnoff:0,duration:0,eta:0,actions:0};
+  
   flights.forEach(flight=>{
     if(flight.triggers.size>0){
-      if(flight.triggers.has(`${flight.origin}:origin-red`)||flight.triggers.has(`${flight.origin}:origin-bold`))columnTriggerCounts.origin++;
-      if(flight.triggers.has(`${flight.dest}:dest`)||flight.triggers.has(`${flight.dest}:dest-noalt`)||flight.triggers.has(`${flight.dest}:dest-sent`)||flight.triggers.has(`${flight.dest}:dest-out`)||flight.triggers.has(`${flight.dest}:dest-out-metar`)||flight.triggers.has(`${flight.dest}:improved`)||flight.triggers.has(`${flight.dest}:dest-term`))columnTriggerCounts.dest++;
-      if(flight.triggers.has(`${flight.takeoffAlt}:talt`))columnTriggerCounts.takeoffAlt++;
-      if(flight.triggers.has(`${flight.alt1}:alt-sent`)||flight.triggers.has(`${flight.alt1}:alt-out`))columnTriggerCounts.alt1++;
-      if(flight.triggers.has(`${flight.alt2}:alt-sent`)||flight.triggers.has(`${flight.alt2}:alt-out`))columnTriggerCounts.alt2++;
+      if(flight.triggers.has(`${flight.origin}:origin-red`)){whiteCounts.origin++;columnTriggerCounts.origin++}
+      else if(flight.triggers.has(`${flight.origin}:origin-bold`)){orangeCounts.origin++;columnTriggerCounts.origin++}
+      
+      if(flight.triggers.has(`${flight.dest}:dest-noalt`)){whiteCounts.dest++;columnTriggerCounts.dest++}
+      else if(flight.triggers.has(`${flight.dest}:dest`)||flight.triggers.has(`${flight.dest}:dest-approach-mins`)){orangeCounts.dest++;columnTriggerCounts.dest++}
+      
+      if(flight.triggers.has(`${flight.takeoffAlt}:talt-critical`)){whiteCounts.takeoffAlt++;columnTriggerCounts.takeoffAlt++}
+      
+      if(flight.triggers.has(`${flight.alt1}:alt-critical`)){whiteCounts.alt1++;columnTriggerCounts.alt1++}
+      if(flight.triggers.has(`${flight.alt2}:alt-critical`)){whiteCounts.alt2++;columnTriggerCounts.alt2++}
     }
   });
+  
   $$('th .trigger-count').forEach(span=>{
     const col=span.dataset.col;
-    const count=columnTriggerCounts[col];
-    if(count>0){span.textContent=count;span.style.display='inline'}
-    else{span.textContent='';span.style.display='none'}
+    const orange=orangeCounts[col]||0;
+    const white=whiteCounts[col]||0;
+    if(orange>0||white>0){
+      let html='';
+      if(orange>0)html+=`<span class="orange-count">${orange}</span>`;
+      if(white>0)html+=`<span class="white-count">${white}</span>`;
+      span.innerHTML=html;
+      span.style.display='inline';
+    }else{
+      span.innerHTML='';
+      span.style.display='none';
+    }
   });
 }
 function renderTable(){
@@ -1038,8 +1141,11 @@ function renderTable(){
     const row=document.createElement('tr');
     row.draggable=true;
     row.dataset.index=actualIdx;
-    if(flight.phase==='in')row.classList.add('phase-done');
-    row.innerHTML=`<td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight,'origin')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight,'dest')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt||''}">${renderICAO(flight,'takeoffAlt')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1||''}">${renderICAO(flight,'alt1')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2||''}">${renderICAO(flight,'alt2')}</td><td class="editable" data-idx="${actualIdx}" data-field="etd">${flight.etd}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td><td>${formatDuration(flight.duration)}</td><td>${formatZuluTime(flight.eta)}</td><td style="white-space:nowrap;">${flight.phase==='planned'?`<button class="btn btn-secondary action-btn" onclick="window.flightActions.markSent(${actualIdx})">Sent</button>`:''}${flight.phase==='sent'?`<button class="btn btn-secondary action-btn" onclick="window.flightActions.markOut(${actualIdx})">Out</button>`:''}<button class="btn action-btn action-btn-remove" onclick="window.flightActions.remove(${actualIdx})">×</button></td><td><span class="drag-handle">⋮⋮</span></td>`;
+    if(flight.isPastEta)row.classList.add('faded');
+    
+    const actionsHtml=flight.isPastEta?`<button class="btn btn-warning action-btn" onclick="window.flightActions.delay(${actualIdx})">Delay</button>`:'';
+    
+    row.innerHTML=`<td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight,'origin')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight,'dest')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt||''}">${renderICAO(flight,'takeoffAlt')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1||''}">${renderICAO(flight,'alt1')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2||''}">${renderICAO(flight,'alt2')}</td><td class="editable" data-idx="${actualIdx}" data-field="etd">${formatZuluTime(flight.etd)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td><td>${formatDuration(flight.duration)}</td><td>${formatZuluTime(flight.eta)}</td><td style="white-space:nowrap;">${actionsHtml}</td><td><span class="drag-handle">⋮⋮</span></td>`;
     row.addEventListener('dragstart',handleDragStart);
     row.addEventListener('dragend',handleDragEnd);
     row.addEventListener('dragover',handleDragOver);
@@ -1091,70 +1197,41 @@ function renderICAO(flight,field){
   const icao=flight[field];
   if(!icao)return['takeoffAlt','alt1','alt2'].includes(field)?'—':'';
   let triggerType=null;
-  const wx=weatherData[icao];
+  
   if(field==='origin'){
     if(flight.triggers.has(`${icao}:origin-red`))triggerType='red';
     else if(flight.triggers.has(`${icao}:origin-bold`))triggerType='bold';
   }else if(field==='dest'){
-    if(flight.phase==='out'){
-      if(flight.triggers.has(`${icao}:dest-out-metar`))triggerType='dest-out-critical';
+    if(flight.triggers.has(`${icao}:improved`)){
+      triggerType=null;
     }else{
-      const hasTrigger=flight.triggers.has(`${icao}:dest`)||flight.triggers.has(`${icao}:dest-noalt`)||flight.triggers.has(`${icao}:dest-sent`);
-      if(flight.phase==='planned'){
-        if(flight.triggers.has(`${icao}:dest-noalt`))triggerType='red';
-        else if(hasTrigger)triggerType='bold';
-      }else if(flight.phase==='sent'){
-        if(wx&&wx.metar){
-          const worst=findWorstWeather(wx.metar.raw||'');
-          const metarTrigger=(worst.ceiling!==null&&(worst.ceiling*100)<2000)||(worst.visibility!==null&&worst.visibility<3);
-          if(metarTrigger){
-            if(!flight.alt1&&!flight.alt2)triggerType='red';
-            else triggerType='bold';
-          }
-        }
-      }
-    }
-    if(flight.triggers.has(`${icao}:dest-term`)&&triggerType!=='dest-out-critical'){
-      if(!flight.alt1&&!flight.alt2)triggerType='red';
-      else triggerType='bold';
+      if(flight.triggers.has(`${icao}:dest-noalt`))triggerType='red';
+      else if(flight.triggers.has(`${icao}:dest`)||flight.triggers.has(`${icao}:dest-approach-mins`))triggerType='bold';
     }
   }else if(field==='takeoffAlt'){
-    if(flight.triggers.has(`${icao}:talt`))triggerType=(flight.phase==='planned'?'red':'bold');
+    if(flight.triggers.has(`${icao}:talt-critical`))triggerType='red';
   }else if(field==='alt1'||field==='alt2'){
-    if(flight.triggers.has(`${icao}:alt-sent`))triggerType='alt-critical';
-    else if(flight.triggers.has(`${icao}:alt-out`))triggerType='alt-out';
+    if(flight.triggers.has(`${icao}:alt-critical`))triggerType='red';
   }
+  
   let html=icao;
   if(triggerType==='red')html=`<span class="icao-trigger">${icao}</span>`;
   else if(triggerType==='bold')html=`<span class="icao-bold">${icao}</span>`;
-  else if(triggerType==='alt-critical')html=`<span class="icao-alt-critical">${icao}</span>`;
-  else if(triggerType==='alt-out')html=`<span class="icao-alt-out">${icao}</span>`;
-  else if(triggerType==='dest-out-critical')html=`<span class="icao-dest-out-critical">${icao}</span>`;
-  html+=getMetarIndicators(icao,flight.phase);
-  if(field==='dest'&&flight.triggers.has(`${icao}:dest-term`))html+=' ⚡';
-  if(field==='dest'&&flight.triggers.has(`${icao}:improved`))html+=' ↑';
-  if(field==='dest'&&flight.triggers.has(`${icao}:dest-out-metar`))html+=' ⚠';
-  if(field==='dest'&&flight.hasWindTrigger)html+=' 🌬️';
+  
+  html+=getMetarIndicators(icao);
+  
+  if(field==='dest'){
+    if(flight.triggers.has(`${icao}:improved`)&&!flight.destRequiresAlt)html+=' +';
+    if(flight.hasAdverseWeather)html+=' ⚡';
+    if(flight.hasWindTrigger)html+=' 🌬️';
+    if(flight.destBelowApproachMins)html+=' ⚠';
+  }
+  
   return html;
 }
 function attachEditListeners(){
   flightTableBody.querySelectorAll('[data-field="taxiOut"]').forEach(cell=>{
     cell.addEventListener('click',function(){const idx=parseInt(this.dataset.idx,10);showTaxiBurnModal(idx)});
-  });
-  flightTableBody.querySelectorAll('.flt-cell').forEach(cell=>{
-    let touchStartTime=0,touchMoved=false;
-    cell.addEventListener('contextmenu',e=>{e.preventDefault();const idx=parseInt(cell.dataset.idx,10);showFlightInfoModal(idx)});
-    cell.addEventListener('touchstart',function(){touchStartTime=Date.now();touchMoved=false},{passive:true});
-    cell.addEventListener('touchmove',function(){touchMoved=true},{passive:true});
-    cell.addEventListener('touchend',function(e){
-      const touchDuration=Date.now()-touchStartTime;
-      if(!touchMoved&&touchDuration>500){
-        e.preventDefault();
-        e.stopPropagation();
-        const idx=parseInt(cell.dataset.idx,10);
-        showFlightInfoModal(idx);
-      }
-    });
   });
   flightTableBody.querySelectorAll('.editable').forEach(cell=>{
     let touchStartTime=0,touchMoved=false;
@@ -1179,11 +1256,12 @@ function startEdit(cell){
   const currentValue=flights[idx][field];
   const input=document.createElement('input');
   input.type='text';
-  input.value=currentValue||'';
+  if(field==='etd')input.value=formatZuluTime(currentValue)||'';
+  else input.value=currentValue||'';
   const save=()=>{
     let newValue=input.value.trim();
     if(['origin','dest','takeoffAlt','alt1','alt2'].includes(field)&&newValue)newValue=normalizeICAO(newValue);
-    if(['etd','outTime'].includes(field)&&newValue)newValue=normalizeTime(newValue);
+    if(field==='etd'&&newValue)newValue=normalizeTime(newValue.replace(/:/g,''));
     flights[idx][field]=newValue;
     if(['etd'].includes(field))calculateDurationAndETA(flights[idx]);
     renderTable();
@@ -1201,33 +1279,10 @@ function startEdit(cell){
 }
 function updateStats(){statTotal.textContent=flights.length}
 function startAutoRefresh(){autoRefreshInterval=setInterval(refreshWeather,5*60*1000)}
+function startAlwaysOnCheck(){alwaysOnCheckInterval=setInterval(()=>{checkWeatherTriggers();renderTable()},ALWAYS_ON_CHECK_INTERVAL)}
 window.flightActions={
-  markSent(idx){
-    if(!flights[idx].burnoff||!flights[idx].taxiOut){showToast('Please enter Taxi and Burn times first','warning');return}
-    flights[idx].phase='sent';
-    renderTable();
-    showToast(`${flights[idx].flight} marked as SENT`,'success');
-  },
-  markOut(idx){
-    flights[idx].phase='out';
-    flights[idx].outTime=getCurrentZulu();
-    renderTable();
-    showToast(`${flights[idx].flight} marked as OUT at ${formatZuluTime(flights[idx].outTime)}`,'success');
-  },
-  remove(idx){
-    const flight=flights[idx];
-    const flightCopy=JSON.parse(JSON.stringify(flight));
-    flightCopy.triggers=Array.from(flight.triggers||[]);
-    flights.splice(idx,1);
-    renderTable();
-    refreshWeather();
-    showToast(`${flight.flight} → ${flight.dest} removed`,'info',12000,()=>{
-      const restored={...flightCopy,triggers:new Set(flightCopy.triggers)};
-      flights.splice(idx,0,restored);
-      renderTable();
-      refreshWeather();
-      showToast(`${flight.flight} restored`,'success');
-    });
+  delay(idx){
+    showDelayModal(idx);
   }
 };
 startClock();
@@ -1235,6 +1290,7 @@ loadFlights();
 renderTable();
 if(flights.length>0)refreshWeather();
 startAutoRefresh();
+startAlwaysOnCheck();
 applyTheme(getTheme());
 })();
   </script>
