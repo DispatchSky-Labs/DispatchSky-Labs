@@ -155,7 +155,7 @@ const TRIGGER_TERMS=['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','T
 const FM_SPLIT=/\bFM\d{6}\b/;
 const FM_FIND=/FM(\d{6})/g;
 const ALWAYS_ON_CHECK_INTERVAL=30*1000;
-const AUTO_REMOVE_DELAY=15*60*1000;
+const AUTO_REMOVE_DELAY=0*60*1000;
 
 let flights=[];
 let weatherData={};
@@ -1071,7 +1071,7 @@ function checkFlightTimes(){
     if(diff<0){
       flight.isPastEta=true;
       flight.minutesPastEta=Math.abs(diff);
-      if(flight.minutesPastEta>=30&&!flight.autoRemoveScheduled){
+      if(flight.minutesPastEta>=15&&!flight.autoRemoveScheduled){
         flight.autoRemoveScheduled=true;
         const delayBeforeRemove=Math.max(0,AUTO_REMOVE_DELAY-(flight.minutesPastEta-30)*60*1000);
         const timeoutId=setTimeout(()=>{
