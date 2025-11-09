@@ -155,7 +155,7 @@ const TRIGGER_TERMS=['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','T
 const FM_SPLIT=/\bFM\d{6}\b/;
 const FM_FIND=/FM(\d{6})/g;
 const ALWAYS_ON_CHECK_INTERVAL=30*1000;
-const AUTO_REMOVE_DELAY=0*60*1000;
+const AUTO_REMOVE_DELAY=15*60*1000;
 
 let flights=[];
 let weatherData={};
@@ -259,7 +259,7 @@ function showToast(message,type='info',duration=3000,undoCallback=null){
   if(undoCallback){
     const undoBtn=document.createElement('button');
     undoBtn.className='toast-btn';
-    undoBtn.textContent='Undo';
+    undoBtn.textContent='Delay';
     undoBtn.addEventListener('click',()=>{undoCallback();toast.remove()});
     toast.appendChild(undoBtn);
   }
@@ -603,7 +603,7 @@ function checkDestRequiresAlternate(wx,flight){
   const etaHHMM=flight.eta&&flight.eta.length===4?flight.eta:null;
   if(!etaHHMM)return false;
   const durationMin=parseInt(flight.duration,10);
-  
+
   const tafSegs=getTafSegmentsForWindow(wx.taf?.raw||'',etaHHMM);
   const windowText=tafSegs.map(s=>s.text).join(' ');
   if(windowText){
@@ -611,13 +611,13 @@ function checkDestRequiresAlternate(wx,flight){
     if(worst.ceiling!==null&&(worst.ceiling*100)<2000)return true;
     if(worst.visibility!==null&&worst.visibility<3)return true;
   }
-  
+
   if(wx.taf&&wx.taf.raw){
     const tafTextAtHour=getTafBaseTextAtEtaHour(wx.taf.raw,etaHHMM);
     const tafTerms=findTriggerTerms(tafTextAtHour);
     if(tafTerms.length>0)return true;
   }
-  
+
   if(wx.metar&&wx.metar.raw){
     const metarHH=getMetarHourHH(wx.metar.raw);
     const etaHH=etaHHMM.slice(0,2);
@@ -632,7 +632,7 @@ function checkDestRequiresAlternate(wx,flight){
       }
     }
   }
-  
+
   return false;
 }
 function checkDestBelowApproachMins(wx,etaHHMM){
@@ -649,7 +649,7 @@ function checkAlternateAtEta(wx,etaHHMM,flight){
   if(!wx||!etaHHMM)return false;
   const etaHH=etaHHMM.slice(0,2);
   const durationMin=flight?parseInt(flight.duration,10):999;
-  
+
   if(wx.taf&&wx.taf.raw){
     const{segments,start,end}=buildTafSegments(wx.taf.raw);
     if(segments.length>0){
@@ -666,7 +666,7 @@ function checkAlternateAtEta(wx,etaHHMM,flight){
       }
     }
   }
-  
+
   if(durationMin<60&&wx.metar&&wx.metar.raw){
     const metarHH=getMetarHourHH(wx.metar.raw);
     if(metarHH===etaHH){
@@ -675,13 +675,13 @@ function checkAlternateAtEta(wx,etaHHMM,flight){
       if(worst.visibility!==null&&worst.visibility<1.5)return true;
     }
   }
-  
+
   return false;
 }
 function checkAlternateAdverseWeather(wx,etaHHMM){
   if(!wx||!etaHHMM)return false;
   const etaHH=etaHHMM.slice(0,2);
-  
+
   if(wx.metar&&wx.metar.raw){
     const metarHH=getMetarHourHH(wx.metar.raw);
     if(metarHH===etaHH){
@@ -689,13 +689,13 @@ function checkAlternateAdverseWeather(wx,etaHHMM){
       if(metarTerms.length>0)return true;
     }
   }
-  
+
   if(wx.taf&&wx.taf.raw){
     const tafTextAtHour=getTafBaseTextAtEtaHour(wx.taf.raw,etaHHMM);
     const tafTerms=findTriggerTerms(tafTextAtHour);
     if(tafTerms.length>0)return true;
   }
-  
+
   return false;
 }
 function checkAlternateBelowApproachMins(wx,etaHHMM){
@@ -727,29 +727,29 @@ function checkWeatherTriggers(){
     flight.alt2BelowApproachMins=false;
     flight.taltHasAdverseWeather=false;
     flight.taltBelowApproachMins=false;
-    
+
     const originWx=weatherData[flight.origin];
     const destWx=weatherData[flight.dest];
     const taltWx=flight.takeoffAlt?weatherData[flight.takeoffAlt]:null;
     const alt1Wx=flight.alt1?weatherData[flight.alt1]:null;
     const alt2Wx=flight.alt2?weatherData[flight.alt2]:null;
-    
+
     const etaHHMM=flight.eta&&flight.eta.length===4?flight.eta:null;
     const etdHHMM=flight.etd&&flight.etd.length===4?flight.etd:null;
     const currentMinutes=getCurrentZuluMinutes();
     const etdMinutes=etdHHMM?zuluToMinutes(etdHHMM):null;
     const minutesPastEtd=etdMinutes!==null?currentMinutes-etdMinutes:null;
-    
+
     flight.destRequiresAlt=checkDestRequiresAlternate(destWx,flight);
     flight.destBelowApproachMins=destWx&&etaHHMM?checkDestBelowApproachMins(destWx,etaHHMM):false;
-    
+
     if(flight.destRequiresAlt){
       if(!flight.alt1&&!flight.alt2)flight.triggers.add(`${flight.dest}:dest-noalt`);
       else flight.triggers.add(`${flight.dest}:dest`);
     }
-    
+
     if(flight.destBelowApproachMins)flight.triggers.add(`${flight.dest}:dest-approach-mins`);
-    
+
     if(destWx&&etaHHMM){
       const metarHH=getMetarHourHH(destWx.metar?.raw||'');
       const etaHH=etaHHMM.slice(0,2);
@@ -766,11 +766,11 @@ function checkWeatherTriggers(){
         }
       }
     }
-    
+
     const prevDestTrigger=flight.prevDestTrigger!==undefined?flight.prevDestTrigger:flight.destRequiresAlt;
     trackDestinationImprovement(flight,destWx,prevDestTrigger,flight.destRequiresAlt);
     flight.prevDestTrigger=flight.destRequiresAlt;
-    
+
     if(checkTakeoffAltRequired(originWx,flight)){
       if(minutesPastEtd===null||minutesPastEtd<0){
         if(!flight.takeoffAlt)flight.triggers.add(`${flight.origin}:origin-red`);
@@ -782,7 +782,7 @@ function checkWeatherTriggers(){
         else flight.triggers.add(`${flight.origin}:origin-bold`);
       }
     }
-    
+
     if(alt1Wx&&etaHHMM){
       if(checkAlternateAtEta(alt1Wx,etaHHMM,flight)){
         flight.triggers.add(`${flight.alt1}:alt-critical`);
@@ -1067,13 +1067,12 @@ function checkFlightTimes(){
     let diff=etaMinutes-currentMinutes;
     if(diff<-12*60)diff+=24*60;
     else if(diff>12*60)diff-=24*60;
-    
+
     if(diff<0){
       flight.isPastEta=true;
       flight.minutesPastEta=Math.abs(diff);
       if(flight.minutesPastEta>=15&&!flight.autoRemoveScheduled){
         flight.autoRemoveScheduled=true;
-        const delayBeforeRemove=Math.max(0,AUTO_REMOVE_DELAY-(flight.minutesPastEta-30)*60*1000);
         const timeoutId=setTimeout(()=>{
           const idx=flights.findIndex(f=>f.id===flight.id);
           if(idx>=0){
@@ -1082,8 +1081,11 @@ function checkFlightTimes(){
             renderTable();
             showToast(`Flight ${flight.flight} auto-removed`,'info');
           }
-        },delayBeforeRemove);
+        },AUTO_REMOVE_DELAY);
         autoRemoveTimeouts.set(flight.id,timeoutId);
+        showToast(`Flight ${flight.flight} will be removed in 15 minutes`,'warning',10000,()=>{
+          showDelayModal(flights.findIndex(f=>f.id===flight.id));
+        });
       }
     }else{
       flight.isPastEta=false;
@@ -1185,22 +1187,22 @@ function updateTriggerCounts(){
   const columnTriggerCounts={flight:0,origin:0,dest:0,takeoffAlt:0,alt1:0,alt2:0,etd:0,taxiOut:0,burnoff:0,duration:0,eta:0,actions:0};
   const orangeCounts={flight:0,origin:0,dest:0,takeoffAlt:0,alt1:0,alt2:0,etd:0,taxiOut:0,burnoff:0,duration:0,eta:0,actions:0};
   const whiteCounts={flight:0,origin:0,dest:0,takeoffAlt:0,alt1:0,alt2:0,etd:0,taxiOut:0,burnoff:0,duration:0,eta:0,actions:0};
-  
+
   flights.forEach(flight=>{
     if(flight.triggers.size>0){
       if(flight.triggers.has(`${flight.origin}:origin-red`)){whiteCounts.origin++;columnTriggerCounts.origin++}
       else if(flight.triggers.has(`${flight.origin}:origin-bold`)){orangeCounts.origin++;columnTriggerCounts.origin++}
-      
+
       if(flight.triggers.has(`${flight.dest}:dest-noalt`)){whiteCounts.dest++;columnTriggerCounts.dest++}
       else if(flight.triggers.has(`${flight.dest}:dest`)||flight.triggers.has(`${flight.dest}:dest-approach-mins`)){orangeCounts.dest++;columnTriggerCounts.dest++}
-      
+
       if(flight.triggers.has(`${flight.takeoffAlt}:talt-critical`)){whiteCounts.takeoffAlt++;columnTriggerCounts.takeoffAlt++}
-      
+
       if(flight.triggers.has(`${flight.alt1}:alt-critical`)){whiteCounts.alt1++;columnTriggerCounts.alt1++}
       if(flight.triggers.has(`${flight.alt2}:alt-critical`)){whiteCounts.alt2++;columnTriggerCounts.alt2++}
     }
   });
-  
+
   $$('th .trigger-count').forEach(span=>{
     const col=span.dataset.col;
     const orange=orangeCounts[col]||0;
@@ -1230,9 +1232,9 @@ function renderTable(){
     row.draggable=true;
     row.dataset.index=actualIdx;
     if(flight.isPastEta)row.classList.add('faded');
-    
+
     const actionsHtml=flight.isPastEta?`<button class="btn btn-warning action-btn" onclick="window.flightActions.delay(${actualIdx})">Delay</button>`:'';
-    
+
     row.innerHTML=`<td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight,'origin')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight,'dest')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt||''}">${renderICAO(flight,'takeoffAlt')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1||''}">${renderICAO(flight,'alt1')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2||''}">${renderICAO(flight,'alt2')}</td><td class="editable" data-idx="${actualIdx}" data-field="etd">${formatZuluTime(flight.etd)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td><td>${formatDuration(flight.duration)}</td><td>${formatZuluTime(flight.eta)}</td><td style="white-space:nowrap;">${actionsHtml}</td><td><span class="drag-handle">⋮⋮</span></td>`;
     row.addEventListener('dragstart',handleDragStart);
     row.addEventListener('dragend',handleDragEnd);
@@ -1285,7 +1287,7 @@ function renderICAO(flight,field){
   const icao=flight[field];
   if(!icao)return['takeoffAlt','alt1','alt2'].includes(field)?'—':'';
   let triggerType=null;
-  
+
   if(field==='origin'){
     if(flight.triggers.has(`${icao}:origin-red`))triggerType='red';
     else if(flight.triggers.has(`${icao}:origin-bold`))triggerType='bold';
@@ -1301,13 +1303,13 @@ function renderICAO(flight,field){
   }else if(field==='alt1'||field==='alt2'){
     if(flight.triggers.has(`${icao}:alt-critical`))triggerType='red';
   }
-  
+
   let html=icao;
   if(triggerType==='red')html=`<span class="icao-trigger">${icao}</span>`;
   else if(triggerType==='bold')html=`<span class="icao-bold">${icao}</span>`;
-  
+
   html+=getMetarIndicators(icao);
-  
+
   if(field==='dest'){
     if(flight.triggers.has(`${icao}:improved`)&&!flight.destRequiresAlt)html+=' +';
     if(flight.hasAdverseWeather)html+=' ⚡';
@@ -1323,7 +1325,7 @@ function renderICAO(flight,field){
     if(flight.taltHasAdverseWeather)html+=' ⚡';
     if(flight.taltBelowApproachMins)html+=' ⚠';
   }
-  
+
   return html;
 }
 function attachEditListeners(){
