@@ -156,6 +156,7 @@ const FM_SPLIT=/\bFM\d{6}\b/;
 const FM_FIND=/FM(\d{6})/g;
 const ALWAYS_ON_CHECK_INTERVAL=30*1000;
 const AUTO_REMOVE_DELAY=7*60*1000;
+const AUTO_REMOVE_THRESHOLD_MINUTES=7;
 
 let flights=[];
 let weatherData={};
@@ -250,13 +251,19 @@ function normalizeICAO(iata){
   if(clean[0]==='Y')return 'C'+clean;
   return 'K'+clean;
 }
-function showToast(message,type='info',duration=3000,undoCallback=null){
+function showToast(message,type='info',duration=3000,undoCallback=null,delayCallback=null){
   const toast=document.createElement('div');
   toast.className=`toast toast-${type}`;
   const msgSpan=document.createElement('span');
   msgSpan.textContent=message;
   toast.appendChild(msgSpan);
-  if(undoCallback){
+  if(delayCallback){
+    const delayBtn=document.createElement('button');
+    delayBtn.className='toast-btn';
+    delayBtn.textContent='Delay';
+    delayBtn.addEventListener('click',()=>{delayCallback();toast.remove()});
+    toast.appendChild(delayBtn);
+  }else if(undoCallback){
     const undoBtn=document.createElement('button');
     undoBtn.className='toast-btn';
     undoBtn.textContent='Delay';
@@ -497,20 +504,36 @@ function buildTafSegments(tafRaw){
     const m=parseInt(fm[1].slice(4,6),10);
     return new Date(Date.UTC(Y,M,d,h,m,0));
   };
+  const parseTempoTime=(tempoMatch)=>{
+    const d=parseInt(tempoMatch[1],10);
+    const h1=parseInt(tempoMatch[2],10);
+    const d2=parseInt(tempoMatch[3],10);
+    const h2=parseInt(tempoMatch[4],10);
+    const startDate=new Date(Date.UTC(Y,M,d,h1,0,0));
+    let endDate=new Date(Date.UTC(Y,M,d2,h2===24?0:h2,0,0));
+    if(h2===24)endDate=new Date(endDate.getTime()+24*3600*1000);
+    return{start:startDate,end:endDate};
+  };
   const segments=[];
   if(parts[0]){
     const firstEnd=fmMatches.length?fmTimeAt(0):end;
-    segments.push({start,end:firstEnd,text:parts[0]});
+    let baseText=parts[0];
+    const tempoMatches=[...parts[0].matchAll(/\bTEMPO\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/g)];
+    baseText=baseText.replace(/\bTEMPO\s+\d{2}\d{2}\/\d{2}\d{2}\s+[^\s]+(?:\s+[^\s]+)*/g,'');
+    segments.push({start,end:firstEnd,text:baseText.trim()});
   }
   for(let i=0;i<fmMatches.length;i++){
     const segStart=fmTimeAt(i);
     const segEnd=(i+1<fmMatches.length)?fmTimeAt(i+1):end;
-    const text=parts[i+1]||'';
-    segments.push({start:segStart,end:segEnd,text});
+    let text=parts[i+1]||'';
+    const tempoMatches=[...text.matchAll(/\bTEMPO\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/g)];
+    text=text.replace(/\bTEMPO\s+\d{2}\d{2}\/\d{2}\d{2}\s+[^\s]+(?:\s+[^\s]+)*/g,'');
+    segments.push({start:segStart,end:segEnd,text:text.trim()});
   }
   return{segments,start,end};
 }
 function etaToUtcDateWithinTaf(etaHHMM,tafStart,tafEnd){
+  if(!etaHHMM||etaHHMM.length!==4)return null;
   const h=parseInt(etaHHMM.slice(0,2),10);
   const m=parseInt(etaHHMM.slice(2),10);
   let candidate=new Date(Date.UTC(tafStart.getUTCFullYear(),tafStart.getUTCMonth(),tafStart.getUTCDate(),h,m,0));
@@ -520,13 +543,34 @@ function etaToUtcDateWithinTaf(etaHHMM,tafStart,tafEnd){
   return null;
 }
 function getTafSegmentsForWindow(tafRaw,etaHHMM){
-  const{segments,start,end}=buildTafSegments(tafRaw);
-  if(!segments.length)return[];
+  const header=parseTafHeader(tafRaw);
+  if(!header)return[];
+  const{start,end,Y,M}=header;
   const etaDate=etaToUtcDateWithinTaf(etaHHMM,start,end);
   if(!etaDate)return[];
   const windowStart=new Date(etaDate.getTime()-60*60*1000);
   const windowEnd=new Date(etaDate.getTime()+60*60*1000);
-  return segments.filter(seg=>seg.end>windowStart&&seg.start<windowEnd);
+  const{segments}=buildTafSegments(tafRaw);
+  if(!segments.length)return[];
+  const filteredSegments=segments.filter(seg=>seg.end>windowStart&&seg.start<windowEnd);
+  const tempoRegex=/\bTEMPO\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\s+([^\n]+?)(?=\s*(?:FM\d{6}|TEMPO|BECMG|PROB\d+|$|\n\s*[A-Z]|\n\s*$))/g;
+  const tempoMatches=[...tafRaw.matchAll(tempoRegex)];
+  const validTempos=[];
+  tempoMatches.forEach(tempoMatch=>{
+    const d=parseInt(tempoMatch[1],10);
+    const h1=parseInt(tempoMatch[2],10);
+    const d2=parseInt(tempoMatch[3],10);
+    const h2=parseInt(tempoMatch[4],10);
+    const tempoText=(tempoMatch[5]||'').trim();
+    if(!tempoText)return;
+    const tempoStart=new Date(Date.UTC(Y,M,d,h1,0,0));
+    let tempoEnd=new Date(Date.UTC(Y,M,d2,h2===24?0:h2,0,0));
+    if(h2===24)tempoEnd=new Date(tempoEnd.getTime()+24*3600*1000);
+    if(tempoEnd>windowStart&&tempoStart<windowEnd){
+      validTempos.push({start:tempoStart,end:tempoEnd,text:tempoText});
+    }
+  });
+  return[...filteredSegments,...validTempos];
 }
 function getTafBaseTextAtEtaHour(tafRaw,etaHHMM){
   const{segments,start,end}=buildTafSegments(tafRaw);
@@ -572,6 +616,17 @@ function findWorstWeather(text){
     const parts=m.match(/(\d+)\/(\d+)/);
     if(parts){
       const vis=parseInt(parts[1],10)/parseInt(parts[2],10);
+      if(vis<worstVis)worstVis=vis;
+    }
+  });
+  const mixedVisMatches=text.match(/\b(\d+)\s+(\d+)\/(\d+)SM\b/g)||[];
+  mixedVisMatches.forEach(m=>{
+    const parts=m.match(/(\d+)\s+(\d+)\/(\d+)/);
+    if(parts){
+      const whole=parseInt(parts[1],10);
+      const num=parseInt(parts[2],10);
+      const den=parseInt(parts[3],10);
+      const vis=whole+(num/den);
       if(vis<worstVis)worstVis=vis;
     }
   });
@@ -745,7 +800,7 @@ function checkWeatherTriggers(){
 
     if(flight.destRequiresAlt){
       if(!flight.alt1&&!flight.alt2)flight.triggers.add(`${flight.dest}:dest-noalt`);
-      else flight.triggers.add(`${flight.dest}:dest`);
+      else if(flight.alt1||flight.alt2)flight.triggers.add(`${flight.dest}:dest`);
     }
 
     if(flight.destBelowApproachMins)flight.triggers.add(`${flight.dest}:dest-approach-mins`);
@@ -1043,7 +1098,10 @@ function showDelayModal(idx){
     if(flights[idx].autoRemoveScheduled){
       const timeoutId=autoRemoveTimeouts.get(flights[idx].id);
       if(timeoutId)clearTimeout(timeoutId);
+      const deleteTimeoutId=autoRemoveTimeouts.get(flights[idx].id+'_delete');
+      if(deleteTimeoutId)clearTimeout(deleteTimeoutId);
       autoRemoveTimeouts.delete(flights[idx].id);
+      autoRemoveTimeouts.delete(flights[idx].id+'_delete');
       flights[idx].autoRemoveScheduled=false;
     }
     renderTable();
@@ -1067,23 +1125,40 @@ function checkFlightTimes(){
     let diff=etaMinutes-currentMinutes;
     if(diff<-12*60)diff+=24*60;
     else if(diff>12*60)diff-=24*60;
-
-    if(diff<0){
+    
+    if(diff<=0){
       flight.isPastEta=true;
       flight.minutesPastEta=Math.abs(diff);
-      if(flight.minutesPastEta>=7&&!flight.autoRemoveScheduled){
+      if(flight.minutesPastEta>=AUTO_REMOVE_THRESHOLD_MINUTES&&!flight.autoRemoveScheduled){
         flight.autoRemoveScheduled=true;
         const timeoutId=setTimeout(()=>{
           const idx=flights.findIndex(f=>f.id===flight.id);
           if(idx>=0){
-            flights.splice(idx,1);
-            autoRemoveTimeouts.delete(flight.id);
-            renderTable();
-            showToast(`Flight ${flight.flight} auto-removed`,'info');
+            const flightToRemove=flights[idx];
+            let deleteTimeoutId=null;
+            const delayHandler=()=>{
+              if(deleteTimeoutId)clearTimeout(deleteTimeoutId);
+              const currentIdx=flights.findIndex(f=>f.id===flightToRemove.id);
+              if(currentIdx>=0){
+                showDelayModal(currentIdx);
+              }
+            };
+            showToast(`Deleting ${flightToRemove.flight} ${flightToRemove.origin} ${flightToRemove.dest}`,'info',10000,null,delayHandler);
+            deleteTimeoutId=setTimeout(()=>{
+              const stillIdx=flights.findIndex(f=>f.id===flightToRemove.id);
+              if(stillIdx>=0){
+                flights.splice(stillIdx,1);
+                autoRemoveTimeouts.delete(flightToRemove.id);
+                autoRemoveTimeouts.delete(flightToRemove.id+'_delete');
+                renderTable();
+                saveFlights();
+              }
+            },10000);
+            autoRemoveTimeouts.set(flight.id+'_delete',deleteTimeoutId);
           }
         },AUTO_REMOVE_DELAY);
         autoRemoveTimeouts.set(flight.id,timeoutId);
-        showToast(`Flight ${flight.flight} will be removed in 15 minutes`,'warning',10000,()=>{
+        showToast(`Flight ${flight.flight} will be removed in 7 minutes`,'warning',10000,()=>{
           showDelayModal(flights.findIndex(f=>f.id===flight.id));
         });
       }
@@ -1093,7 +1168,10 @@ function checkFlightTimes(){
       if(flight.autoRemoveScheduled){
         const timeoutId=autoRemoveTimeouts.get(flight.id);
         if(timeoutId)clearTimeout(timeoutId);
+        const deleteTimeoutId=autoRemoveTimeouts.get(flight.id+'_delete');
+        if(deleteTimeoutId)clearTimeout(deleteTimeoutId);
         autoRemoveTimeouts.delete(flight.id);
+        autoRemoveTimeouts.delete(flight.id+'_delete');
         flight.autoRemoveScheduled=false;
       }
     }
@@ -1103,6 +1181,38 @@ function checkFlightTimes(){
 function closeContextMenu(){
   const existing=$('.context-menu');
   if(existing)existing.remove();
+}
+function showFlightContextMenu(e,idx,flight){
+  e.preventDefault();
+  e.stopPropagation();
+  closeContextMenu();
+  const menu=document.createElement('div');
+  menu.className='context-menu';
+  const deleteItem=document.createElement('button');
+  deleteItem.className='context-menu-item';
+  deleteItem.textContent='Delete Flight';
+  deleteItem.addEventListener('click',()=>{
+    closeContextMenu();
+    if(confirm(`Are you sure you want to delete flight ${flight.flight} (${flight.origin} → ${flight.dest})?`)){
+      flights.splice(idx,1);
+      if(flight.autoRemoveScheduled){
+        const timeoutId=autoRemoveTimeouts.get(flight.id);
+        if(timeoutId)clearTimeout(timeoutId);
+        autoRemoveTimeouts.delete(flight.id);
+      }
+      renderTable();
+      saveFlights();
+      showToast(`Flight ${flight.flight} deleted`,'info');
+    }
+  });
+  menu.appendChild(deleteItem);
+  document.body.appendChild(menu);
+  const x=e.clientX||0;
+  const y=e.clientY||0;
+  menu.style.position='fixed';
+  menu.style.left=x+'px';
+  menu.style.top=y+'px';
+  setTimeout(()=>{document.addEventListener('click',closeContextMenu,{once:true})},0);
 }
 function showContextMenu(e){
   e.preventDefault();
@@ -1232,10 +1342,16 @@ function renderTable(){
     row.draggable=true;
     row.dataset.index=actualIdx;
     if(flight.isPastEta)row.classList.add('faded');
-
+    
     const actionsHtml=flight.isPastEta?`<button class="btn btn-warning action-btn" onclick="window.flightActions.delay(${actualIdx})">Delay</button>`:'';
-
+    
     row.innerHTML=`<td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight,'origin')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight,'dest')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt||''}">${renderICAO(flight,'takeoffAlt')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1||''}">${renderICAO(flight,'alt1')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2||''}">${renderICAO(flight,'alt2')}</td><td class="editable" data-idx="${actualIdx}" data-field="etd">${formatZuluTime(flight.etd)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td><td>${formatDuration(flight.duration)}</td><td>${formatZuluTime(flight.eta)}</td><td style="white-space:nowrap;">${actionsHtml}</td><td><span class="drag-handle">⋮⋮</span></td>`;
+    const fltCell=row.querySelector('.flt-cell');
+    fltCell.addEventListener('contextmenu',e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      showFlightContextMenu(e,actualIdx,flight);
+    });
     row.addEventListener('dragstart',handleDragStart);
     row.addEventListener('dragend',handleDragEnd);
     row.addEventListener('dragover',handleDragOver);
@@ -1296,7 +1412,7 @@ function renderICAO(flight,field){
       triggerType=null;
     }else{
       if(flight.triggers.has(`${icao}:dest-noalt`))triggerType='red';
-      else if(flight.triggers.has(`${icao}:dest`)||flight.triggers.has(`${icao}:dest-approach-mins`))triggerType='bold';
+      else if((flight.triggers.has(`${icao}:dest`)||flight.triggers.has(`${icao}:dest-approach-mins`))&&(flight.alt1||flight.alt2))triggerType='bold';
     }
   }else if(field==='takeoffAlt'){
     if(flight.triggers.has(`${icao}:talt-critical`))triggerType='red';
