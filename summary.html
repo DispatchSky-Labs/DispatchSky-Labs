@@ -30,6 +30,12 @@
     .bold { font-weight:700; }
     .text-center { text-align:center; }
     .no-data { text-align:center; color:var(--muted); padding:20px; }
+    .hour-grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+    .hour-item { flex:0 0 auto; min-width:60px; text-align:center; padding:8px; background:#fff; border:1px solid var(--border); border-radius:4px; }
+    .theme-dark .hour-item { background:#1f2937; border-color:#374151; }
+    .hour-label { font-size:12px; color:var(--muted); margin-bottom:4px; }
+    .hour-count { font-size:16px; font-weight:600; }
+    .hour-count.bold { font-weight:700; }
   </style>
 </head>
 <body>
@@ -38,17 +44,7 @@
 
     <div class="section">
       <div class="section-title">Flights Due by Hour</div>
-      <table id="dueHourTable">
-        <thead>
-          <tr>
-            <th>Hour (UTC)</th>
-            <th class="text-center">Count</th>
-          </tr>
-        </thead>
-        <tbody id="dueHourBody">
-          <tr><td colspan="2" class="no-data">No flights</td></tr>
-        </tbody>
-      </table>
+      <div id="dueHourGrid" class="hour-grid"></div>
     </div>
 
     <div class="section">
@@ -107,24 +103,29 @@
         }
       });
 
-      // Sort and find top 2
-      const sortedHours = Object.entries(dueHours)
+      // Get all hours that have flights, sorted chronologically (00-23)
+      const allHours = Array.from({ length: 24 }, (_, i) => pad2(i));
+      const hoursWithFlights = allHours.filter(hour => dueHours[hour] !== undefined);
+
+      // Find top 2 for bold styling
+      const sortedByCount = Object.entries(dueHours)
         .sort((a, b) => b[1] - a[1])
-        .map(([hour, count]) => ({ hour, count }));
+        .slice(0, 2)
+        .map(([hour]) => hour);
+      const top2Hours = new Set(sortedByCount);
 
-      const top2Hours = new Set(sortedHours.slice(0, 2).map(h => h.hour));
-
-      // Render due hours table
-      const dueHourBody = document.querySelector('#dueHourBody');
-      if (sortedHours.length === 0) {
-        dueHourBody.innerHTML = '<tr><td colspan="2" class="no-data">No flights</td></tr>';
+      // Render due hours grid (horizontal, chronological order)
+      const dueHourGrid = document.querySelector('#dueHourGrid');
+      if (hoursWithFlights.length === 0) {
+        dueHourGrid.innerHTML = '<div class="no-data" style="width:100%;">No flights</div>';
       } else {
-        dueHourBody.innerHTML = sortedHours.map(({ hour, count }) => {
+        dueHourGrid.innerHTML = hoursWithFlights.map(hour => {
+          const count = dueHours[hour] || 0;
           const isBold = top2Hours.has(hour);
-          return `<tr>
-            <td>${hour}:00</td>
-            <td class="text-center ${isBold ? 'bold' : ''}">${count}</td>
-          </tr>`;
+          return `<div class="hour-item">
+            <div class="hour-label">${hour}:00</div>
+            <div class="hour-count ${isBold ? 'bold' : ''}">${count}</div>
+          </div>`;
         }).join('');
       }
 

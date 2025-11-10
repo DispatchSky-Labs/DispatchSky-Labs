@@ -77,8 +77,8 @@
         return;
       }
 
-      // Only list flights that have ALT1 or ALT2
-      const flightsWithAlternates = flights.filter(f => upper(f.alt1) || upper(f.alt2));
+      // Include flights that have takeoff alternates, ALT1, or ALT2
+      const flightsWithAlternates = flights.filter(f => upper(f.takeoffAlt) || upper(f.alt1) || upper(f.alt2));
 
       if (flightsWithAlternates.length === 0) {
         content.innerHTML = '<div class="no-data">No flights with alternates</div>';
@@ -90,24 +90,33 @@
         const flightNum = escapeHtml(f.flight || '');
         const origin = upper(f.origin);
         const dest = upper(f.dest);
+        const takeoffAlt = upper(f.takeoffAlt);
         const alt1 = upper(f.alt1);
         const alt2 = upper(f.alt2);
 
-        // Header line: flight, origin, dest, then alternates (ALT1, ALT2 if present)
-        const headerCodes = [flightNum, origin, dest]
-          .concat(alt1 ? [alt1] : [])
-          .concat(alt2 ? [alt2] : [])
-          .join(' ');
+        // Header line: flight, origin, dest, then "Takeoff Alternate" + T/ALT, then "Alternate" + ALT1, then "Secondary Alternate" + ALT2
+        const headerParts = [flightNum, origin, dest];
+        if (takeoffAlt) {
+          headerParts.push(`Takeoff Alternate ${takeoffAlt}`);
+        }
+        if (alt1) {
+          headerParts.push(`Alternate ${alt1}`);
+        }
+        if (alt2) {
+          headerParts.push(`Secondary Alternate ${alt2}`);
+        }
+        const headerCodes = headerParts.join(' ');
 
-        // Weather blocks: Destination first, then ALT1, then ALT2
+        // Weather blocks: Destination first, then Takeoff Alternate, then ALT1, then ALT2
         const blocks = [];
         const airportsInOrder = [
           dest ? { icao: dest, label: dest } : null,
-          alt1 ? { icao: alt1, label: alt1 } : null,
-          alt2 ? { icao: alt2, label: alt2 } : null
+          takeoffAlt ? { icao: takeoffAlt, label: `Takeoff Alternate ${takeoffAlt}` } : null,
+          alt1 ? { icao: alt1, label: `Alternate ${alt1}` } : null,
+          alt2 ? { icao: alt2, label: `Secondary Alternate ${alt2}` } : null
         ].filter(Boolean);
 
-        airportsInOrder.forEach(({ icao }) => {
+        airportsInOrder.forEach(({ icao, label }) => {
           const wx = weather[icao] || {};
           const metar = rawString(wx.metar);
           const taf = rawString(wx.taf);
