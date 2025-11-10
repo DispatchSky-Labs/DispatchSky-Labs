@@ -1198,7 +1198,10 @@ function showFlightContextMenu(e,idx,flight){
       if(flight.autoRemoveScheduled){
         const timeoutId=autoRemoveTimeouts.get(flight.id);
         if(timeoutId)clearTimeout(timeoutId);
+        const deleteTimeoutId=autoRemoveTimeouts.get(flight.id+'_delete');
+        if(deleteTimeoutId)clearTimeout(deleteTimeoutId);
         autoRemoveTimeouts.delete(flight.id);
+        autoRemoveTimeouts.delete(flight.id+'_delete');
       }
       renderTable();
       saveFlights();
@@ -1412,7 +1415,8 @@ function renderICAO(flight,field){
       triggerType=null;
     }else{
       if(flight.triggers.has(`${icao}:dest-noalt`))triggerType='red';
-      else if((flight.triggers.has(`${icao}:dest`)||flight.triggers.has(`${icao}:dest-approach-mins`))&&(flight.alt1||flight.alt2))triggerType='bold';
+      else if(flight.triggers.has(`${icao}:dest-approach-mins`))triggerType='bold';
+      else if(flight.triggers.has(`${icao}:dest`)&&(flight.alt1||flight.alt2))triggerType='bold';
     }
   }else if(field==='takeoffAlt'){
     if(flight.triggers.has(`${icao}:talt-critical`))triggerType='red';
