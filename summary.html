@@ -103,9 +103,25 @@
         }
       });
 
-      // Get all hours that have flights, sorted chronologically (00-23)
-      const allHours = Array.from({ length: 24 }, (_, i) => pad2(i));
-      const hoursWithFlights = allHours.filter(hour => dueHours[hour] !== undefined);
+      // Get current hour in zulu time
+      const now = new Date();
+      const currentHour = now.getUTCHours();
+
+      // Get all hours that have flights and sort them chronologically
+      // Hours >= currentHour are today, hours < currentHour are tomorrow
+      const hoursWithFlights = Object.keys(dueHours);
+      hoursWithFlights.sort((a, b) => {
+        const hourA = parseInt(a, 10);
+        const hourB = parseInt(b, 10);
+        // If both are today (>= currentHour) or both are tomorrow (< currentHour), sort normally
+        if ((hourA >= currentHour && hourB >= currentHour) || (hourA < currentHour && hourB < currentHour)) {
+          return hourA - hourB;
+        }
+        // Today's hours come before tomorrow's hours
+        if (hourA >= currentHour && hourB < currentHour) return -1;
+        if (hourA < currentHour && hourB >= currentHour) return 1;
+        return 0;
+      });
 
       // Find top 2 for bold styling
       const sortedByCount = Object.entries(dueHours)

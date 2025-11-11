@@ -42,6 +42,8 @@
     tbody tr.faded{opacity:0.6}
     tbody tr.due-soon{background:#F5DEB3}
     .theme-dark tbody tr.due-soon{background:#8b7355}
+    tbody tr.within-90min{background:#E0FFFF}
+    .theme-dark tbody tr.within-90min{background:#004d4d}
     .taxi-burn-cell{font-style:italic;cursor:pointer}
     .taxi-burn-cell:hover{background:rgba(0,0,0,0.08)}
     .theme-dark .taxi-burn-cell:hover{background:rgba(255,255,255,0.08)}
@@ -1433,11 +1435,16 @@ function renderTable(){
     if(flight.isPastEta)row.classList.add('faded');
     
     const etdMinutes=flight.etd?zuluToMinutes(flight.etd):null;
-    if(etdMinutes!==null&&!flight.taxiOut&&!flight.burnoff){
+    if(etdMinutes!==null){
       let minutesUntilEtd=etdMinutes-currentMinutes;
       if(minutesUntilEtd<-12*60)minutesUntilEtd+=24*60;
       else if(minutesUntilEtd>12*60)minutesUntilEtd-=24*60;
-      if(minutesUntilEtd>=0&&minutesUntilEtd<=120){
+      // Highlight if within 1.5 hours (90 minutes) of ETD
+      if(minutesUntilEtd>=0&&minutesUntilEtd<=90){
+        row.classList.add('within-90min');
+      }
+      // Also apply due-soon class if taxi/burn are not set and within 2 hours
+      if(!flight.taxiOut&&!flight.burnoff&&minutesUntilEtd>=0&&minutesUntilEtd<=120){
         row.classList.add('due-soon');
       }
     }
@@ -1566,9 +1573,32 @@ function startEdit(cell){
   const save=()=>{
     let newValue=input.value.trim();
     if(['origin','dest','takeoffAlt','alt1','alt2'].includes(field)&&newValue)newValue=normalizeICAO(newValue);
-    if(field==='etd'&&newValue)newValue=normalizeTime(newValue.replace(/:/g,''));
-    flights[idx][field]=newValue;
-    if(['etd'].includes(field))calculateDurationAndETA(flights[idx]);
+    if(field==='etd'&&newValue){
+      const oldEtd=flights[idx].etd;
+      newValue=normalizeTime(newValue.replace(/:/g,''));
+      flights[idx][field]=newValue;
+      // If taxi out and burnoff are not set, update ETA based on ETD change
+      if((!flights[idx].taxiOut||!flights[idx].burnoff)&&oldEtd&&flights[idx].eta){
+        const oldEtdMinutes=zuluToMinutes(oldEtd);
+        const newEtdMinutes=zuluToMinutes(newValue);
+        if(oldEtdMinutes!==null&&newEtdMinutes!==null){
+          let diffMinutes=newEtdMinutes-oldEtdMinutes;
+          // Handle day wrap-around
+          if(diffMinutes>12*60)diffMinutes-=24*60;
+          else if(diffMinutes<-12*60)diffMinutes+=24*60;
+          const oldEtaMinutes=zuluToMinutes(flights[idx].eta);
+          if(oldEtaMinutes!==null){
+            const newEtaMinutes=(oldEtaMinutes+diffMinutes+24*60)%(24*60);
+            flights[idx].eta=minutesToZulu(newEtaMinutes);
+          }
+        }
+      }else{
+        calculateDurationAndETA(flights[idx]);
+      }
+    }else{
+      flights[idx][field]=newValue;
+      if(['etd'].includes(field))calculateDurationAndETA(flights[idx]);
+    }
     renderTable();
     refreshWeather();
   };
