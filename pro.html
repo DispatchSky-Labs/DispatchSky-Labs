@@ -1115,6 +1115,61 @@ function showRawInputModal(){
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()},{once:true});
   textarea.focus();
 }
+function showReceivePassdownModal(){
+  const overlay=document.createElement('div');
+  overlay.className='upload-modal-overlay';
+  const modal=document.createElement('div');
+  modal.className='upload-modal';
+  modal.innerHTML=`<div class="upload-modal-title">Receive Passdown</div><label class="upload-modal-label">Paste dispatch worksheet data:</label><textarea id="passdownTextarea" class="upload-modal-textarea" placeholder="42 1000 10 SKW 3861  MOT    1100  MSP    1235  013          001
+42 1007 10 SKW 4680  BTR    1107  IAH    1233  131S         001"></textarea><div class="upload-modal-actions"><button class="btn btn-secondary" id="passdownCancelBtn">Cancel</button><button class="btn btn-success" id="passdownSubmitBtn">Submit</button></div>`;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const textarea=modal.querySelector('#passdownTextarea');
+  const cancelBtn=modal.querySelector('#passdownCancelBtn');
+  const submitBtn=modal.querySelector('#passdownSubmitBtn');
+  const closeModal=()=>overlay.remove();
+  const submit=()=>{
+    const text=textarea.value.trim();
+    if(!text){showToast('Please enter flight data','warning');return}
+    const parsed=parseRawInput(text);
+    if(parsed.length>0){
+      // Calculate taxi and burn for each flight based on duration = ETA - ETD
+      parsed.forEach(flight=>{
+        if(flight.etd&&flight.eta){
+          const etdMinutes=zuluToMinutes(flight.etd);
+          const etaMinutes=zuluToMinutes(flight.eta);
+          if(etdMinutes!==null&&etaMinutes!==null){
+            let durationMinutes=etaMinutes-etdMinutes;
+            // Handle day wrap-around
+            if(durationMinutes<0)durationMinutes+=24*60;
+            // Ensure minimum duration of 1 minute
+            if(durationMinutes<=0)durationMinutes=1;
+            // Divide by 2 for taxi and burn
+            const halfDuration=Math.floor(durationMinutes/2);
+            flight.taxiOut=String(halfDuration);
+            flight.burnoff=String(durationMinutes-halfDuration);
+            // Calculate duration field - this prevents ETA from being recalculated
+            flight.duration=String(durationMinutes);
+            // Note: We preserve the original ETA from input, so calculateDurationAndETA won't override it
+            // because it only updates ETA if etd exists, but we want to keep the input ETA
+          }
+        }
+      });
+      // Append to existing flights instead of replacing
+      flights.push(...parsed);
+      renderTable();
+      refreshWeather();
+      closeModal();
+      showToast(`Added ${parsed.length} flights`,'success');
+    }else{showToast('No valid flights found','warning')}
+  };
+  textarea.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.ctrlKey){e.preventDefault();submit()}});
+  cancelBtn.addEventListener('click',closeModal);
+  submitBtn.addEventListener('click',submit);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()},{once:true});
+  textarea.focus();
+}
 function showTaxiBurnModal(idx){
   const flight=flights[idx];
   const overlay=document.createElement('div');
@@ -1322,6 +1377,10 @@ function showContextMenu(e){
   rawInputItem.className='context-menu-item';
   rawInputItem.textContent='Raw Input';
   rawInputItem.addEventListener('click',()=>{closeContextMenu();showRawInputModal()});
+  const receivePassdownItem=document.createElement('button');
+  receivePassdownItem.className='context-menu-item';
+  receivePassdownItem.textContent='Receive Passdown';
+  receivePassdownItem.addEventListener('click',()=>{closeContextMenu();showReceivePassdownModal()});
   const summaryItem=document.createElement('button');
   summaryItem.className='context-menu-item';
   summaryItem.textContent='Summary';
@@ -1370,6 +1429,7 @@ function showContextMenu(e){
   menu.appendChild(uploadItem);
   menu.appendChild(singleFlightItem);
   menu.appendChild(rawInputItem);
+  menu.appendChild(receivePassdownItem);
   menu.appendChild(summaryItem);
   menu.appendChild(passdownItem);
   menu.appendChild(themeItem);
@@ -1383,6 +1443,42 @@ function showContextMenu(e){
 }
 headerTitle.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();showContextMenu(e)});
 headerTitle.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();showContextMenu(e)});
+// Keyboard shortcut: 't' or 'T' to open taxi edit for next yellow (due-soon) flight
+document.addEventListener('keydown',e=>{
+  if((e.key==='t'||e.key==='T')&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
+    // Check if user is typing in an input field
+    const activeElement=document.activeElement;
+    if(activeElement&&(activeElement.tagName==='INPUT'||activeElement.tagName==='TEXTAREA')){
+      return; // Don't trigger if typing in input
+    }
+    e.preventDefault();
+    // Find the first flight that is due-soon (yellow) - flights without taxi/burn within 2 hours of ETD
+    const currentMinutes=getCurrentZuluMinutes();
+    for(let i=0;i<flights.length;i++){
+      const flight=flights[i];
+      if(!flight.taxiOut&&!flight.burnoff&&flight.etd){
+        const etdMinutes=zuluToMinutes(flight.etd);
+        if(etdMinutes!==null){
+          let minutesUntilEtd=etdMinutes-currentMinutes;
+          if(minutesUntilEtd<-12*60)minutesUntilEtd+=24*60;
+          else if(minutesUntilEtd>12*60)minutesUntilEtd-=24*60;
+          if(minutesUntilEtd>=0&&minutesUntilEtd<=120){
+            showTaxiBurnModal(i);
+            return;
+          }
+        }
+      }
+    }
+    // If no due-soon flight found, find first flight without taxi/burn
+    for(let i=0;i<flights.length;i++){
+      const flight=flights[i];
+      if(!flight.taxiOut&&!flight.burnoff){
+        showTaxiBurnModal(i);
+        return;
+      }
+    }
+  }
+});
 function updateTriggerCounts(){
   const columnTriggerCounts={flight:0,origin:0,dest:0,takeoffAlt:0,alt1:0,alt2:0,etd:0,taxiOut:0,burnoff:0,duration:0,eta:0,actions:0};
   const orangeCounts={flight:0,origin:0,dest:0,takeoffAlt:0,alt1:0,alt2:0,etd:0,taxiOut:0,burnoff:0,duration:0,eta:0,actions:0};
@@ -1574,27 +1670,38 @@ function startEdit(cell){
     let newValue=input.value.trim();
     if(['origin','dest','takeoffAlt','alt1','alt2'].includes(field)&&newValue)newValue=normalizeICAO(newValue);
     if(field==='etd'&&newValue){
-      const oldEtd=flights[idx].etd;
-      newValue=normalizeTime(newValue.replace(/:/g,''));
-      flights[idx][field]=newValue;
-      // If taxi out and burnoff are not set, update ETA based on ETD change
-      if((!flights[idx].taxiOut||!flights[idx].burnoff)&&oldEtd&&flights[idx].eta){
+      const oldEtd=flights[idx].etd||'';
+      const normalizedNewValue=normalizeTime(newValue.replace(/:/g,''));
+      if(!normalizedNewValue){
+        renderTable();
+        return;
+      }
+      // Check if both taxi and burn are empty (not set)
+      const taxiEmpty=!flights[idx].taxiOut||flights[idx].taxiOut==='';
+      const burnEmpty=!flights[idx].burnoff||flights[idx].burnoff==='';
+      // If taxi out and burnoff are BOTH empty, update ETA based on ETD change
+      if(taxiEmpty&&burnEmpty&&oldEtd&&flights[idx].eta){
         const oldEtdMinutes=zuluToMinutes(oldEtd);
-        const newEtdMinutes=zuluToMinutes(newValue);
+        const newEtdMinutes=zuluToMinutes(normalizedNewValue);
         if(oldEtdMinutes!==null&&newEtdMinutes!==null){
           let diffMinutes=newEtdMinutes-oldEtdMinutes;
-          // Handle day wrap-around
+          // Handle day wrap-around - assume difference is in range -12 to +12 hours
           if(diffMinutes>12*60)diffMinutes-=24*60;
           else if(diffMinutes<-12*60)diffMinutes+=24*60;
           const oldEtaMinutes=zuluToMinutes(flights[idx].eta);
           if(oldEtaMinutes!==null){
-            const newEtaMinutes=(oldEtaMinutes+diffMinutes+24*60)%(24*60);
+            let newEtaMinutes=oldEtaMinutes+diffMinutes;
+            // Normalize to 0-1439 range (one day)
+            while(newEtaMinutes<0)newEtaMinutes+=24*60;
+            while(newEtaMinutes>=24*60)newEtaMinutes-=24*60;
             flights[idx].eta=minutesToZulu(newEtaMinutes);
           }
         }
       }else{
+        // If taxi or burn are set, recalculate ETA normally
         calculateDurationAndETA(flights[idx]);
       }
+      flights[idx][field]=normalizedNewValue;
     }else{
       flights[idx][field]=newValue;
       if(['etd'].includes(field))calculateDurationAndETA(flights[idx]);
