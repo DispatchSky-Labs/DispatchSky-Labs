@@ -198,6 +198,58 @@ function getCurrentZuluMinutes(){
   const now=new Date();
   return now.getUTCHours()*60+now.getUTCMinutes();
 }
+function getAirportTimezone(icao){
+  if(!icao)return null;
+  const code=icao.toUpperCase();
+  // Common US airport timezone mappings
+  // Eastern Time (EST/EDT)
+  if(/^(KJFK|KLGA|KEWR|KPHL|KBOS|KDCA|KIAD|KATL|KMIA|KMCO|KFLL|KTPA|KRDU|KCLT|KCHA)$/.test(code))return'America/New_York';
+  // Central Time (CST/CDT)
+  if(/^(KORD|KMDW|KDFW|KIAH|KDAL|KMSY|KMEM|KBNA|KSTL|KMCI|KIND|KCVG|KCMH|KDTW|KMSP)$/.test(code))return'America/Chicago';
+  // Mountain Time (MST/MDT)
+  if(/^(KDEN|KPHX|KSLC|KABQ|KBOI|KBIL|KELP|KTUS)$/.test(code))return'America/Denver';
+  // Pacific Time (PST/PDT)
+  if(/^(KLAX|KSFO|KSAN|KSNA|KSJC|KSEA|KPDX|KLAS|KRNO|KSMF|KOAK|KBUR|KLGB|KONT)$/.test(code))return'America/Los_Angeles';
+  // Alaska Time (AKST/AKDT)
+  if(/^PA/.test(code)||/^(PANC|PAFA|PAJN)$/.test(code))return'America/Anchorage';
+  // Hawaii Time (HST)
+  if(/^PH/.test(code)||/^(PHNL|PHOG|PHKO)$/.test(code))return'Pacific/Honolulu';
+  // Default to browser local timezone if airport not found
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+function convertUtcToLocalTime(utcHHMM,timezone){
+  if(!utcHHMM||utcHHMM.length!==4)return null;
+  if(!timezone)return null;
+  try{
+    const now=new Date();
+    const year=now.getUTCFullYear();
+    const month=now.getUTCMonth();
+    const day=now.getUTCDate();
+    const hours=parseInt(utcHHMM.slice(0,2),10);
+    const minutes=parseInt(utcHHMM.slice(2),10);
+    // Create UTC date - handle day wrap-around
+    let utcDate=new Date(Date.UTC(year,month,day,hours,minutes,0));
+    const currentUtcMinutes=now.getUTCHours()*60+now.getUTCMinutes();
+    const etaUtcMinutes=hours*60+minutes;
+    // If ETA is more than 12 hours in the past, assume it's tomorrow
+    let diffMinutes=etaUtcMinutes-currentUtcMinutes;
+    if(diffMinutes<-12*60){
+      utcDate=new Date(utcDate.getTime()+24*3600*1000);
+    }else if(diffMinutes>12*60){
+      // If ETA is more than 12 hours in the future, assume it was yesterday (shouldn't happen, but handle it)
+      utcDate=new Date(utcDate.getTime()-24*3600*1000);
+    }
+    // Convert to local time in the specified timezone
+    const formatter=new Intl.DateTimeFormat('en-US',{timeZone:timezone,hour12:false,hour:'2-digit',minute:'2-digit'});
+    const parts=formatter.formatToParts(utcDate);
+    const localHours=parseInt(parts.find(p=>p.type==='hour').value,10);
+    const localMinutes=parseInt(parts.find(p=>p.type==='minute').value,10);
+    return{hours:localHours,minutes:localMinutes,timeString:`${String(localHours).padStart(2,'0')}:${String(localMinutes).padStart(2,'0')}`};
+  }catch(e){
+    console.error('Error converting timezone:',e);
+  }
+  return null;
+}
 function normalizeTime(time){
   if(!time)return '';
   const cleaned=time.replace(/[^\d]/g,'');
@@ -270,7 +322,7 @@ function showToast(message,type='info',duration=3000,undoCallback=null,delayCall
   }else if(undoCallback){
     const undoBtn=document.createElement('button');
     undoBtn.className='toast-btn';
-    undoBtn.textContent='Delay';
+    undoBtn.textContent='Undo';
     undoBtn.addEventListener('click',()=>{undoCallback();toast.remove()});
     toast.appendChild(undoBtn);
   }
@@ -598,42 +650,62 @@ function findWorstWeather(text){
   if(!text)return{ceiling:null,visibility:null};
   let worstCeiling=Infinity;
   let worstVis=Infinity;
+  
+  // Ceilings: Only look at BKN, OVC, or VV (lowest value)
+  // SCT and FEW are NOT ceilings - they are scattered/few clouds, not ceilings
   const vvMatches=text.match(/\bVV(\d{3})\b/g)||[];
   vvMatches.forEach(m=>{
     const height=parseInt(m.slice(2),10);
     if(height<worstCeiling)worstCeiling=height;
   });
+  // Only match BKN and OVC for ceilings, explicitly exclude SCT and FEW
   const ceilingMatches=text.match(/\b(BKN|OVC)(\d{3})\b/g)||[];
   ceilingMatches.forEach(m=>{
     const height=parseInt(m.slice(-3),10);
     if(height<worstCeiling)worstCeiling=height;
   });
-  const visMatches=text.match(/\b(P?)(\d+)SM\b/g)||[];
-  visMatches.forEach(m=>{
-    const pFlag=m.includes('P');
-    const vis=parseInt(m.match(/(\d+)/)[1],10);
-    if(pFlag)return;
-    if(vis<worstVis)worstVis=vis;
-  });
-  const fracVisMatches=text.match(/\b(P?)(\d+)\/(\d+)SM\b/g)||[];
-  fracVisMatches.forEach(m=>{
-    const parts=m.match(/(\d+)\/(\d+)/);
-    if(parts){
-      const vis=parseInt(parts[1],10)/parseInt(parts[2],10);
-      if(vis<worstVis)worstVis=vis;
-    }
-  });
-  const mixedVisMatches=text.match(/\b(\d+)\s+(\d+)\/(\d+)SM\b/g)||[];
-  mixedVisMatches.forEach(m=>{
-    const parts=m.match(/(\d+)\s+(\d+)\/(\d+)/);
-    if(parts){
-      const whole=parseInt(parts[1],10);
-      const num=parseInt(parts[2],10);
-      const den=parseInt(parts[3],10);
+  
+  // Visibility parsing: Find the first/main visibility value (before RMK section if present)
+  // Split by RMK to ignore visibility values in remarks
+  const mainSection=text.split(/\bRMK\b/i)[0];
+  if(!mainSection)return{ceiling:worstCeiling===Infinity?null:worstCeiling,visibility:worstVis===Infinity?null:worstVis};
+  
+  // First check for mixed format like "2 1/2SM" (whole number + fraction)
+  // Pattern: number, space, fraction, SM
+  const mixedVisPattern=/(\d+)\s+(\d+)\/(\d+)SM\b/;
+  const mixedVisMatch=mainSection.match(mixedVisPattern);
+  if(mixedVisMatch){
+    const whole=parseInt(mixedVisMatch[1],10);
+    const num=parseInt(mixedVisMatch[2],10);
+    const den=parseInt(mixedVisMatch[3],10);
+    if(den>0){
       const vis=whole+(num/den);
-      if(vis<worstVis)worstVis=vis;
+      worstVis=vis;
     }
-  });
+  }else{
+    // Check for simple fraction like "1/2SM" (no whole number)
+    const fracVisPattern=/\b(P?)(\d+)\/(\d+)SM\b/;
+    const fracVisMatch=mainSection.match(fracVisPattern);
+    if(fracVisMatch&&!fracVisMatch[1]){
+      // No "P" prefix
+      const num=parseInt(fracVisMatch[2],10);
+      const den=parseInt(fracVisMatch[3],10);
+      if(den>0){
+        const vis=num/den;
+        worstVis=vis;
+      }
+    }else{
+      // Check for whole number visibility like "5SM" or "P6SM"
+      const visPattern=/\b(P?)(\d+)SM\b/;
+      const visMatch=mainSection.match(visPattern);
+      if(visMatch&&!visMatch[1]){
+        // No "P" prefix
+        const vis=parseInt(visMatch[2],10);
+        worstVis=vis;
+      }
+    }
+  }
+  
   return{ceiling:worstCeiling===Infinity?null:worstCeiling,visibility:worstVis===Infinity?null:worstVis};
 }
 function findTriggerTerms(text){
@@ -1335,20 +1407,30 @@ function showFlightContextMenu(e,idx,flight){
   deleteItem.textContent='Delete Flight';
   deleteItem.addEventListener('click',()=>{
     closeContextMenu();
-    if(confirm(`Are you sure you want to delete flight ${flight.flight} (${flight.origin} → ${flight.dest})?`)){
-      flights.splice(idx,1);
-      if(flight.autoRemoveScheduled){
-        const timeoutId=autoRemoveTimeouts.get(flight.id);
-        if(timeoutId)clearTimeout(timeoutId);
-        const deleteTimeoutId=autoRemoveTimeouts.get(flight.id+'_delete');
-        if(deleteTimeoutId)clearTimeout(deleteTimeoutId);
-        autoRemoveTimeouts.delete(flight.id);
-        autoRemoveTimeouts.delete(flight.id+'_delete');
-      }
+    // Store flight data for undo
+    const deletedFlight={...flight};
+    const deletedIdx=idx;
+    // Clean up auto-remove timeouts if scheduled
+    if(flight.autoRemoveScheduled){
+      const timeoutId=autoRemoveTimeouts.get(flight.id);
+      if(timeoutId)clearTimeout(timeoutId);
+      const deleteTimeoutId=autoRemoveTimeouts.get(flight.id+'_delete');
+      if(deleteTimeoutId)clearTimeout(deleteTimeoutId);
+      autoRemoveTimeouts.delete(flight.id);
+      autoRemoveTimeouts.delete(flight.id+'_delete');
+    }
+    // Delete the flight immediately
+    flights.splice(idx,1);
+    renderTable();
+    saveFlights();
+    // Show red toast with undo button
+    showToast(`${flight.flight} ${flight.origin} ${flight.dest}`,'error',10000,()=>{
+      // Undo: restore the flight at its original index
+      flights.splice(deletedIdx,0,deletedFlight);
       renderTable();
       saveFlights();
-      showToast(`Flight ${flight.flight} deleted`,'info');
-    }
+      showToast(`Flight ${deletedFlight.flight} restored`,'success',2000);
+    });
   });
   menu.appendChild(deleteItem);
   document.body.appendChild(menu);
@@ -1545,7 +1627,43 @@ function renderTable(){
       }
     }
     
-    const actionsHtml=flight.isPastEta?`<button class="btn btn-warning action-btn" onclick="window.flightActions.delay(${actualIdx})">Delay</button>`:'';
+    // Action column logic: Show local time if alt1/alt2 exists and ETA >= 8PM local
+    let actionsHtml='';
+    const etaMinutes=flight.eta?zuluToMinutes(flight.eta):null;
+    const currentUtcMinutes=getCurrentZuluMinutes();
+    // Check if flight has arrived (handle day wrap-around)
+    let hasArrived=false;
+    if(etaMinutes!==null&&currentUtcMinutes!==null){
+      let diffMinutes=currentUtcMinutes-etaMinutes;
+      // Handle day wrap-around: if difference is more than 12 hours, adjust
+      if(diffMinutes<-12*60)diffMinutes+=24*60;
+      else if(diffMinutes>12*60)diffMinutes-=24*60;
+      hasArrived=diffMinutes>=0; // Flight has arrived if current time >= ETA
+    }
+    
+    // Only show local time if flight hasn't arrived yet
+    if(!hasArrived&&!flight.isPastEta){
+      // Check if alt1 or alt2 exists
+      if((flight.alt1||flight.alt2)&&flight.eta&&flight.dest){
+        const destTimezone=getAirportTimezone(flight.dest);
+        if(destTimezone){
+          const localTime=convertUtcToLocalTime(flight.eta,destTimezone);
+          if(localTime){
+            // Check if local time is at or past 8:00 PM (20:00)
+            const localTimeMinutes=localTime.hours*60+localTime.minutes;
+            const eightPMMinutes=20*60; // 8:00 PM = 20:00 = 1200 minutes
+            if(localTimeMinutes>=eightPMMinutes){
+              actionsHtml=localTime.timeString;
+            }
+          }
+        }
+      }
+    }
+    
+    // If flight has arrived (current UTC >= ETA UTC), show Delay button instead of local time
+    if(flight.isPastEta||hasArrived){
+      actionsHtml=`<button class="btn btn-warning action-btn" onclick="window.flightActions.delay(${actualIdx})">Delay</button>`;
+    }
     
     row.innerHTML=`<td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight,'origin')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight,'dest')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt||''}">${renderICAO(flight,'takeoffAlt')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1||''}">${renderICAO(flight,'alt1')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2||''}">${renderICAO(flight,'alt2')}</td><td class="editable" data-idx="${actualIdx}" data-field="etd">${formatZuluTime(flight.etd)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td><td>${formatDuration(flight.duration)}</td><td>${formatZuluTime(flight.eta)}</td><td style="white-space:nowrap;">${actionsHtml}</td><td><span class="drag-handle">⋮⋮</span></td>`;
     const fltCell=row.querySelector('.flt-cell');
