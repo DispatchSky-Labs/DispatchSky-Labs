@@ -239,12 +239,24 @@ function convertUtcToLocalTime(utcHHMM,timezone){
       // If ETA is more than 12 hours in the future, assume it was yesterday (shouldn't happen, but handle it)
       utcDate=new Date(utcDate.getTime()-24*3600*1000);
     }
-    // Convert to local time in the specified timezone
-    const formatter=new Intl.DateTimeFormat('en-US',{timeZone:timezone,hour12:false,hour:'2-digit',minute:'2-digit'});
-    const parts=formatter.formatToParts(utcDate);
-    const localHours=parseInt(parts.find(p=>p.type==='hour').value,10);
-    const localMinutes=parseInt(parts.find(p=>p.type==='minute').value,10);
-    return{hours:localHours,minutes:localMinutes,timeString:`${String(localHours).padStart(2,'0')}:${String(localMinutes).padStart(2,'0')}`};
+    // Convert to local time in the specified timezone with 12-hour format
+    const formatter=new Intl.DateTimeFormat('en-US',{timeZone:timezone,hour12:true,hour:'numeric',minute:'2-digit'});
+    const formattedTime=formatter.format(utcDate);
+    // Parse the formatted time (e.g., "8:00 PM" or "7:00 AM" or "12:00 AM" for midnight)
+    const timeMatch=formattedTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if(timeMatch){
+      let localHours=parseInt(timeMatch[1],10);
+      const localMinutes=parseInt(timeMatch[2],10);
+      const period=timeMatch[3].toUpperCase();
+      // Convert to 24-hour format for calculations (but keep 12-hour format for display)
+      let hours24;
+      if(period==='PM'){
+        hours24=localHours===12?12:localHours+12;
+      }else{
+        hours24=localHours===12?0:localHours;
+      }
+      return{hours:localHours,hours24:hours24,minutes:localMinutes,period:period,timeString:formattedTime};
+    }
   }catch(e){
     console.error('Error converting timezone:',e);
   }
@@ -433,7 +445,10 @@ function getTaxiOutSuggestion(origin){
   return String(Math.round(history.reduce((a,b)=>a+b,0)/history.length));
 }
 function calculateDurationAndETA(flight){
-  if(!flight.taxiOut||!flight.burnoff){flight.duration='';return}
+  if(!flight.taxiOut||!flight.burnoff){
+    flight.duration='';
+    return;
+  }
   const totalMin=(parseInt(flight.taxiOut,10)||0)+(parseInt(flight.burnoff,10)||0);
   flight.duration=String(totalMin);
   if(flight.etd)flight.eta=addMinutesToZulu(flight.etd,totalMin);
@@ -1627,7 +1642,7 @@ function renderTable(){
       }
     }
     
-    // Action column logic: Show local time if alt1/alt2 exists and ETA >= 8PM local
+    // Action column logic: Show local time if alt1/alt2 exists and ETA is 8:00 PM to 7:00 AM next day
     let actionsHtml='';
     const etaMinutes=flight.eta?zuluToMinutes(flight.eta):null;
     const currentUtcMinutes=getCurrentZuluMinutes();
@@ -1649,10 +1664,12 @@ function renderTable(){
         if(destTimezone){
           const localTime=convertUtcToLocalTime(flight.eta,destTimezone);
           if(localTime){
-            // Check if local time is at or past 8:00 PM (20:00)
-            const localTimeMinutes=localTime.hours*60+localTime.minutes;
+            // Check if local time is between 8:00 PM (20:00) and 7:00 AM (07:00) next day
+            // This means: time >= 20:00 (8:00 PM) OR time < 07:00 (7:00 AM)
+            const localTimeMinutes24=localTime.hours24*60+localTime.minutes;
             const eightPMMinutes=20*60; // 8:00 PM = 20:00 = 1200 minutes
-            if(localTimeMinutes>=eightPMMinutes){
+            const sevenAMMinutes=7*60; // 7:00 AM = 07:00 = 420 minutes
+            if(localTimeMinutes24>=eightPMMinutes||localTimeMinutes24<sevenAMMinutes){
               actionsHtml=localTime.timeString;
             }
           }
