@@ -1829,18 +1829,33 @@ function attachEditListeners(){
         showWeatherModal(icao);
       }else if(!touchMoved&&touchDuration<=500&&!this.querySelector('input')){startEdit(this)}
     });
-    // Hover to show weather for ICAO cells
-    const icao=cell.dataset.icao;
-    if(icao&&icao!=='—'&&cell.classList.contains('icao-cell')){
-      let hoverTimeout=null;
-      cell.addEventListener('mouseenter',function(){
-        hoverTimeout=setTimeout(()=>{showWeatherOnHover(icao,cell)},300);
-      });
-      cell.addEventListener('mouseleave',function(){
-        if(hoverTimeout)clearTimeout(hoverTimeout);
-        // comment out:hideWeatherOnHover();
-      });
-    }
+    // === WEATHER: Long-press on mobile, right-click on desktop ===
+// Do NOT use hover — it breaks editing
+const icao = cell.dataset.icao;
+if (icao && icao !== '—' && cell.classList.contains('icao-cell')) {
+  let longPressTimer = null;
+  const longPressDuration = 600; // ms
+
+  // Long press on touch devices
+  cell.addEventListener('touchstart', function (e) {
+    longPressTimer = setTimeout(() => {
+      e.preventDefault();
+      showWeatherModal(icao);
+    }, longPressDuration);
+  }, { passive: false });
+
+  cell.addEventListener('touchend', function () {
+    if (longPressTimer) clearTimeout(longPressTimer);
+  });
+
+  cell.addEventListener('touchmove', function () {
+    if (longPressTimer) clearTimeout(longPressTimer);
+  });
+
+  // Right-click on desktop
+  cell.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    showWeatherModal(icao);
   });
 }
 function startEdit(cell){
