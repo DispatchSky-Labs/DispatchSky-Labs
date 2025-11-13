@@ -1838,7 +1838,7 @@ function attachEditListeners(){
       });
       cell.addEventListener('mouseleave',function(){
         if(hoverTimeout)clearTimeout(hoverTimeout);
-        hideWeatherOnHover();
+        // comment out:hideWeatherOnHover();
       });
     }
   });
