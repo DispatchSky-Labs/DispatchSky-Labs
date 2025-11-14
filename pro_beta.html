@@ -619,45 +619,46 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
       // QR codes should be at least 10x10 modules per version, so larger = more readable
       const qrSize=Math.min(600,Math.max(400,Math.ceil(Math.sqrt(dataSizeBytes)*20)));
       
-      try{
-        // Use HIGH error correction for better reliability with camera scanning
-        // H (30%) provides best recovery from damage/poor scanning
-        const qrCode=new QRCode(qrDiv,{
-          text:qrData,
-          width:qrSize,
-          height:qrSize,
-          colorDark:'#000000',
-          colorLight:'#ffffff',
-          correctLevel:QRCode.CorrectLevel.H // HIGH error correction for camera readability
-        });
-        
-        // Show data size info on success
-        const info=document.createElement('div');
-        info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
-        info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes'+(useBase64?' (base64)':'');
-        container.appendChild(info);
-      }catch(qrErr){
-        console.error('QRCode constructor error:',qrErr);
-        // Try again with medium error correction if H fails
-        try{
-          qrDiv.innerHTML='';
-          const qrCode2=new QRCode(qrDiv,{
-            text:qrData,
-            width:qrSize,
-            height:qrSize,
-            colorDark:'#000000',
-            colorLight:'#ffffff',
-            correctLevel:QRCode.CorrectLevel.M // Medium error correction fallback
-          });
-          const info=document.createElement('div');
-          info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
-          info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes (fallback)';
-          container.appendChild(info);
-        }catch(qrErr2){
-          console.error('QRCode fallback error:',qrErr2);
-          throw qrErr;
+      // Start with lower error correction (L) and smaller size for better compatibility
+      let qrCode=null;
+      let error=null;
+      const sizes=[400,350,300];
+      const levels=[QRCode.CorrectLevel.L,QRCode.CorrectLevel.M];
+      
+      for(let level of levels){
+        if(qrCode)break;
+        for(let size of sizes){
+          try{
+            qrDiv.innerHTML='';
+            qrCode=new QRCode(qrDiv,{
+              text:qrData,
+              width:size,
+              height:size,
+              colorDark:'#000000',
+              colorLight:'#ffffff',
+              correctLevel:level,
+              useSVG:false // Use canvas instead of SVG for better compatibility
+            });
+            // Success - break out of loops
+            break;
+          }catch(e){
+            error=e;
+            console.error('QRCode generation attempt failed:',e,`size:${size}, level:${level}`);
+            continue;
+          }
         }
       }
+      
+      if(!qrCode){
+        console.error('All QRCode generation attempts failed. Last error:',error);
+        throw error||new Error('QRCode generation failed');
+      }
+      
+      // Show data size info on success
+      const info=document.createElement('div');
+      info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
+      info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes'+(useBase64?' (base64)':'');
+      container.appendChild(info);
       
     }catch(err){
       console.error('QR Code generation error:',err);
