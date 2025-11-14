@@ -485,10 +485,9 @@ function exportForiOS(){
     if(typeof crypto!=='undefined'&&crypto.randomUUID)return crypto.randomUUID();
     return Date.now()+'-'+Math.random().toString(36).substr(2,9);
   };
-  // Ultra-compact export: use single-letter keys to minimize size
+  // Ultra-compact export: use single-letter keys to minimize size, no ID needed
   const exportedFlights=flights.map(f=>{
     const flight={
-      i:f.id||generateId(), // id -> i
       f:f.flight||'', // flight -> f
       o:f.origin||'', // origin -> o
       d:f.dest||'', // dest -> d
