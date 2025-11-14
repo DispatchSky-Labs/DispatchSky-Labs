@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>CieloTracker Pro – Flight Weather Monitor</title>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root{--bg:#f9fafb;--fg:#111827;--muted:#6b7280;--border:#e5e7eb;--brand:#0f5fff;--danger:#ef4444;--success:#10b981;--warning:#f59e0b;--trigger-bg:#ef4444;--trigger-text:#fff}
     *{box-sizing:border-box}
@@ -550,10 +550,17 @@ function showQRCodeModal(jsonString,flightCount){
     if(e.target===overlay)overlay.remove();
   });
   
-  // Wait for DOM to be ready, then generate QR code
-  setTimeout(()=>{
-    if(typeof QRCode==='undefined'){
-      qrDiv.innerHTML='<p style="color:var(--warning);padding:20px;">QR Code library not loaded. Please refresh the page.</p>';
+  // Wait for DOM and library to be ready, then generate QR code
+  let attempts=0;
+  const maxAttempts=50;
+  function tryGenerateQR(){
+    attempts++;
+    if(typeof QRCode==='undefined'||!QRCode){
+      if(attempts<maxAttempts){
+        setTimeout(tryGenerateQR,100);
+        return;
+      }
+      qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--warning);margin-bottom:16px;">QR Code library not loaded.</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Please check your internet connection and refresh the page.</p><button class="btn" onclick="location.reload()">Refresh Page</button></div>';
       return;
     }
     if(!qrDiv.parentNode){
@@ -581,40 +588,28 @@ function showQRCodeModal(jsonString,flightCount){
       // Clear any existing QR code in the div
       qrDiv.innerHTML='';
       
-      // Use canvas-based QR code generation (more reliable)
+      // Use qrcodejs library (DOM-based, reliable)
       const qrSize=Math.min(400,Math.max(300,Math.ceil(dataSizeBytes/10)));
-      const canvas=document.createElement('canvas');
-      qrDiv.appendChild(canvas);
       
-      // Generate QR code using qrcode library (canvas-based)
-      QRCode.toCanvas(canvas,jsonString,{
-        width:qrSize,
-        margin:2,
-        color:{
-          dark:'#000000',
-          light:'#ffffff'
-        },
-        errorCorrectionLevel:'H'
-      },(err)=>{
-        if(err){
-          console.error('QR Code generation error:',err);
-          qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:8px;">Error generating QR code</p><p style="color:var(--muted);font-size:12px;margin-bottom:12px;">'+err.message+'</p><p style="color:var(--muted);font-size:11px;">Data size: '+Math.round(dataSizeBytes)+' bytes</p></div>';
-          const copyBtn=document.createElement('button');
-          copyBtn.className='btn';
-          copyBtn.style.marginTop='12px';
-          copyBtn.textContent='Copy JSON Instead';
-          copyBtn.onclick=()=>{
-            navigator.clipboard.writeText(jsonString).then(()=>alert('JSON copied to clipboard as fallback!')).catch(()=>alert('Copy failed'));
-          };
-          qrDiv.appendChild(copyBtn);
-        }else{
-          // Show data size info on success
-          const info=document.createElement('div');
-          info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
-          info.textContent=flightCount+' flights • '+Math.round(dataSizeBytes)+' bytes';
-          container.appendChild(info);
-        }
-      });
+      try{
+        const qrCode=new QRCode(qrDiv,{
+          text:jsonString,
+          width:qrSize,
+          height:qrSize,
+          colorDark:'#000000',
+          colorLight:'#ffffff',
+          correctLevel:QRCode.CorrectLevel.H
+        });
+        
+        // Show data size info on success
+        const info=document.createElement('div');
+        info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
+        info.textContent=flightCount+' flights • '+Math.round(dataSizeBytes)+' bytes';
+        container.appendChild(info);
+      }catch(qrErr){
+        console.error('QRCode constructor error:',qrErr);
+        throw qrErr;
+      }
       
     }catch(err){
       console.error('QR Code generation error:',err);
@@ -630,7 +625,10 @@ function showQRCodeModal(jsonString,flightCount){
       };
       qrDiv.appendChild(copyBtn);
     }
-  },100);
+  }
+  
+  // Start trying to generate after short delay
+  setTimeout(tryGenerateQR,200);
 }
 function loadFlights(){
   const saved=localStorage.getItem('ct_pro_flights');
