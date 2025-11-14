@@ -512,12 +512,30 @@ function exportForiOS(){
   });
   // Create compact JSON (no pretty printing, minimal whitespace)
   const jsonString=JSON.stringify(exportedFlights);
-  // Base64 encode to avoid issues with special characters in QR code library
-  const base64Data=btoa(unescape(encodeURIComponent(jsonString)));
-  showQRCodeModal(base64Data,jsonString,exportedFlights.length);
+  
+  // Try raw JSON first (smaller, more readable by cameras)
+  // If too large, fall back to base64
+  const jsonSizeBytes=new Blob([jsonString]).size;
+  const maxQRBytes=2953; // Maximum for QR code v40 with medium error correction
+  
+  let qrData, useBase64;
+  if(jsonSizeBytes<=maxQRBytes){
+    // Use raw JSON - smaller and more readable
+    qrData=jsonString;
+    useBase64=false;
+  }else{
+    // Base64 encode if too large (but this doubles size, so may still be too big)
+    qrData=btoa(unescape(encodeURIComponent(jsonString)));
+    useBase64=true;
+  }
+  
+  showQRCodeModal(qrData,jsonString,exportedFlights.length,useBase64);
 }
-function showQRCodeModal(base64Data,originalJson,flightCount){
-  console.log('Generating QR code for',flightCount,'flights. Original size:',originalJson.length,'chars, Base64:',base64Data.length,'chars');
+function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
+  const dataSizeBytes=new Blob([qrData]).size;
+  const originalSizeBytes=new Blob([originalJson]).size;
+  console.log('Generating QR code for',flightCount,'flights. QR data size:',dataSizeBytes,'bytes, Original:',originalSizeBytes,'bytes, Base64:',useBase64);
+  
   // Remove any existing QR modal
   const existingModal=document.querySelector('.qr-modal-overlay');
   if(existingModal)existingModal.remove();
@@ -541,11 +559,26 @@ function showQRCodeModal(base64Data,originalJson,flightCount){
   container.appendChild(qrDiv);
   const instructions=document.createElement('div');
   instructions.className='qr-modal-instructions';
-  instructions.innerHTML='<strong>Instructions:</strong><br/>1. Open CieloTracker Pro on your iPhone<br/>2. Tap Menu (⋯) → Scan QR Code<br/>3. Point camera at this QR code<br/>4. Flights will import automatically';
+  instructions.innerHTML='<strong>Instructions:</strong><br/>1. Open CieloTracker Pro on your iPhone<br/>2. Tap Menu (⋯) → Scan QR Code<br/>3. Point camera at this QR code<br/>4. Flights will import automatically<br/><br/><strong>Tip:</strong> Ensure good lighting and hold phone steady';
+  
+  // Add clipboard button as alternative
+  const clipboardBtn=document.createElement('button');
+  clipboardBtn.className='btn';
+  clipboardBtn.style.cssText='margin-top:12px;width:100%;';
+  clipboardBtn.textContent='Copy JSON to Clipboard Instead';
+  clipboardBtn.onclick=()=>{
+    navigator.clipboard.writeText(originalJson).then(()=>{
+      showToast('JSON copied to clipboard! Paste in iOS app.', 'success', 3000);
+    }).catch(()=>{
+      showToast('Copy failed', 'error');
+    });
+  };
+  
   modal.appendChild(closeBtn);
   modal.appendChild(title);
   modal.appendChild(container);
   modal.appendChild(instructions);
+  modal.appendChild(clipboardBtn);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   overlay.addEventListener('click',(e)=>{
@@ -571,58 +604,50 @@ function showQRCodeModal(base64Data,originalJson,flightCount){
     }
     
     try{
-      // Check data size - QR codes can handle up to ~2900 bytes
-      const dataSizeBytes=new Blob([base64Data]).size;
-      const originalSizeBytes=new Blob([originalJson]).size;
-      const maxSizeBytes=2900;
+      // Check data size - QR codes can handle up to ~2953 bytes for v40 with M error correction
+      const maxSizeBytes=2953;
       
       if(dataSizeBytes>maxSizeBytes){
-        const copyBtn=document.createElement('button');
-        copyBtn.className='btn';
-        copyBtn.textContent='Copy JSON to Clipboard';
-        copyBtn.onclick=()=>{
-          navigator.clipboard.writeText(originalJson).then(()=>alert('JSON copied to clipboard!')).catch(()=>alert('Copy failed'));
-        };
-        qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Consider splitting into multiple exports, or use clipboard method instead.</p></div>';
-        qrDiv.appendChild(copyBtn);
+        qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Use clipboard method instead, or split flights into multiple exports.</p></div>';
         return;
       }
       
       // Clear any existing QR code in the div
       qrDiv.innerHTML='';
       
-      // Use qrcodejs library (DOM-based, reliable)
-      // Use base64 encoded data - more reliable with QR code libraries
-      const qrSize=Math.min(500,Math.max(300,Math.ceil(dataSizeBytes/8)));
+      // Use larger QR code size for better readability (especially for cameras)
+      // QR codes should be at least 10x10 modules per version, so larger = more readable
+      const qrSize=Math.min(600,Math.max(400,Math.ceil(Math.sqrt(dataSizeBytes)*20)));
       
       try{
-        // Create QR code with medium error correction first (H sometimes fails)
+        // Use HIGH error correction for better reliability with camera scanning
+        // H (30%) provides best recovery from damage/poor scanning
         const qrCode=new QRCode(qrDiv,{
-          text:base64Data,
+          text:qrData,
           width:qrSize,
           height:qrSize,
           colorDark:'#000000',
           colorLight:'#ffffff',
-          correctLevel:QRCode.CorrectLevel.M
+          correctLevel:QRCode.CorrectLevel.H // HIGH error correction for camera readability
         });
         
         // Show data size info on success
         const info=document.createElement('div');
         info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
-        info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes';
+        info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes'+(useBase64?' (base64)':'');
         container.appendChild(info);
       }catch(qrErr){
         console.error('QRCode constructor error:',qrErr);
-        // Try again with smaller size and lower error correction
+        // Try again with medium error correction if H fails
         try{
           qrDiv.innerHTML='';
           const qrCode2=new QRCode(qrDiv,{
-            text:base64Data,
-            width:300,
-            height:300,
+            text:qrData,
+            width:qrSize,
+            height:qrSize,
             colorDark:'#000000',
             colorLight:'#ffffff',
-            correctLevel:QRCode.CorrectLevel.L
+            correctLevel:QRCode.CorrectLevel.M // Medium error correction fallback
           });
           const info=document.createElement('div');
           info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
