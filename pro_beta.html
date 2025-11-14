@@ -485,29 +485,27 @@ function exportForiOS(){
     if(typeof crypto!=='undefined'&&crypto.randomUUID)return crypto.randomUUID();
     return Date.now()+'-'+Math.random().toString(36).substr(2,9);
   };
-  // Optimize export: only include non-empty optional fields, use shorter names where possible
+  // Ultra-compact export: use single-letter keys to minimize size
   const exportedFlights=flights.map(f=>{
     const flight={
-      id:f.id||generateId(),
-      flight:f.flight||'',
-      origin:f.origin||'',
-      dest:f.dest||'',
+      i:f.id||generateId(), // id -> i
+      f:f.flight||'', // flight -> f
+      o:f.origin||'', // origin -> o
+      d:f.dest||'', // dest -> d
       etd:f.etd||'',
       eta:f.eta||''
     };
-    // Only include optional fields if they have values
-    if(f.takeoffAlt)flight.takeoffAlt=f.takeoffAlt;
-    if(f.alt1)flight.alt1=f.alt1;
-    if(f.alt2)flight.alt2=f.alt2;
-    if(f.taxiOut)flight.taxiOut=f.taxiOut;
-    if(f.burnoff)flight.burnoff=f.burnoff;
-    if(f.duration)flight.duration=f.duration;
-    if(f.isPastEta)flight.isPastEta=true;
-    if(f.autoRemoveScheduled)flight.autoRemoveScheduled=true;
+    // Only include optional fields if they have values, use short keys
+    if(f.takeoffAlt)flight.ta=f.takeoffAlt; // takeoffAlt -> ta
+    if(f.alt1)flight.a1=f.alt1; // alt1 -> a1
+    if(f.alt2)flight.a2=f.alt2; // alt2 -> a2
+    if(f.taxiOut)flight.to=f.taxiOut; // taxiOut -> to
+    if(f.burnoff)flight.bo=f.burnoff; // burnoff -> bo
+    if(f.duration)flight.dur=f.duration; // duration -> dur
+    if(f.isPastEta)flight.pe=true; // isPastEta -> pe
+    if(f.autoRemoveScheduled)flight.ar=true; // autoRemoveScheduled -> ar
     const triggers=Array.from(f.triggers||[]);
-    if(triggers.length>0)flight.triggers=triggers;
-    // Only include lastUpdated if it exists and is relevant
-    if(f.lastUpdated)flight.lastUpdated=new Date().toISOString();
+    if(triggers.length>0)flight.t=triggers; // triggers -> t
     return flight;
   });
   // Create compact JSON (no pretty printing, minimal whitespace)
