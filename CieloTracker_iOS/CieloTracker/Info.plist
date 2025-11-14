@@ -63,6 +63,8 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is needed to scan QR codes for syncing flights from the web app.</string>
 </dict>
 </plist>
 

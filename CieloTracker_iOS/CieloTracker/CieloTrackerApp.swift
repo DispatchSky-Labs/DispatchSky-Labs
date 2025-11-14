@@ -15,7 +15,13 @@ struct CieloTrackerApp: App {
             Flight.self,
             WeatherData.self
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        
+        // Enable CloudKit/iCloud sync
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .automatic // Enable iCloud sync
+        )
         
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])

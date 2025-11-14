@@ -9,18 +9,32 @@ struct FlightListView: View {
     let flights: [Flight]
     let weatherData: [String: WeatherResponse]
     let onICAOTap: (String) -> Void
+    @State private var searchText = ""
+    
+    var filteredFlights: [Flight] {
+        if searchText.isEmpty {
+            return flights
+        }
+        return flights.filter { flight in
+            flight.flightNumber.localizedCaseInsensitiveContains(searchText) ||
+            flight.origin.localizedCaseInsensitiveContains(searchText) ||
+            flight.dest.localizedCaseInsensitiveContains(searchText)
+        }
+    }
     
     var body: some View {
         List {
-            ForEach(flights, id: \.id) { flight in
+            ForEach(filteredFlights, id: \.id) { flight in
                 FlightRowView(
                     flight: flight,
                     weatherData: weatherData,
                     onICAOTap: onICAOTap
                 )
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
         }
         .listStyle(.plain)
+        .searchable(text: $searchText, prompt: "Search flights")
     }
 }
 
@@ -30,76 +44,136 @@ struct FlightRowView: View {
     let onICAOTap: (String) -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header row: Flight number and times
             HStack {
                 Text(flight.flightNumber)
-                    .font(.headline)
+                    .font(.title3)
                     .fontWeight(.bold)
+                    .foregroundColor(.primary)
                 
                 Spacer()
                 
-                Text(formatTime(flight.etd))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                // ETD/ETA with time formatting
+                if !flight.etd.isEmpty {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("ETD")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(formatTime(flight.etd))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    }
+                }
                 
-                Text("→")
-                    .foregroundColor(.secondary)
+                if !flight.etd.isEmpty && !flight.eta.isEmpty {
+                    Text("→")
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                }
                 
-                Text(formatTime(flight.eta))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if !flight.eta.isEmpty {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("ETA")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(formatTime(flight.eta))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(flight.isPastEta ? .red : .primary)
+                    }
+                }
             }
             
-            HStack(spacing: 12) {
-                ICAOCell(icao: flight.origin, label: "ORG", weatherData: weatherData, onTap: onICAOTap)
-                ICAOCell(icao: flight.dest, label: "DEST", weatherData: weatherData, onTap: onICAOTap)
+            // Airport codes row
+            HStack(spacing: 8) {
+                ICAOCell(icao: flight.origin, label: "ORG", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.origin), onTap: onICAOTap)
+                ICAOCell(icao: flight.dest, label: "DEST", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.dest), onTap: onICAOTap)
                 if !flight.takeoffAlt.isEmpty {
-                    ICAOCell(icao: flight.takeoffAlt, label: "T/ALT", weatherData: weatherData, onTap: onICAOTap)
+                    ICAOCell(icao: flight.takeoffAlt, label: "T/ALT", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.takeoffAlt), onTap: onICAOTap)
                 }
                 if !flight.alt1.isEmpty {
-                    ICAOCell(icao: flight.alt1, label: "ALT1", weatherData: weatherData, onTap: onICAOTap)
+                    ICAOCell(icao: flight.alt1, label: "ALT1", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.alt1), onTap: onICAOTap)
                 }
                 if !flight.alt2.isEmpty {
-                    ICAOCell(icao: flight.alt2, label: "ALT2", weatherData: weatherData, onTap: onICAOTap)
+                    ICAOCell(icao: flight.alt2, label: "ALT2", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.alt2), onTap: onICAOTap)
                 }
             }
             
-            if !flight.taxiOut.isEmpty || !flight.burnoff.isEmpty {
-                HStack(spacing: 16) {
+            // Taxi, Burn, Duration row
+            if !flight.taxiOut.isEmpty || !flight.burnoff.isEmpty || !flight.duration.isEmpty {
+                HStack(spacing: 12) {
                     if !flight.taxiOut.isEmpty {
-                        Label("Taxi: \(flight.taxiOut)min", systemImage: "car")
-                            .font(.caption)
+                        HStack(spacing: 4) {
+                            Image(systemName: "car.fill")
+                                .font(.caption)
+                            Text("\(flight.taxiOut)m")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.secondary)
                     }
                     if !flight.burnoff.isEmpty {
-                        Label("Burn: \(flight.burnoff)min", systemImage: "flame")
-                            .font(.caption)
+                        HStack(spacing: 4) {
+                            Image(systemName: "flame.fill")
+                                .font(.caption)
+                            Text("\(flight.burnoff)m")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.orange)
                     }
                     if !flight.duration.isEmpty {
-                        Label("Dur: \(flight.duration)min", systemImage: "clock")
-                            .font(.caption)
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.fill")
+                                .font(.caption)
+                            Text("\(flight.duration)m")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.blue)
                     }
                 }
-                .foregroundColor(.secondary)
+                .padding(.top, 2)
             }
             
-            // Show triggers if any
+            // Triggers row
             if !flight.triggers.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         ForEach(Array(flight.triggers), id: \.self) { trigger in
-                            Text(trigger)
+                            Text(trigger.replacingOccurrences(of: ":", with: " "))
                                 .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(triggerColor(for: trigger).opacity(0.2))
-                                .foregroundColor(triggerColor(for: trigger))
-                                .cornerRadius(4)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(triggerColor(for: trigger))
+                                .foregroundColor(.white)
+                                .cornerRadius(6)
                         }
                     }
                 }
+                .padding(.top, 4)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
+        .background(backgroundColor.opacity(0.3))
+        .cornerRadius(8)
+    }
+    
+    private var backgroundColor: Color {
+        if flight.isPastEta {
+            return .red.opacity(0.1)
+        } else if !flight.triggers.isEmpty {
+            if flight.triggers.contains(where: { $0.contains("red") || $0.contains("critical") }) {
+                return .red.opacity(0.1)
+            } else {
+                return .orange.opacity(0.1)
+            }
+        }
+        return .clear
+    }
+    
+    private func hasTrigger(for icao: String) -> Bool {
+        flight.triggers.contains { $0.contains(icao) }
     }
     
     private func formatTime(_ time: String) -> String {
@@ -111,8 +185,10 @@ struct FlightRowView: View {
     private func triggerColor(for trigger: String) -> Color {
         if trigger.contains("red") || trigger.contains("critical") || trigger.contains("noalt") {
             return .red
-        } else if trigger.contains("bold") || trigger.contains("dest") {
+        } else if trigger.contains("bold") || trigger.contains("dest") || trigger.contains("approach-mins") {
             return .orange
+        } else if trigger.contains("improved") {
+            return .green
         }
         return .blue
     }
@@ -122,6 +198,7 @@ struct ICAOCell: View {
     let icao: String
     let label: String
     let weatherData: [String: WeatherResponse]
+    let hasTrigger: Bool
     let onTap: (String) -> Void
     
     var body: some View {
@@ -130,25 +207,57 @@ struct ICAOCell: View {
                 onTap(icao)
             }
         }) {
-            VStack(spacing: 2) {
+            VStack(spacing: 3) {
                 Text(label)
                     .font(.caption2)
                     .foregroundColor(.secondary)
                 Text(icao.isEmpty ? "—" : icao)
                     .font(.system(.body, design: .monospaced))
-                    .fontWeight(.medium)
-                    .foregroundColor(icao.isEmpty ? .secondary : .primary)
+                    .fontWeight(hasTrigger ? .bold : .medium)
+                    .foregroundColor(cellColor)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(hasWeatherData ? Color.blue.opacity(0.1) : Color.clear)
-            .cornerRadius(6)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(backgroundColor)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(borderColor, lineWidth: hasTrigger ? 2 : 0)
+            )
         }
         .buttonStyle(.plain)
     }
     
+    private var cellColor: Color {
+        if icao.isEmpty {
+            return .secondary
+        } else if hasTrigger {
+            return .red
+        } else if hasWeatherData {
+            return .blue
+        }
+        return .primary
+    }
+    
+    private var backgroundColor: Color {
+        if hasTrigger {
+            return .red.opacity(0.15)
+        } else if hasWeatherData {
+            return .blue.opacity(0.1)
+        }
+        return Color.gray.opacity(0.1)
+    }
+    
+    private var borderColor: Color {
+        if hasTrigger {
+            return .red
+        }
+        return .clear
+    }
+    
     private var hasWeatherData: Bool {
-        weatherData[icao] != nil
+        !icao.isEmpty && weatherData[icao] != nil
     }
 }
+
 

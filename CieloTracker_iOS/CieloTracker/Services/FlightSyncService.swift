@@ -67,7 +67,8 @@ class FlightSyncService {
                 eta: dict["eta"] as? String ?? "",
                 isPastEta: dict["isPastEta"] as? Bool ?? false,
                 autoRemoveScheduled: dict["autoRemoveScheduled"] as? Bool ?? false,
-                triggers: Set((dict["triggers"] as? [String]) ?? [])
+                triggers: Set((dict["triggers"] as? [String]) ?? []),
+                lastUpdated: Date()
             )
             context.insert(flight)
             flights.append(flight)

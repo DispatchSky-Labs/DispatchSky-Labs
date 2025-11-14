@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var selectedICAO = ""
     @State private var showingSyncOptions = false
     @State private var showingAddFlight = false
+    @State private var showingQRScanner = false
     
     var body: some View {
         NavigationStack {
@@ -56,9 +57,15 @@ struct ContentView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button(action: {
+                            showingQRScanner = true
+                        }) {
+                            Label("Scan QR Code", systemImage: "qrcode.viewfinder")
+                        }
+                        
+                        Button(action: {
                             showingSyncOptions = true
                         }) {
-                            Label("Sync", systemImage: "arrow.clockwise")
+                            Label("Import JSON", systemImage: "arrow.clockwise")
                         }
                         
                         Button(action: {
@@ -76,6 +83,9 @@ struct ContentView: View {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
+            }
+            .sheet(isPresented: $showingQRScanner) {
+                QRCodeScannerView()
             }
             .sheet(isPresented: $showingSyncOptions) {
                 SyncOptionsView()

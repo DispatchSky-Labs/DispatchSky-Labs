@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"name": "Sadiom (Web App)",
+			"path": "/Users/sam/Sadiom"
+		},
+		{
+			"name": "CieloTracker Pro (iOS)",
+			"path": "/Users/sam/Library/Mobile Documents/com~apple~CloudDocs/CielotTrackerPro"
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"**/.git": true,
+			"**/.DS_Store": true,
+			"**/DerivedData": true,
+			"**/.build": true
+		}
+	}
+}

@@ -20,13 +20,11 @@ struct AddFlightView: View {
             Form {
                 Section(header: Text("Flight Information")) {
                     TextField("Flight Number", text: $flightNumber)
-                        .autocapitalization(.none)
+                        .textInputAutocapitalization(.never)
                     TextField("Origin", text: $origin)
-                        .autocapitalization(.allCharacters)
-                        .textInputAutocapitalization(.allCharacters)
+                        .textInputAutocapitalization(.characters)
                     TextField("Destination", text: $dest)
-                        .autocapitalization(.allCharacters)
-                        .textInputAutocapitalization(.allCharacters)
+                        .textInputAutocapitalization(.characters)
                     TextField("ETD (HHMM)", text: $etd)
                         .keyboardType(.numberPad)
                     TextField("ETA (HHMM)", text: $eta)

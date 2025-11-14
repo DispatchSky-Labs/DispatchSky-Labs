@@ -5,6 +5,7 @@
 
 import Foundation
 import SwiftData
+import Combine
 
 @MainActor
 class FlightListViewModel: ObservableObject {
