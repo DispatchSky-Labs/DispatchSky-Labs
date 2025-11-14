@@ -511,24 +511,90 @@ function exportForiOS(){
   const jsonString=JSON.stringify(exportedFlights);
   
   // Try raw JSON first (smaller, more readable by cameras)
-  // If too large, fall back to base64
+  // If too large, split into 2 parts
   const jsonSizeBytes=new Blob([jsonString]).size;
-  const maxQRBytes=2953; // Maximum for QR code v40 with medium error correction
+  const maxQRBytes=2800; // Conservative limit for QR code v40 with medium error correction
   
-  let qrData, useBase64;
   if(jsonSizeBytes<=maxQRBytes){
-    // Use raw JSON - smaller and more readable
-    qrData=jsonString;
-    useBase64=false;
+    // Single QR code - use raw JSON
+    const qrData=jsonString;
+    showQRCodeModal(qrData,jsonString,exportedFlights.length,false,1,1);
   }else{
-    // Base64 encode if too large (but this doubles size, so may still be too big)
-    qrData=btoa(unescape(encodeURIComponent(jsonString)));
-    useBase64=true;
+    // Split into 2 parts
+    const midPoint=Math.ceil(exportedFlights.length/2);
+    const part1=exportedFlights.slice(0,midPoint);
+    const part2=exportedFlights.slice(midPoint);
+    const jsonPart1=JSON.stringify(part1);
+    const jsonPart2=JSON.stringify(part2);
+    
+    // Create metadata objects for each part
+    const metadata1={part:1,total:2,count:part1.length,data:part1};
+    const metadata2={part:2,total:2,count:part2.length,data:part2};
+    const qrData1=JSON.stringify(metadata1);
+    const qrData2=JSON.stringify(metadata2);
+    
+    // Check if parts fit in QR codes
+    const size1=new Blob([qrData1]).size;
+    const size2=new Blob([qrData2]).size;
+    
+    if(size1<=maxQRBytes&&size2<=maxQRBytes){
+      // Both parts fit - show 2 QR codes
+      showMultiQRCodeModal([qrData1,qrData2],jsonString,exportedFlights.length);
+    }else{
+      // Even split parts are too large - use base64 encoding
+      const base64Data=btoa(unescape(encodeURIComponent(jsonString)));
+      const base64Size=new Blob([base64Data]).size;
+      if(base64Size<=maxQRBytes){
+        showQRCodeModal(base64Data,jsonString,exportedFlights.length,true,1,1);
+      }else{
+        // Still too large even with base64 - show error with clipboard option
+        showQRCodeModal(null,jsonString,exportedFlights.length,false,0,0);
+      }
+    }
+  }
+}
+function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1,totalParts=1){
+  if(!qrData){
+    // Data too large - show error with clipboard option
+    const existingModal=document.querySelector('.qr-modal-overlay');
+    if(existingModal)existingModal.remove();
+    const overlay=document.createElement('div');
+    overlay.className='qr-modal-overlay';
+    const modal=document.createElement('div');
+    modal.className='qr-modal';
+    const title=document.createElement('div');
+    title.className='qr-modal-title';
+    title.textContent='Data Too Large for QR Code';
+    const closeBtn=document.createElement('button');
+    closeBtn.className='qr-modal-close';
+    closeBtn.innerHTML='&times;';
+    closeBtn.addEventListener('click',()=>overlay.remove());
+    const container=document.createElement('div');
+    container.className='qr-code-container';
+    container.style.padding='20px';
+    container.innerHTML='<div style="text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(new Blob([originalJson]).size/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:16px;">Use clipboard method instead.</p></div>';
+    const clipboardBtn=document.createElement('button');
+    clipboardBtn.className='btn';
+    clipboardBtn.style.cssText='width:100%;';
+    clipboardBtn.textContent='Copy JSON to Clipboard';
+    clipboardBtn.onclick=()=>{
+      navigator.clipboard.writeText(originalJson).then(()=>{
+        showToast('JSON copied to clipboard! Paste in iOS app.', 'success', 3000);
+        overlay.remove();
+      }).catch(()=>{
+        showToast('Copy failed', 'error');
+      });
+    };
+    modal.appendChild(closeBtn);
+    modal.appendChild(title);
+    modal.appendChild(container);
+    container.appendChild(clipboardBtn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click',(e)=>{if(e.target===overlay)overlay.remove()});
+    return;
   }
   
-  showQRCodeModal(qrData,jsonString,exportedFlights.length,useBase64);
-}
-function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
   const dataSizeBytes=new Blob([qrData]).size;
   const originalSizeBytes=new Blob([originalJson]).size;
   console.log('Generating QR code for',flightCount,'flights. QR data size:',dataSizeBytes,'bytes, Original:',originalSizeBytes,'bytes, Base64:',useBase64);
@@ -544,7 +610,7 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
   modal.style.position='relative';
   const title=document.createElement('div');
   title.className='qr-modal-title';
-  title.textContent='Scan QR Code with iOS App';
+  title.textContent=totalParts>1?`Scan QR Code Part ${currentPart} of ${totalParts}`:'Scan QR Code with iOS App';
   const closeBtn=document.createElement('button');
   closeBtn.className='qr-modal-close';
   closeBtn.innerHTML='&times;';
@@ -556,7 +622,9 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
   container.appendChild(qrDiv);
   const instructions=document.createElement('div');
   instructions.className='qr-modal-instructions';
-  instructions.innerHTML='<strong>Instructions:</strong><br/>1. Open CieloTracker Pro on your iPhone<br/>2. Tap Menu (⋯) → Scan QR Code<br/>3. Point camera at this QR code<br/>4. Flights will import automatically<br/><br/><strong>Tip:</strong> Ensure good lighting and hold phone steady';
+  instructions.innerHTML=totalParts>1?
+    '<strong>Instructions:</strong><br/>1. Scan Part '+currentPart+' of '+totalParts+'<br/>2. The iOS app will prompt for Part '+(currentPart===1?2:1)+' after scanning this one<br/>3. Scan both parts to import all '+flightCount+' flights<br/><br/><strong>Tip:</strong> Ensure good lighting and hold phone steady':
+    '<strong>Instructions:</strong><br/>1. Open CieloTracker Pro on your iPhone<br/>2. Tap Menu (⋯) → Scan QR Code<br/>3. Point camera at this QR code<br/>4. Flights will import automatically<br/><br/><strong>Tip:</strong> Ensure good lighting and hold phone steady';
   
   // Add clipboard button as alternative
   const clipboardBtn=document.createElement('button');
@@ -605,7 +673,7 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
       const maxSizeBytes=2953;
       
       if(dataSizeBytes>maxSizeBytes){
-        qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Use clipboard method instead, or split flights into multiple exports.</p></div>';
+        qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Use clipboard method instead.</p></div>';
         return;
       }
       
@@ -613,7 +681,6 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
       qrDiv.innerHTML='';
       
       // Use larger QR code size for better readability (especially for cameras)
-      // QR codes should be at least 10x10 modules per version, so larger = more readable
       const qrSize=Math.min(600,Math.max(400,Math.ceil(Math.sqrt(dataSizeBytes)*20)));
       
       // Start with lower error correction (L) and smaller size for better compatibility
@@ -634,9 +701,8 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
               colorDark:'#000000',
               colorLight:'#ffffff',
               correctLevel:level,
-              useSVG:false // Use canvas instead of SVG for better compatibility
+              useSVG:false
             });
-            // Success - break out of loops
             break;
           }catch(e){
             error=e;
@@ -654,12 +720,11 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
       // Show data size info on success
       const info=document.createElement('div');
       info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
-      info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes'+(useBase64?' (base64)':'');
+      info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes'+(useBase64?' (base64)':'')+(totalParts>1?` • Part ${currentPart}/${totalParts}`:'');
       container.appendChild(info);
       
     }catch(err){
       console.error('QR Code generation error:',err);
-      console.error('Error details:',err.message,err.stack);
       const dataSizeBytes=new Blob([originalJson]).size;
       qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:8px;">Error generating QR code</p><p style="color:var(--muted);font-size:12px;margin-bottom:12px;">'+err.message+'</p><p style="color:var(--muted);font-size:11px;">Data size: '+Math.round(dataSizeBytes)+' bytes</p></div>';
       const copyBtn=document.createElement('button');
@@ -673,8 +738,146 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64){
     }
   }
   
-  // Start trying to generate after short delay
   setTimeout(tryGenerateQR,200);
+}
+function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
+  // Remove any existing QR modal
+  const existingModal=document.querySelector('.qr-modal-overlay');
+  if(existingModal)existingModal.remove();
+  
+  const overlay=document.createElement('div');
+  overlay.className='qr-modal-overlay';
+  const modal=document.createElement('div');
+  modal.className='qr-modal';
+  modal.style.position='relative';
+  modal.style.maxWidth='800px';
+  const title=document.createElement('div');
+  title.className='qr-modal-title';
+  title.textContent='Scan Both QR Codes (2-Part Import)';
+  const closeBtn=document.createElement('button');
+  closeBtn.className='qr-modal-close';
+  closeBtn.innerHTML='&times;';
+  closeBtn.addEventListener('click',()=>overlay.remove());
+  
+  const container=document.createElement('div');
+  container.className='qr-code-container';
+  container.style.display='flex';
+  container.style.flexDirection='row';
+  container.style.gap='20px';
+  container.style.justifyContent='center';
+  container.style.flexWrap='wrap';
+  
+  // Create QR code containers for both parts
+  const part1Div=document.createElement('div');
+  part1Div.style.display='flex';
+  part1Div.style.flexDirection='column';
+  part1Div.style.alignItems='center';
+  part1Div.style.gap='8px';
+  const part1Label=document.createElement('div');
+  part1Label.textContent='Part 1 of 2';
+  part1Label.style.fontWeight='600';
+  part1Label.style.fontSize='14px';
+  part1Label.style.color='var(--fg)';
+  const part1QR=document.createElement('div');
+  part1QR.id='qrcode-part1-'+Date.now();
+  part1Div.appendChild(part1Label);
+  part1Div.appendChild(part1QR);
+  
+  const part2Div=document.createElement('div');
+  part2Div.style.display='flex';
+  part2Div.style.flexDirection='column';
+  part2Div.style.alignItems='center';
+  part2Div.style.gap='8px';
+  const part2Label=document.createElement('div');
+  part2Label.textContent='Part 2 of 2';
+  part2Label.style.fontWeight='600';
+  part2Label.style.fontSize='14px';
+  part2Label.style.color='var(--fg)';
+  const part2QR=document.createElement('div');
+  part2QR.id='qrcode-part2-'+Date.now();
+  part2Div.appendChild(part2Label);
+  part2Div.appendChild(part2QR);
+  
+  container.appendChild(part1Div);
+  container.appendChild(part2Div);
+  
+  const instructions=document.createElement('div');
+  instructions.className='qr-modal-instructions';
+  instructions.innerHTML='<strong>Instructions:</strong><br/>1. Scan Part 1 first<br/>2. Then scan Part 2<br/>3. The iOS app will combine both parts automatically<br/>4. All '+flightCount+' flights will import<br/><br/><strong>Tip:</strong> Scan them in order (1, then 2)';
+  
+  const clipboardBtn=document.createElement('button');
+  clipboardBtn.className='btn';
+  clipboardBtn.style.cssText='margin-top:12px;width:100%;';
+  clipboardBtn.textContent='Copy JSON to Clipboard Instead';
+  clipboardBtn.onclick=()=>{
+    navigator.clipboard.writeText(originalJson).then(()=>{
+      showToast('JSON copied to clipboard! Paste in iOS app.', 'success', 3000);
+    }).catch(()=>{
+      showToast('Copy failed', 'error');
+    });
+  };
+  
+  modal.appendChild(closeBtn);
+  modal.appendChild(title);
+  modal.appendChild(container);
+  modal.appendChild(instructions);
+  modal.appendChild(clipboardBtn);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',(e)=>{
+    if(e.target===overlay)overlay.remove();
+  });
+  
+  // Generate both QR codes
+  let attempts=0;
+  const maxAttempts=50;
+  function tryGenerateQRs(){
+    attempts++;
+    if(typeof QRCode==='undefined'||!QRCode){
+      if(attempts<maxAttempts){
+        setTimeout(tryGenerateQRs,100);
+        return;
+      }
+      part1QR.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--warning);">QR Code library not loaded.</p></div>';
+      part2QR.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--warning);">QR Code library not loaded.</p></div>';
+      return;
+    }
+    
+    try{
+      // Generate Part 1 QR code
+      new QRCode(part1QR,{
+        text:qrDataParts[0],
+        width:350,
+        height:350,
+        colorDark:'#000000',
+        colorLight:'#ffffff',
+        correctLevel:QRCode.CorrectLevel.M,
+        useSVG:false
+      });
+      
+      // Generate Part 2 QR code
+      new QRCode(part2QR,{
+        text:qrDataParts[1],
+        width:350,
+        height:350,
+        colorDark:'#000000',
+        colorLight:'#ffffff',
+        correctLevel:QRCode.CorrectLevel.M,
+        useSVG:false
+      });
+      
+      const info=document.createElement('div');
+      info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
+      info.textContent=flightCount+' flights • '+Math.round(new Blob([originalJson]).size)+' bytes • 2-part QR codes';
+      container.appendChild(info);
+    }catch(err){
+      console.error('QR Code generation error:',err);
+      part1QR.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);">Error generating QR code</p></div>';
+      part2QR.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);">Error generating QR code</p></div>';
+    }
+  }
+  
+  setTimeout(tryGenerateQRs,200);
 }
 function loadFlights(){
   const saved=localStorage.getItem('ct_pro_flights');
