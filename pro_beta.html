@@ -468,6 +468,57 @@ function saveFlights(){
   const flightsToSave=flights.map(f=>({...f,triggers:Array.from(f.triggers||[])}));
   localStorage.setItem('ct_pro_flights',JSON.stringify(flightsToSave));
 }
+function exportForiOS(){
+  if(!flights.length){
+    showToast('No flights to export', 'warning');
+    return;
+  }
+  const generateId=()=>{
+    if(typeof crypto!=='undefined'&&crypto.randomUUID)return crypto.randomUUID();
+    return Date.now()+'-'+Math.random().toString(36).substr(2,9);
+  };
+  const exportedFlights=flights.map(f=>({
+    id:f.id||generateId(),
+    flight:f.flight||'',
+    origin:f.origin||'',
+    dest:f.dest||'',
+    takeoffAlt:f.takeoffAlt||'',
+    alt1:f.alt1||'',
+    alt2:f.alt2||'',
+    etd:f.etd||'',
+    taxiOut:f.taxiOut||'',
+    burnoff:f.burnoff||'',
+    duration:f.duration||'',
+    eta:f.eta||'',
+    isPastEta:f.isPastEta||false,
+    autoRemoveScheduled:f.autoRemoveScheduled||false,
+    triggers:Array.from(f.triggers||[]),
+    lastUpdated:new Date().toISOString()
+  }));
+  const jsonString=JSON.stringify(exportedFlights,null,2);
+  navigator.clipboard.writeText(jsonString).then(()=>{
+    showToast('Flight data copied to clipboard! Open iOS app → Menu → Sync → Paste and Import', 'success', 5000);
+  }).catch(err=>{
+    console.error('Failed to copy:',err);
+    const textArea=document.createElement('textarea');
+    textArea.value=jsonString;
+    textArea.style.position='fixed';
+    textArea.style.opacity='0';
+    document.body.appendChild(textArea);
+    textArea.select();
+    try{
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      showToast('Flight data copied! Open iOS app → Menu → Sync → Paste and Import', 'success', 5000);
+    }catch(e){
+      document.body.removeChild(textArea);
+      showToast('Failed to copy. Please copy manually from console.', 'error');
+      console.log('--- Copy this JSON for iOS Import ---');
+      console.log(jsonString);
+      console.log('--- End JSON ---');
+    }
+  });
+}
 function loadFlights(){
   const saved=localStorage.getItem('ct_pro_flights');
   if(saved){
@@ -1534,6 +1585,10 @@ function showContextMenu(e){
   const currentTheme=getTheme();
   themeItem.textContent=currentTheme==='dark'?'Light Theme':'Dark Theme';
   themeItem.addEventListener('click',()=>{toggleTheme()});
+  const exportIOSItem=document.createElement('button');
+  exportIOSItem.className='context-menu-item';
+  exportIOSItem.textContent='Export for iOS';
+  exportIOSItem.addEventListener('click',()=>{closeContextMenu();exportForiOS()});
   const rawInputItem=document.createElement('button');
   rawInputItem.className='context-menu-item danger';
   rawInputItem.textContent='Clear and Input Raw';
@@ -1543,6 +1598,7 @@ function showContextMenu(e){
   menu.appendChild(summaryItem);
   menu.appendChild(passdownItem);
   menu.appendChild(themeItem);
+  menu.appendChild(exportIOSItem);
   menu.appendChild(rawInputItem);
   document.body.appendChild(menu);
   const x=e.clientX||0;
