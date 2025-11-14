@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>CieloTracker Pro – Flight Weather Monitor</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/davidshimjs-qrcodejs@0.0.2/qrcode.min.js"></script>
   <style>
     :root{--bg:#f9fafb;--fg:#111827;--muted:#6b7280;--border:#e5e7eb;--brand:#0f5fff;--danger:#ef4444;--success:#10b981;--warning:#f59e0b;--trigger-bg:#ef4444;--trigger-text:#fff}
     *{box-sizing:border-box}
@@ -512,10 +512,12 @@ function exportForiOS(){
   });
   // Create compact JSON (no pretty printing, minimal whitespace)
   const jsonString=JSON.stringify(exportedFlights);
-  showQRCodeModal(jsonString,exportedFlights.length);
+  // Base64 encode to avoid issues with special characters in QR code library
+  const base64Data=btoa(unescape(encodeURIComponent(jsonString)));
+  showQRCodeModal(base64Data,jsonString,exportedFlights.length);
 }
-function showQRCodeModal(jsonString,flightCount){
-  console.log('Generating QR code for',flightCount,'flights. Data size:',jsonString.length,'characters');
+function showQRCodeModal(base64Data,originalJson,flightCount){
+  console.log('Generating QR code for',flightCount,'flights. Original size:',originalJson.length,'chars, Base64:',base64Data.length,'chars');
   // Remove any existing QR modal
   const existingModal=document.querySelector('.qr-modal-overlay');
   if(existingModal)existingModal.remove();
@@ -570,7 +572,8 @@ function showQRCodeModal(jsonString,flightCount){
     
     try{
       // Check data size - QR codes can handle up to ~2900 bytes
-      const dataSizeBytes=new Blob([jsonString]).size;
+      const dataSizeBytes=new Blob([base64Data]).size;
+      const originalSizeBytes=new Blob([originalJson]).size;
       const maxSizeBytes=2900;
       
       if(dataSizeBytes>maxSizeBytes){
@@ -578,7 +581,7 @@ function showQRCodeModal(jsonString,flightCount){
         copyBtn.className='btn';
         copyBtn.textContent='Copy JSON to Clipboard';
         copyBtn.onclick=()=>{
-          navigator.clipboard.writeText(jsonString).then(()=>alert('JSON copied to clipboard!')).catch(()=>alert('Copy failed'));
+          navigator.clipboard.writeText(originalJson).then(()=>alert('JSON copied to clipboard!')).catch(()=>alert('Copy failed'));
         };
         qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Consider splitting into multiple exports, or use clipboard method instead.</p></div>';
         qrDiv.appendChild(copyBtn);
@@ -589,39 +592,59 @@ function showQRCodeModal(jsonString,flightCount){
       qrDiv.innerHTML='';
       
       // Use qrcodejs library (DOM-based, reliable)
-      const qrSize=Math.min(400,Math.max(300,Math.ceil(dataSizeBytes/10)));
+      // Use base64 encoded data - more reliable with QR code libraries
+      const qrSize=Math.min(500,Math.max(300,Math.ceil(dataSizeBytes/8)));
       
       try{
+        // Create QR code with medium error correction first (H sometimes fails)
         const qrCode=new QRCode(qrDiv,{
-          text:jsonString,
+          text:base64Data,
           width:qrSize,
           height:qrSize,
           colorDark:'#000000',
           colorLight:'#ffffff',
-          correctLevel:QRCode.CorrectLevel.H
+          correctLevel:QRCode.CorrectLevel.M
         });
         
         // Show data size info on success
         const info=document.createElement('div');
         info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
-        info.textContent=flightCount+' flights • '+Math.round(dataSizeBytes)+' bytes';
+        info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes';
         container.appendChild(info);
       }catch(qrErr){
         console.error('QRCode constructor error:',qrErr);
-        throw qrErr;
+        // Try again with smaller size and lower error correction
+        try{
+          qrDiv.innerHTML='';
+          const qrCode2=new QRCode(qrDiv,{
+            text:base64Data,
+            width:300,
+            height:300,
+            colorDark:'#000000',
+            colorLight:'#ffffff',
+            correctLevel:QRCode.CorrectLevel.L
+          });
+          const info=document.createElement('div');
+          info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
+          info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes (fallback)';
+          container.appendChild(info);
+        }catch(qrErr2){
+          console.error('QRCode fallback error:',qrErr2);
+          throw qrErr;
+        }
       }
       
     }catch(err){
       console.error('QR Code generation error:',err);
       console.error('Error details:',err.message,err.stack);
-      const dataSizeBytes=new Blob([jsonString]).size;
+      const dataSizeBytes=new Blob([originalJson]).size;
       qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:8px;">Error generating QR code</p><p style="color:var(--muted);font-size:12px;margin-bottom:12px;">'+err.message+'</p><p style="color:var(--muted);font-size:11px;">Data size: '+Math.round(dataSizeBytes)+' bytes</p></div>';
       const copyBtn=document.createElement('button');
       copyBtn.className='btn';
       copyBtn.style.marginTop='12px';
       copyBtn.textContent='Copy JSON Instead';
       copyBtn.onclick=()=>{
-        navigator.clipboard.writeText(jsonString).then(()=>alert('JSON copied to clipboard as fallback!')).catch(()=>alert('Copy failed'));
+        navigator.clipboard.writeText(originalJson).then(()=>alert('JSON copied to clipboard as fallback!')).catch(()=>alert('Copy failed'));
       };
       qrDiv.appendChild(copyBtn);
     }
