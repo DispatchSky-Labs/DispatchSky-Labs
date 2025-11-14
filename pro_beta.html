@@ -485,28 +485,37 @@ function exportForiOS(){
     if(typeof crypto!=='undefined'&&crypto.randomUUID)return crypto.randomUUID();
     return Date.now()+'-'+Math.random().toString(36).substr(2,9);
   };
-  const exportedFlights=flights.map(f=>({
-    id:f.id||generateId(),
-    flight:f.flight||'',
-    origin:f.origin||'',
-    dest:f.dest||'',
-    takeoffAlt:f.takeoffAlt||'',
-    alt1:f.alt1||'',
-    alt2:f.alt2||'',
-    etd:f.etd||'',
-    taxiOut:f.taxiOut||'',
-    burnoff:f.burnoff||'',
-    duration:f.duration||'',
-    eta:f.eta||'',
-    isPastEta:f.isPastEta||false,
-    autoRemoveScheduled:f.autoRemoveScheduled||false,
-    triggers:Array.from(f.triggers||[]),
-    lastUpdated:new Date().toISOString()
-  }));
+  // Optimize export: only include non-empty optional fields, use shorter names where possible
+  const exportedFlights=flights.map(f=>{
+    const flight={
+      id:f.id||generateId(),
+      flight:f.flight||'',
+      origin:f.origin||'',
+      dest:f.dest||'',
+      etd:f.etd||'',
+      eta:f.eta||''
+    };
+    // Only include optional fields if they have values
+    if(f.takeoffAlt)flight.takeoffAlt=f.takeoffAlt;
+    if(f.alt1)flight.alt1=f.alt1;
+    if(f.alt2)flight.alt2=f.alt2;
+    if(f.taxiOut)flight.taxiOut=f.taxiOut;
+    if(f.burnoff)flight.burnoff=f.burnoff;
+    if(f.duration)flight.duration=f.duration;
+    if(f.isPastEta)flight.isPastEta=true;
+    if(f.autoRemoveScheduled)flight.autoRemoveScheduled=true;
+    const triggers=Array.from(f.triggers||[]);
+    if(triggers.length>0)flight.triggers=triggers;
+    // Only include lastUpdated if it exists and is relevant
+    if(f.lastUpdated)flight.lastUpdated=new Date().toISOString();
+    return flight;
+  });
+  // Create compact JSON (no pretty printing, minimal whitespace)
   const jsonString=JSON.stringify(exportedFlights);
-  showQRCodeModal(jsonString);
+  showQRCodeModal(jsonString,exportedFlights.length);
 }
-function showQRCodeModal(jsonString){
+function showQRCodeModal(jsonString,flightCount){
+  console.log('Generating QR code for',flightCount,'flights. Data size:',jsonString.length,'characters');
   // Remove any existing QR modal
   const existingModal=document.querySelector('.qr-modal-overlay');
   if(existingModal)existingModal.remove();
@@ -543,24 +552,50 @@ function showQRCodeModal(jsonString){
   
   // Wait for DOM to be ready, then generate QR code
   setTimeout(()=>{
-    if(typeof QRCode!=='undefined'&&qrDiv.parentNode){
-      try{
-        // Clear any existing QR code in the div
-        qrDiv.innerHTML='';
-        new QRCode(qrDiv,{
-          text:jsonString,
-          width:300,
-          height:300,
-          colorDark:'#000000',
-          colorLight:'#ffffff',
-          correctLevel:QRCode.CorrectLevel.M
-        });
-      }catch(err){
-        console.error('QR Code generation error:',err);
-        qrDiv.innerHTML='<p style="color:var(--danger);padding:20px;">Error generating QR code. The data may be too large. Try exporting fewer flights.</p>';
-      }
-    }else{
+    if(typeof QRCode==='undefined'){
       qrDiv.innerHTML='<p style="color:var(--warning);padding:20px;">QR Code library not loaded. Please refresh the page.</p>';
+      return;
+    }
+    if(!qrDiv.parentNode){
+      qrDiv.innerHTML='<p style="color:var(--danger);padding:20px;">QR Code container not ready.</p>';
+      return;
+    }
+    
+    try{
+      // Check data size - QR codes can handle up to ~2900 bytes
+      const dataSizeBytes=new Blob([jsonString]).size;
+      const maxSizeBytes=2900;
+      
+      if(dataSizeBytes>maxSizeBytes){
+        qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Consider splitting into multiple exports, or use clipboard method instead.</p><button class="btn" onclick="navigator.clipboard.writeText('+JSON.stringify(jsonString)+').then(()=>alert(\'JSON copied to clipboard!\')).catch(()=>alert(\'Copy failed\'))">Copy JSON to Clipboard</button></div>';
+        return;
+      }
+      
+      // Clear any existing QR code in the div
+      qrDiv.innerHTML='';
+      
+      // Use larger QR code size and higher error correction for better scanning
+      const qrSize=Math.min(400,Math.max(300,Math.ceil(dataSizeBytes/10)));
+      
+      new QRCode(qrDiv,{
+        text:jsonString,
+        width:qrSize,
+        height:qrSize,
+        colorDark:'#000000',
+        colorLight:'#ffffff',
+        correctLevel:QRCode.CorrectLevel.H // Higher error correction for reliability
+      });
+      
+      // Show data size info
+      const info=document.createElement('div');
+      info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
+      info.textContent=flightCount+' flights • '+Math.round(dataSizeBytes)+' bytes';
+      container.appendChild(info);
+      
+    }catch(err){
+      console.error('QR Code generation error:',err);
+      console.error('Error details:',err.message,err.stack);
+      qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:8px;">Error generating QR code</p><p style="color:var(--muted);font-size:12px;margin-bottom:12px;">'+err.message+'</p><p style="color:var(--muted);font-size:11px;">Data size: '+Math.round(new Blob([jsonString]).size)+' bytes</p><button class="btn" style="margin-top:12px;" onclick="navigator.clipboard.writeText('+JSON.stringify(jsonString)+').then(()=>alert(\'JSON copied to clipboard as fallback!\')).catch(()=>alert(\'Copy failed\'))">Copy JSON Instead</button></div>';
     }
   },100);
 }
