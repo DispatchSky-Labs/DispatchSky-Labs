@@ -4,6 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>CieloTracker Pro – Flight Weather Monitor</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root{--bg:#f9fafb;--fg:#111827;--muted:#6b7280;--border:#e5e7eb;--brand:#0f5fff;--danger:#ef4444;--success:#10b981;--warning:#f59e0b;--trigger-bg:#ef4444;--trigger-text:#fff}
     *{box-sizing:border-box}
@@ -110,6 +111,13 @@
     @media (max-width:768px){body{font-size:12px}.header-left{font-size:16px}table{font-size:11px}th{font-size:10px;padding:6px 3px}td{font-size:11px;padding:4px 3px}.action-btn{font-size:9px;padding:2px 4px;min-width:35px}}
     @media (max-width:480px){header{padding:8px 12px}}
     .hidden{display:none!important}
+    .qr-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px}
+    .qr-modal{background:var(--bg);border-radius:12px;padding:24px;max-width:500px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto}
+    .qr-code-container{display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px}
+    .qr-modal-title{font-size:18px;font-weight:600;margin-bottom:16px;text-align:center}
+    .qr-modal-instructions{font-size:13px;color:var(--muted);text-align:center;line-height:1.6;margin-top:16px}
+    .qr-modal-close{position:absolute;top:12px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);padding:4px 8px;line-height:1}
+    .qr-modal-close:hover{color:var(--fg)}
   </style>
 </head>
 <body class="theme-light">
@@ -495,29 +503,66 @@ function exportForiOS(){
     triggers:Array.from(f.triggers||[]),
     lastUpdated:new Date().toISOString()
   }));
-  const jsonString=JSON.stringify(exportedFlights,null,2);
-  navigator.clipboard.writeText(jsonString).then(()=>{
-    showToast('Flight data copied to clipboard! Open iOS app → Menu → Sync → Paste and Import', 'success', 5000);
-  }).catch(err=>{
-    console.error('Failed to copy:',err);
-    const textArea=document.createElement('textarea');
-    textArea.value=jsonString;
-    textArea.style.position='fixed';
-    textArea.style.opacity='0';
-    document.body.appendChild(textArea);
-    textArea.select();
-    try{
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      showToast('Flight data copied! Open iOS app → Menu → Sync → Paste and Import', 'success', 5000);
-    }catch(e){
-      document.body.removeChild(textArea);
-      showToast('Failed to copy. Please copy manually from console.', 'error');
-      console.log('--- Copy this JSON for iOS Import ---');
-      console.log(jsonString);
-      console.log('--- End JSON ---');
-    }
+  const jsonString=JSON.stringify(exportedFlights);
+  showQRCodeModal(jsonString);
+}
+function showQRCodeModal(jsonString){
+  // Remove any existing QR modal
+  const existingModal=document.querySelector('.qr-modal-overlay');
+  if(existingModal)existingModal.remove();
+  
+  const overlay=document.createElement('div');
+  overlay.className='qr-modal-overlay';
+  const modal=document.createElement('div');
+  modal.className='qr-modal';
+  modal.style.position='relative';
+  const title=document.createElement('div');
+  title.className='qr-modal-title';
+  title.textContent='Scan QR Code with iOS App';
+  const closeBtn=document.createElement('button');
+  closeBtn.className='qr-modal-close';
+  closeBtn.innerHTML='&times;';
+  closeBtn.addEventListener('click',()=>overlay.remove());
+  const container=document.createElement('div');
+  container.className='qr-code-container';
+  const qrDiv=document.createElement('div');
+  qrDiv.id='qrcode-'+Date.now();
+  container.appendChild(qrDiv);
+  const instructions=document.createElement('div');
+  instructions.className='qr-modal-instructions';
+  instructions.innerHTML='<strong>Instructions:</strong><br/>1. Open CieloTracker Pro on your iPhone<br/>2. Tap Menu (⋯) → Scan QR Code<br/>3. Point camera at this QR code<br/>4. Flights will import automatically';
+  modal.appendChild(closeBtn);
+  modal.appendChild(title);
+  modal.appendChild(container);
+  modal.appendChild(instructions);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',(e)=>{
+    if(e.target===overlay)overlay.remove();
   });
+  
+  // Wait for DOM to be ready, then generate QR code
+  setTimeout(()=>{
+    if(typeof QRCode!=='undefined'&&qrDiv.parentNode){
+      try{
+        // Clear any existing QR code in the div
+        qrDiv.innerHTML='';
+        new QRCode(qrDiv,{
+          text:jsonString,
+          width:300,
+          height:300,
+          colorDark:'#000000',
+          colorLight:'#ffffff',
+          correctLevel:QRCode.CorrectLevel.M
+        });
+      }catch(err){
+        console.error('QR Code generation error:',err);
+        qrDiv.innerHTML='<p style="color:var(--danger);padding:20px;">Error generating QR code. The data may be too large. Try exporting fewer flights.</p>';
+      }
+    }else{
+      qrDiv.innerHTML='<p style="color:var(--warning);padding:20px;">QR Code library not loaded. Please refresh the page.</p>';
+    }
+  },100);
 }
 function loadFlights(){
   const saved=localStorage.getItem('ct_pro_flights');
