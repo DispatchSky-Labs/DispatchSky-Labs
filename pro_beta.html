@@ -90,8 +90,10 @@
     .upload-modal-actions,.single-flight-modal-actions,.taxi-burn-modal-actions,.delay-modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
     .upload-modal-actions .btn,.single-flight-modal-actions .btn,.taxi-burn-modal-actions .btn,.delay-modal-actions .btn{height:36px;padding:0 16px;font-size:13px}
     .single-flight-form-group,.taxi-burn-form-group,.delay-modal-form-group{margin-bottom:16px}
-    .toast{position:fixed;top:20px;right:20px;background:#111;color:#fff;padding:12px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:2000;animation:slideIn 0.3s ease-out;max-width:400px;display:flex;align-items:center;gap:12px}
+    .toast{position:fixed;right:20px;background:#111;color:#fff;padding:12px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:2000;animation:slideIn 0.3s ease-out;max-width:400px;display:flex;align-items:center;gap:12px;transition:top 0.3s ease-out}
     @keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
+    .context-menu-item.danger{color:var(--danger)!important;font-weight:600}
+    .context-menu-item.danger:hover{background:rgba(239,68,68,0.1)!important}
     .toast-success{background:var(--success)}
     .toast-error{background:var(--danger)}
     .toast-warning{background:var(--warning)}
@@ -321,6 +323,18 @@ function normalizeICAO(iata){
   if(clean[0]==='Y')return 'C'+clean;
   return 'K'+clean;
 }
+let activeToasts=[];
+function updateToastPositions(){
+  const baseTop=20;
+  const spacing=8;
+  let currentTop=baseTop;
+  activeToasts.forEach(toast=>{
+    if(toast.parentNode){
+      toast.style.top=`${currentTop}px`;
+      currentTop+=toast.offsetHeight+spacing;
+    }
+  });
+}
 function showToast(message,type='info',duration=3000,undoCallback=null,delayCallback=null){
   const toast=document.createElement('div');
   toast.className=`toast toast-${type}`;
@@ -331,17 +345,39 @@ function showToast(message,type='info',duration=3000,undoCallback=null,delayCall
     const delayBtn=document.createElement('button');
     delayBtn.className='toast-btn';
     delayBtn.textContent='Delay';
-    delayBtn.addEventListener('click',()=>{delayCallback();toast.remove()});
+    delayBtn.addEventListener('click',()=>{
+      delayCallback();
+      const index=activeToasts.indexOf(toast);
+      if(index>-1)activeToasts.splice(index,1);
+      toast.remove();
+      requestAnimationFrame(updateToastPositions);
+    });
     toast.appendChild(delayBtn);
   }else if(undoCallback){
     const undoBtn=document.createElement('button');
     undoBtn.className='toast-btn';
     undoBtn.textContent='Undo';
-    undoBtn.addEventListener('click',()=>{undoCallback();toast.remove()});
+    undoBtn.addEventListener('click',()=>{
+      undoCallback();
+      const index=activeToasts.indexOf(toast);
+      if(index>-1)activeToasts.splice(index,1);
+      toast.remove();
+      requestAnimationFrame(updateToastPositions);
+    });
     toast.appendChild(undoBtn);
   }
   document.body.appendChild(toast);
-  setTimeout(()=>toast.remove(),duration);
+  activeToasts.push(toast);
+  // Use requestAnimationFrame to ensure DOM is rendered before calculating positions
+  requestAnimationFrame(()=>{
+    updateToastPositions();
+  });
+  setTimeout(()=>{
+    const index=activeToasts.indexOf(toast);
+    if(index>-1)activeToasts.splice(index,1);
+    toast.remove();
+    requestAnimationFrame(updateToastPositions);
+  },duration);
 }
 function updateClock(){
   const now=new Date();
@@ -1077,13 +1113,7 @@ function escapeHtml(text){
   const map={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'};
   return text.replace(/[&<>"']/g,m=>map[m]);
 }
-let currentWeatherHoverOverlay=null;
 function showWeatherModal(icao){
-  // Close any existing hover overlay
-  if(currentWeatherHoverOverlay){
-    currentWeatherHoverOverlay.remove();
-    currentWeatherHoverOverlay=null;
-  }
   const wx=weatherData[icao];
   const overlay=document.createElement('div');
   overlay.className='wx-modal-overlay';
@@ -1099,21 +1129,10 @@ function showWeatherModal(icao){
   modal.innerHTML=`<div class="wx-modal-header"><button class="wx-modal-close" id="closeModal">×</button></div><div class="wx-modal-body">${content}</div>`;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-  currentWeatherHoverOverlay=overlay;
-  const closeModal=()=>{overlay.remove();if(currentWeatherHoverOverlay===overlay)currentWeatherHoverOverlay=null};
+  const closeModal=()=>overlay.remove();
   modal.querySelector('#closeModal').addEventListener('click',closeModal);
   overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()},{once:true});
-}
-function showWeatherOnHover(icao,cell){
-  if(!icao||icao==='—'||!cell.classList.contains('icao-cell'))return;
-  showWeatherModal(icao);
-}
-function hideWeatherOnHover(){
-  if(currentWeatherHoverOverlay){
-    currentWeatherHoverOverlay.remove();
-    currentWeatherHoverOverlay=null;
-  }
 }
 function showUploadModal(){
   const overlay=document.createElement('div');
@@ -1466,10 +1485,6 @@ function showContextMenu(e){
   singleFlightItem.className='context-menu-item';
   singleFlightItem.textContent='Add Single Flight';
   singleFlightItem.addEventListener('click',()=>{closeContextMenu();showSingleFlightModal()});
-  const rawInputItem=document.createElement('button');
-  rawInputItem.className='context-menu-item';
-  rawInputItem.textContent='Raw Input';
-  rawInputItem.addEventListener('click',()=>{closeContextMenu();showRawInputModal()});
   const receivePassdownItem=document.createElement('button');
   receivePassdownItem.className='context-menu-item';
   receivePassdownItem.textContent='Receive Passdown';
@@ -1519,12 +1534,16 @@ function showContextMenu(e){
   const currentTheme=getTheme();
   themeItem.textContent=currentTheme==='dark'?'Light Theme':'Dark Theme';
   themeItem.addEventListener('click',()=>{toggleTheme()});
+  const rawInputItem=document.createElement('button');
+  rawInputItem.className='context-menu-item danger';
+  rawInputItem.textContent='Clear and Input Raw';
+  rawInputItem.addEventListener('click',()=>{closeContextMenu();showRawInputModal()});
   menu.appendChild(singleFlightItem);
-  menu.appendChild(rawInputItem);
   menu.appendChild(receivePassdownItem);
   menu.appendChild(summaryItem);
   menu.appendChild(passdownItem);
   menu.appendChild(themeItem);
+  menu.appendChild(rawInputItem);
   document.body.appendChild(menu);
   const x=e.clientX||0;
   const y=e.clientY||0;
@@ -1817,45 +1836,38 @@ function attachEditListeners(){
     cell.addEventListener('click',function(){const idx=parseInt(this.dataset.idx,10);showTaxiBurnModal(idx)});
   });
   flightTableBody.querySelectorAll('.editable').forEach(cell=>{
-    let touchStartTime=0,touchMoved=false;
-    cell.addEventListener('click',function(e){if(e.button!==0||this.querySelector('input'))return;startEdit(this)});
-    cell.addEventListener('touchstart',function(){touchStartTime=Date.now();touchMoved=false},{passive:true});
-    cell.addEventListener('touchmove',function(){touchMoved=true},{passive:true});
-    cell.addEventListener('touchend',function(e){
-      const touchDuration=Date.now()-touchStartTime;
-      const icao=this.dataset.icao;
-      if(!touchMoved&&touchDuration>500&&icao&&icao!=='—'&&this.classList.contains('icao-cell')){
-        e.preventDefault();e.stopPropagation();
+    const icao=cell.dataset.icao;
+    const isICAOCell=icao&&icao!=='—'&&cell.classList.contains('icao-cell');
+    // For ICAO cells, left click shows weather instead of editing
+    if(isICAOCell){
+      cell.addEventListener('click',function(e){
+        if(e.button!==0||this.querySelector('input'))return;
+        e.preventDefault();
+        e.stopPropagation();
         showWeatherModal(icao);
-      }else if(!touchMoved&&touchDuration<=500&&!this.querySelector('input')){startEdit(this)}
-    });
-    // === WEATHER: Long-press on mobile, right-click on desktop ===
-// Do NOT use hover — it breaks editing
-const icao = cell.dataset.icao;
-if (icao && icao !== '—' && cell.classList.contains('icao-cell')) {
-  let longPressTimer = null;
-  const longPressDuration = 600; // ms
-
-  // Long press on touch devices
-  cell.addEventListener('touchstart', function (e) {
-    longPressTimer = setTimeout(() => {
-      e.preventDefault();
-      showWeatherModal(icao);
-    }, longPressDuration);
-  }, { passive: false });
-
-  cell.addEventListener('touchend', function () {
-    if (longPressTimer) clearTimeout(longPressTimer);
-  });
-
-  cell.addEventListener('touchmove', function () {
-    if (longPressTimer) clearTimeout(longPressTimer);
-  });
-
-  // Right-click on desktop
-  cell.addEventListener('contextmenu', function (e) {
-    e.preventDefault();
-    showWeatherModal(icao);
+      });
+      // Long press on touch devices for weather
+      let touchStartTime=0,touchMoved=false;
+      cell.addEventListener('touchstart',function(){touchStartTime=Date.now();touchMoved=false},{passive:true});
+      cell.addEventListener('touchmove',function(){touchMoved=true},{passive:true});
+      cell.addEventListener('touchend',function(e){
+        const touchDuration=Date.now()-touchStartTime;
+        if(!touchMoved&&touchDuration>500){
+          e.preventDefault();
+          e.stopPropagation();
+          showWeatherModal(icao);
+        }
+      });
+    }else{
+      // For non-ICAO cells, normal click editing
+      cell.addEventListener('click',function(e){if(e.button!==0||this.querySelector('input'))return;startEdit(this)});
+      let touchStartTime=0,touchMoved=false;
+      cell.addEventListener('touchstart',function(){touchStartTime=Date.now();touchMoved=false},{passive:true});
+      cell.addEventListener('touchmove',function(){touchMoved=true},{passive:true});
+      cell.addEventListener('touchend',function(e){
+        if(!touchMoved&&Date.now()-touchStartTime<=500&&!this.querySelector('input')){startEdit(this)}
+      });
+    }
   });
 }
 function startEdit(cell){
