@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>CieloTracker Pro – Flight Weather Monitor</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     :root{--bg:#f9fafb;--fg:#111827;--muted:#6b7280;--border:#e5e7eb;--brand:#0f5fff;--danger:#ef4444;--success:#10b981;--warning:#f59e0b;--trigger-bg:#ef4444;--trigger-text:#fff}
     *{box-sizing:border-box}
@@ -567,35 +567,68 @@ function showQRCodeModal(jsonString,flightCount){
       const maxSizeBytes=2900;
       
       if(dataSizeBytes>maxSizeBytes){
-        qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Consider splitting into multiple exports, or use clipboard method instead.</p><button class="btn" onclick="navigator.clipboard.writeText('+JSON.stringify(jsonString)+').then(()=>alert(\'JSON copied to clipboard!\')).catch(()=>alert(\'Copy failed\'))">Copy JSON to Clipboard</button></div>';
+        const copyBtn=document.createElement('button');
+        copyBtn.className='btn';
+        copyBtn.textContent='Copy JSON to Clipboard';
+        copyBtn.onclick=()=>{
+          navigator.clipboard.writeText(jsonString).then(()=>alert('JSON copied to clipboard!')).catch(()=>alert('Copy failed'));
+        };
+        qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Consider splitting into multiple exports, or use clipboard method instead.</p></div>';
+        qrDiv.appendChild(copyBtn);
         return;
       }
       
       // Clear any existing QR code in the div
       qrDiv.innerHTML='';
       
-      // Use larger QR code size and higher error correction for better scanning
+      // Use canvas-based QR code generation (more reliable)
       const qrSize=Math.min(400,Math.max(300,Math.ceil(dataSizeBytes/10)));
+      const canvas=document.createElement('canvas');
+      qrDiv.appendChild(canvas);
       
-      new QRCode(qrDiv,{
-        text:jsonString,
+      // Generate QR code using qrcode library (canvas-based)
+      QRCode.toCanvas(canvas,jsonString,{
         width:qrSize,
-        height:qrSize,
-        colorDark:'#000000',
-        colorLight:'#ffffff',
-        correctLevel:QRCode.CorrectLevel.H // Higher error correction for reliability
+        margin:2,
+        color:{
+          dark:'#000000',
+          light:'#ffffff'
+        },
+        errorCorrectionLevel:'H'
+      },(err)=>{
+        if(err){
+          console.error('QR Code generation error:',err);
+          qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:8px;">Error generating QR code</p><p style="color:var(--muted);font-size:12px;margin-bottom:12px;">'+err.message+'</p><p style="color:var(--muted);font-size:11px;">Data size: '+Math.round(dataSizeBytes)+' bytes</p></div>';
+          const copyBtn=document.createElement('button');
+          copyBtn.className='btn';
+          copyBtn.style.marginTop='12px';
+          copyBtn.textContent='Copy JSON Instead';
+          copyBtn.onclick=()=>{
+            navigator.clipboard.writeText(jsonString).then(()=>alert('JSON copied to clipboard as fallback!')).catch(()=>alert('Copy failed'));
+          };
+          qrDiv.appendChild(copyBtn);
+        }else{
+          // Show data size info on success
+          const info=document.createElement('div');
+          info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
+          info.textContent=flightCount+' flights • '+Math.round(dataSizeBytes)+' bytes';
+          container.appendChild(info);
+        }
       });
-      
-      // Show data size info
-      const info=document.createElement('div');
-      info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
-      info.textContent=flightCount+' flights • '+Math.round(dataSizeBytes)+' bytes';
-      container.appendChild(info);
       
     }catch(err){
       console.error('QR Code generation error:',err);
       console.error('Error details:',err.message,err.stack);
-      qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:8px;">Error generating QR code</p><p style="color:var(--muted);font-size:12px;margin-bottom:12px;">'+err.message+'</p><p style="color:var(--muted);font-size:11px;">Data size: '+Math.round(new Blob([jsonString]).size)+' bytes</p><button class="btn" style="margin-top:12px;" onclick="navigator.clipboard.writeText('+JSON.stringify(jsonString)+').then(()=>alert(\'JSON copied to clipboard as fallback!\')).catch(()=>alert(\'Copy failed\'))">Copy JSON Instead</button></div>';
+      const dataSizeBytes=new Blob([jsonString]).size;
+      qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:8px;">Error generating QR code</p><p style="color:var(--muted);font-size:12px;margin-bottom:12px;">'+err.message+'</p><p style="color:var(--muted);font-size:11px;">Data size: '+Math.round(dataSizeBytes)+' bytes</p></div>';
+      const copyBtn=document.createElement('button');
+      copyBtn.className='btn';
+      copyBtn.style.marginTop='12px';
+      copyBtn.textContent='Copy JSON Instead';
+      copyBtn.onclick=()=>{
+        navigator.clipboard.writeText(jsonString).then(()=>alert('JSON copied to clipboard as fallback!')).catch(()=>alert('Copy failed'));
+      };
+      qrDiv.appendChild(copyBtn);
     }
   },100);
 }
