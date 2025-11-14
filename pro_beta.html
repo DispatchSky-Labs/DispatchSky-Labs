@@ -1837,25 +1837,42 @@ function attachEditListeners(){
   });
   flightTableBody.querySelectorAll('.editable').forEach(cell=>{
     const icao=cell.dataset.icao;
-    const isICAOCell=icao&&icao!=='—'&&cell.classList.contains('icao-cell');
-    // For ICAO cells, left click shows weather instead of editing
+    const isICAOCell=cell.classList.contains('icao-cell');
+    // For ICAO cells (ORG, DEST, T/ALT, ALT1, ALT2)
     if(isICAOCell){
+      const icaoValue=icao&&icao!=='—'?icao:null;
+      // Left click on ICAO cells shows weather (if ICAO exists)
       cell.addEventListener('click',function(e){
         if(e.button!==0||this.querySelector('input'))return;
         e.preventDefault();
         e.stopPropagation();
-        showWeatherModal(icao);
+        if(icaoValue){
+          showWeatherModal(icaoValue);
+        }else{
+          // If empty, left click edits
+          startEdit(this);
+        }
       });
-      // Long press on touch devices for weather
+      // Right click on ICAO cells edits the cell
+      cell.addEventListener('contextmenu',function(e){
+        if(this.querySelector('input'))return;
+        e.preventDefault();
+        e.stopPropagation();
+        startEdit(this);
+      });
+      // Long press on touch devices for weather (if ICAO exists)
       let touchStartTime=0,touchMoved=false;
       cell.addEventListener('touchstart',function(){touchStartTime=Date.now();touchMoved=false},{passive:true});
       cell.addEventListener('touchmove',function(){touchMoved=true},{passive:true});
       cell.addEventListener('touchend',function(e){
         const touchDuration=Date.now()-touchStartTime;
-        if(!touchMoved&&touchDuration>500){
+        if(!touchMoved&&touchDuration>500&&icaoValue){
           e.preventDefault();
           e.stopPropagation();
-          showWeatherModal(icao);
+          showWeatherModal(icaoValue);
+        }else if(!touchMoved&&Date.now()-touchStartTime<=500&&!icaoValue){
+          // Short tap on empty ICAO cell edits
+          startEdit(this);
         }
       });
     }else{
