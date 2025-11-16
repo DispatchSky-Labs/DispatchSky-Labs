@@ -47,6 +47,8 @@
     .theme-dark tbody tr.within-90min{background:#004d4d}
     tbody tr.highlighted{background:#ffff00!important;box-shadow:0 0 10px rgba(255,255,0,0.5)}
     .theme-dark tbody tr.highlighted{background:#ffff00!important;color:#000!important;box-shadow:0 0 10px rgba(255,255,0,0.5)}
+    tbody tr.deleting-soon{background:#ffe0e0!important;border-left:3px solid #ff6b6b}
+    .theme-dark tbody tr.deleting-soon{background:#3d2525!important;border-left:3px solid #ff6b6b}
     .taxi-burn-cell{font-style:italic;cursor:pointer}
     .taxi-burn-cell:hover{background:rgba(0,0,0,0.08)}
     .theme-dark .taxi-burn-cell:hover{background:rgba(255,255,255,0.08)}
@@ -179,6 +181,7 @@ let weatherData={};
 let lastSuccessfulUpdate=null;
 let autoRefreshInterval=null;
 let alwaysOnCheckInterval=null;
+let deletionWarningInterval=null;
 const destImprovementCache=new Map();
 let draggedIndex=null;
 const autoRemoveTimeouts=new Map();
@@ -2077,8 +2080,9 @@ function updateTriggerCounts(){
     const white=whiteCounts[col]||0;
     if(orange>0||white>0){
       let html='';
-      if(orange>0)html+=`<span class="orange-count">${orange}</span>`;
+      // Red triggers first, then orange triggers
       if(white>0)html+=`<span class="white-count">${white}</span>`;
+      if(orange>0)html+=`<span class="orange-count">${orange}</span>`;
       span.innerHTML=html;
       span.style.display='inline';
     }else{
@@ -2096,11 +2100,27 @@ function renderTable(){
   }
   flightTableBody.innerHTML='';
   const currentMinutes=getCurrentZuluMinutes();
+  const now=new Date();
+  const currentSeconds=now.getUTCSeconds();
   flights.forEach((flight,actualIdx)=>{
     const row=document.createElement('tr');
     row.draggable=true;
     row.dataset.index=actualIdx;
     if(flight.isPastEta)row.classList.add('faded');
+    
+    // Highlight row 10 seconds before deletion (14 minutes past ETA, last 10 seconds)
+    if(flight.autoRemoveScheduled&&flight.minutesPastEta!==undefined){
+      // Deletion is scheduled at 7 minutes past ETA, then waits 7 more minutes (AUTO_REMOVE_DELAY),
+      // then shows toast and waits 10 seconds. So deletion happens at 14 minutes 10 seconds past ETA.
+      // Highlight when we're in the 10-second warning window (14:00 to 14:10 minutes past ETA)
+      if(flight.minutesPastEta===14&&currentSeconds<10){
+        // We're in the exact 10-second warning window (0-10 seconds of the 14th minute)
+        row.classList.add('deleting-soon');
+      }else if(flight.minutesPastEta===13&&currentSeconds>=50){
+        // We're approaching the warning window (50-59 seconds of the 13th minute, about to hit 14:00)
+        row.classList.add('deleting-soon');
+      }
+    }
     
     const etdMinutes=flight.etd?zuluToMinutes(flight.etd):null;
     if(etdMinutes!==null){
@@ -2368,6 +2388,21 @@ function startEdit(cell){
 function updateStats(){statTotal.textContent=flights.length}
 function startAutoRefresh(){autoRefreshInterval=setInterval(refreshWeather,5*60*1000)}
 function startAlwaysOnCheck(){alwaysOnCheckInterval=setInterval(()=>{checkWeatherTriggers();renderTable()},ALWAYS_ON_CHECK_INTERVAL)}
+function startDeletionWarningCheck(){
+  // Clear any existing interval
+  if(deletionWarningInterval)clearInterval(deletionWarningInterval);
+  // Check every second if any flights are in the deletion warning window
+  deletionWarningInterval=setInterval(()=>{
+    const hasFlightsNearDeletion=flights.some(flight=>{
+      if(!flight.autoRemoveScheduled||flight.minutesPastEta===undefined)return false;
+      const now=new Date();
+      const currentSeconds=now.getUTCSeconds();
+      return(flight.minutesPastEta===14&&currentSeconds<10)||(flight.minutesPastEta===13&&currentSeconds>=50);
+    });
+    // Only re-render if there are flights in the warning window
+    if(hasFlightsNearDeletion)renderTable();
+  },1000);
+}
 window.flightActions={
   delay(idx){
     showDelayModal(idx);
@@ -2379,6 +2414,7 @@ renderTable();
 if(flights.length>0)refreshWeather();
 startAutoRefresh();
 startAlwaysOnCheck();
+startDeletionWarningCheck();
 applyTheme(getTheme());
 })();
   </script>
