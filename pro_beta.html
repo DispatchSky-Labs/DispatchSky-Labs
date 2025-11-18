@@ -34,6 +34,24 @@
     thead{position:sticky;top:0;z-index:100}
     th{background:#f3f4f6;padding:8px 4px;text-align:left;font-weight:600;font-size:12px;border-bottom:2px solid var(--border);white-space:nowrap;user-select:none;position:relative}
     .theme-dark th{background:#1f2937}
+    th.filterable{cursor:pointer}
+    th.filterable:hover{background:#e5e7eb}
+    .theme-dark th.filterable:hover{background:#374151}
+    th.filterable.active{background:#dbeafe;border-bottom:3px solid var(--brand)}
+    .theme-dark th.filterable.active{background:#1e3a5f}
+    .filter-menu{position:absolute;top:100%;left:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:2000;min-width:200px;max-width:300px;margin-top:2px;animation:fadeIn 0.15s ease-out}
+    .theme-dark .filter-menu{background:#1f2937;border-color:#374151}
+    .filter-menu-header{padding:8px 12px;border-bottom:1px solid var(--border);font-weight:600;font-size:12px}
+    .filter-menu-input{padding:8px 12px;border-bottom:1px solid var(--border)}
+    .filter-menu-input input{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:monospace}
+    .theme-dark .filter-menu-input input{background:#111827;border-color:#374151;color:#e5e7eb}
+    .filter-menu-options{max-height:200px;overflow-y:auto}
+    .filter-menu-option{padding:8px 12px;cursor:pointer;font-size:13px;transition:background 0.15s}
+    .filter-menu-option:hover{background:rgba(0,0,0,0.08)}
+    .theme-dark .filter-menu-option:hover{background:rgba(255,255,255,0.1)}
+    .filter-menu-option.selected{background:var(--brand);color:#fff}
+    .filter-menu-option.clear{padding:8px 12px;border-top:1px solid var(--border);font-weight:600;color:var(--danger)}
+    tbody tr.filtered-out{display:none}
     th .trigger-count{font-weight:700;margin-left:4px;font-size:11px}
     th .trigger-count .orange-count{color:#f59e0b;margin-left:6px}
     th .trigger-count .white-count{color:#fff;background:#dc2626;padding:1px 4px;border-radius:3px;margin-left:2px}
@@ -143,11 +161,11 @@
         <thead>
           <tr>
             <th>FLT<span class="trigger-count" data-col="flight"></span></th>
-            <th>ORG<span class="trigger-count" data-col="origin"></span></th>
-            <th>DEST<span class="trigger-count" data-col="dest"></span></th>
-            <th>T/ALT<span class="trigger-count" data-col="takeoffAlt"></span></th>
-            <th>ALT1<span class="trigger-count" data-col="alt1"></span></th>
-            <th>ALT2<span class="trigger-count" data-col="alt2"></span></th>
+            <th data-filter="origin">ORG<span class="trigger-count" data-col="origin"></span></th>
+            <th data-filter="dest">DEST<span class="trigger-count" data-col="dest"></span></th>
+            <th data-filter="takeoffAlt">T/ALT<span class="trigger-count" data-col="takeoffAlt"></span></th>
+            <th data-filter="alt1">ALT1<span class="trigger-count" data-col="alt1"></span></th>
+            <th data-filter="alt2">ALT2<span class="trigger-count" data-col="alt2"></span></th>
             <th>ETD<span class="trigger-count" data-col="etd"></span></th>
             <th>TAXI<span class="trigger-count" data-col="taxiOut"></span></th>
             <th>BURN<span class="trigger-count" data-col="burnoff"></span></th>
@@ -185,6 +203,8 @@ let deletionWarningInterval=null;
 const destImprovementCache=new Map();
 let draggedIndex=null;
 const autoRemoveTimeouts=new Map();
+const filters={origin:'',dest:'',takeoffAlt:'',alt1:'',alt2:''};
+let activeFilterMenu=null;
 
 const $=(sel)=>document.querySelector(sel);
 const $$=(sel)=>document.querySelectorAll(sel);
@@ -489,13 +509,14 @@ function exportForiOS(){
     return Date.now()+'-'+Math.random().toString(36).substr(2,9);
   };
   // Ultra-compact export: use single-letter keys to minimize size, no ID needed
-  const exportedFlights=flights.map(f=>{
+  const exportedFlights=flights.map((f,index)=>{
     const flight={
       f:f.flight||'', // flight -> f
       o:f.origin||'', // origin -> o
       d:f.dest||'', // dest -> d
       etd:f.etd||'',
-      eta:f.eta||''
+      eta:f.eta||'',
+      do:index // displayOrder -> do (preserve order)
     };
     // Only include optional fields if they have values, use short keys
     if(f.takeoffAlt)flight.ta=f.takeoffAlt; // takeoffAlt -> ta
@@ -1165,10 +1186,16 @@ function findWorstWeather(text){
       // Check for whole number visibility like "5SM" or "P6SM"
       const visPattern=/\b(P?)(\d+)SM\b/;
       const visMatch=mainSection.match(visPattern);
-      if(visMatch&&!visMatch[1]){
-        // No "P" prefix
-        const vis=parseInt(visMatch[2],10);
-        worstVis=vis;
+      if(visMatch){
+        if(visMatch[1]==='P'){
+          // P prefix means "plus" or "greater than" - treat as > value (use value + 1 for threshold checks)
+          const vis=parseInt(visMatch[2],10);
+          worstVis=vis+1; // P6SM means >6SM, so use 7 for threshold comparisons
+        }else{
+          // No "P" prefix
+          const vis=parseInt(visMatch[2],10);
+          worstVis=vis;
+        }
       }
     }
   }
@@ -1973,6 +2000,131 @@ function showContextMenu(e){
 }
 headerTitle.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();showContextMenu(e)});
 headerTitle.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();showContextMenu(e)});
+
+// Setup filter functionality for header cells
+function setupFilters(){
+  $$('th[data-filter]').forEach(headerCell=>{
+    const field=headerCell.dataset.filter;
+    if(field){
+      headerCell.classList.add('filterable');
+      if(filters[field])headerCell.classList.add('active');
+      headerCell.addEventListener('click',e=>{
+        e.stopPropagation();
+        showFilterMenu(headerCell,field);
+      });
+    }
+  });
+  
+  // Close filter menu when clicking outside
+  document.addEventListener('click',e=>{
+    if(activeFilterMenu&&!activeFilterMenu.contains(e.target)&&!e.target.closest('.filterable')){
+      closeFilterMenu();
+    }
+  });
+}
+
+function showFilterMenu(headerCell,field){
+  closeFilterMenu();
+  activeFilterMenu=document.createElement('div');
+  activeFilterMenu.className='filter-menu';
+  
+  const header=document.createElement('div');
+  header.className='filter-menu-header';
+  header.textContent=`Filter ${field.toUpperCase()}`;
+  activeFilterMenu.appendChild(header);
+  
+  const inputDiv=document.createElement('div');
+  inputDiv.className='filter-menu-input';
+  const input=document.createElement('input');
+  input.type='text';
+  input.placeholder='Enter airport code...';
+  input.value=filters[field]||'';
+  input.addEventListener('input',e=>{
+    filters[field]=e.target.value.trim();
+    renderTable();
+    updateFilterHeaderState();
+  });
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Escape')closeFilterMenu();
+  });
+  inputDiv.appendChild(input);
+  activeFilterMenu.appendChild(inputDiv);
+  
+  // Get unique values for this field
+  const uniqueValues=new Set();
+  flights.forEach(f=>{
+    const val=f[field];
+    if(val&&val.trim())uniqueValues.add(val.toUpperCase());
+  });
+  const sortedValues=Array.from(uniqueValues).sort();
+  
+  if(sortedValues.length>0){
+    const optionsDiv=document.createElement('div');
+    optionsDiv.className='filter-menu-options';
+    sortedValues.forEach(val=>{
+      const option=document.createElement('div');
+      option.className='filter-menu-option';
+      if(filters[field]&&filters[field].toUpperCase()===val)option.classList.add('selected');
+      option.textContent=val;
+      option.addEventListener('click',e=>{
+        e.stopPropagation();
+        if(filters[field]&&filters[field].toUpperCase()===val){
+          filters[field]='';
+        }else{
+          filters[field]=val;
+        }
+        input.value=filters[field];
+        renderTable();
+        updateFilterHeaderState();
+      });
+      optionsDiv.appendChild(option);
+    });
+    activeFilterMenu.appendChild(optionsDiv);
+  }
+  
+  const clearOption=document.createElement('div');
+  clearOption.className='filter-menu-option clear';
+  clearOption.textContent='Clear Filter';
+  clearOption.addEventListener('click',e=>{
+    e.stopPropagation();
+    filters[field]='';
+    input.value='';
+    renderTable();
+    updateFilterHeaderState();
+  });
+  activeFilterMenu.appendChild(clearOption);
+  
+  headerCell.appendChild(activeFilterMenu);
+  headerCell.classList.add('active');
+  input.focus();
+  input.select();
+}
+
+function closeFilterMenu(){
+  if(activeFilterMenu){
+    activeFilterMenu.remove();
+    activeFilterMenu=null;
+  }
+  $$('th.filterable').forEach(th=>th.classList.remove('active'));
+}
+
+function updateFilterHeaderState(){
+  $$('th[data-filter]').forEach(headerCell=>{
+    const field=headerCell.dataset.filter;
+    if(field){
+      if(filters[field]){
+        headerCell.classList.add('active');
+      }else{
+        headerCell.classList.remove('active');
+      }
+    }
+  });
+}
+
+// Initialize filters on page load
+document.addEventListener('DOMContentLoaded',()=>{
+  setupFilters();
+});
 // Keyboard shortcut: 't' or 'T' to open taxi edit for next yellow (due-soon) flight
 document.addEventListener('keydown',e=>{
   if((e.key==='t'||e.key==='T')&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
@@ -2177,7 +2329,22 @@ function renderTable(){
       actionsHtml=`<button class="btn btn-warning action-btn" onclick="window.flightActions.delay(${actualIdx})">Delay</button>`;
     }
     
-    row.innerHTML=`<td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight,'origin')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight,'dest')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt||''}">${renderICAO(flight,'takeoffAlt')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1||''}">${renderICAO(flight,'alt1')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2||''}">${renderICAO(flight,'alt2')}</td><td class="editable" data-idx="${actualIdx}" data-field="etd">${formatZuluTime(flight.etd)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td><td>${formatDuration(flight.duration)}</td><td>${formatZuluTime(flight.eta)}</td><td style="white-space:nowrap;">${actionsHtml}</td><td><span class="drag-handle">⋮⋮</span></td>`;
+    const durationMin=parseInt(flight.duration,10);
+    const durCellClass=durationMin<60?'font-weight:bold;':'';
+    const durCellStyle=durationMin<60?'style="font-weight:bold;"':'';
+    
+    // Apply filters - hide row if it doesn't match filter criteria
+    const originMatch=!filters.origin||flight.origin.toUpperCase().includes(filters.origin.toUpperCase());
+    const destMatch=!filters.dest||flight.dest.toUpperCase().includes(filters.dest.toUpperCase());
+    const takeoffAltMatch=!filters.takeoffAlt||(flight.takeoffAlt&&flight.takeoffAlt.toUpperCase().includes(filters.takeoffAlt.toUpperCase()));
+    const alt1Match=!filters.alt1||(flight.alt1&&flight.alt1.toUpperCase().includes(filters.alt1.toUpperCase()));
+    const alt2Match=!filters.alt2||(flight.alt2&&flight.alt2.toUpperCase().includes(filters.alt2.toUpperCase()));
+    
+    if(!originMatch||!destMatch||!takeoffAltMatch||!alt1Match||!alt2Match){
+      row.classList.add('filtered-out');
+    }
+    
+    row.innerHTML=`<td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight,'origin')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight,'dest')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt||''}">${renderICAO(flight,'takeoffAlt')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1||''}">${renderICAO(flight,'alt1')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2||''}">${renderICAO(flight,'alt2')}</td><td class="editable" data-idx="${actualIdx}" data-field="etd">${formatZuluTime(flight.etd)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td><td ${durCellStyle}>${formatDuration(flight.duration)}</td><td>${formatZuluTime(flight.eta)}</td><td style="white-space:nowrap;">${actionsHtml}</td><td><span class="drag-handle">⋮⋮</span></td>`;
     const fltCell=row.querySelector('.flt-cell');
     fltCell.addEventListener('contextmenu',e=>{
       e.preventDefault();
@@ -2259,8 +2426,10 @@ function renderICAO(flight,field){
 
   html+=getMetarIndicators(icao);
 
-  if(field==='dest'){
-    if(flight.triggers.has(`${icao}:improved`)&&!flight.destRequiresAlt)html+=' +';
+  // Show + for improved weather on all stations
+  if(flight.triggers.has(`${icao}:improved`)){
+    if(field==='dest'&&!flight.destRequiresAlt)html+=' +';
+    else if(field!=='dest')html+=' +';
   }
   
   html+=getMetarSymbols(icao);

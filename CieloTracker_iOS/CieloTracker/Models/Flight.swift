@@ -23,6 +23,7 @@ final class Flight {
     var isPastEta: Bool
     var autoRemoveScheduled: Bool
     var lastUpdated: Date
+    var displayOrder: Int // Preserve order from HTML export
     
     // Weather triggers (stored as comma-separated string, converted to Set in code)
     var triggersString: String
@@ -43,7 +44,8 @@ final class Flight {
         isPastEta: Bool = false,
         autoRemoveScheduled: Bool = false,
         triggers: Set<String> = [],
-        lastUpdated: Date = Date()
+        lastUpdated: Date = Date(),
+        displayOrder: Int = 0
     ) {
         self.id = id
         self.flightNumber = flightNumber
@@ -61,6 +63,7 @@ final class Flight {
         self.autoRemoveScheduled = autoRemoveScheduled
         self.triggersString = Array(triggers).joined(separator: ",")
         self.lastUpdated = lastUpdated
+        self.displayOrder = displayOrder
     }
     
     var triggers: Set<String> {

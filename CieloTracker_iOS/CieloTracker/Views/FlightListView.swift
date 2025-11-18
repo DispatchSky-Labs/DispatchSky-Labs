@@ -9,17 +9,35 @@ struct FlightListView: View {
     let flights: [Flight]
     let weatherData: [String: WeatherResponse]
     let onICAOTap: (String) -> Void
-    @State private var searchText = ""
+    let searchText: String
+    let onSearchTextChange: (String) -> Void
+    @State private var showRedTriggersOnly = false
     
     var filteredFlights: [Flight] {
-        if searchText.isEmpty {
-            return flights
+        var result = flights
+        
+        // Filter by red triggers if enabled
+        if showRedTriggersOnly {
+            result = result.filter { flight in
+                flight.triggers.contains { trigger in
+                    trigger.contains("red") || trigger.contains("critical") || trigger.contains("noalt")
+                }
+            }
         }
-        return flights.filter { flight in
-            flight.flightNumber.localizedCaseInsensitiveContains(searchText) ||
-            flight.origin.localizedCaseInsensitiveContains(searchText) ||
-            flight.dest.localizedCaseInsensitiveContains(searchText)
+        
+        // Filter by search text
+        if !searchText.isEmpty {
+            result = result.filter { flight in
+                flight.flightNumber.localizedCaseInsensitiveContains(searchText) ||
+                flight.origin.localizedCaseInsensitiveContains(searchText) ||
+                flight.dest.localizedCaseInsensitiveContains(searchText) ||
+                flight.takeoffAlt.localizedCaseInsensitiveContains(searchText) ||
+                flight.alt1.localizedCaseInsensitiveContains(searchText) ||
+                flight.alt2.localizedCaseInsensitiveContains(searchText)
+            }
         }
+        
+        return result
     }
     
     var body: some View {
@@ -34,7 +52,20 @@ struct FlightListView: View {
             }
         }
         .listStyle(.plain)
-        .searchable(text: $searchText, prompt: "Search flights")
+        .searchable(text: Binding(
+            get: { searchText },
+            set: { onSearchTextChange($0) }
+        ), prompt: "Search flights")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    showRedTriggersOnly.toggle()
+                }) {
+                    Image(systemName: showRedTriggersOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .foregroundColor(showRedTriggersOnly ? .red : .primary)
+                }
+            }
+        }
     }
 }
 

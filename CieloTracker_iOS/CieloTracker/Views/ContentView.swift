@@ -8,13 +8,15 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Flight.etd) private var flights: [Flight]
+    @Query(sort: \Flight.displayOrder) private var flights: [Flight]
     @StateObject private var viewModel = FlightListViewModel()
     @State private var showingWeather = false
     @State private var selectedICAO = ""
     @State private var showingSyncOptions = false
     @State private var showingAddFlight = false
     @State private var showingQRScanner = false
+    @State private var showingSearch = false
+    @State private var searchText = ""
     
     var body: some View {
         NavigationStack {
@@ -40,6 +42,10 @@ struct ContentView: View {
                         onICAOTap: { icao in
                             selectedICAO = icao
                             showingWeather = true
+                        },
+                        searchText: showingSearch ? searchText : "",
+                        onSearchTextChange: { newText in
+                            searchText = newText
                         }
                     )
                 }
@@ -78,6 +84,12 @@ struct ContentView: View {
                             refreshWeather()
                         }) {
                             Label("Refresh Weather", systemImage: "cloud.sun")
+                        }
+                        
+                        Button(action: {
+                            showingSearch.toggle()
+                        }) {
+                            Label(showingSearch ? "Hide Search" : "Search", systemImage: "magnifyingglass")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
