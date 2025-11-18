@@ -59,10 +59,6 @@ struct FlightListView: View {
             }
         }
         .listStyle(.plain)
-        .searchable(text: Binding(
-            get: { searchText },
-            set: { onSearchTextChange($0) }
-        ), prompt: "Search flights")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: {

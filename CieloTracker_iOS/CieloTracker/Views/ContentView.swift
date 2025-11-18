@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var showingQRScanner = false
     @State private var showingSearch = false
     @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
     
     var body: some View {
         NavigationStack {
@@ -48,6 +49,7 @@ struct ContentView: View {
                             searchText = newText
                         }
                     )
+                    .searchable(text: $searchText, isPresented: $showingSearch, prompt: "Search flights")
                 }
             }
             .navigationTitle("CieloTracker Pro")
@@ -62,6 +64,12 @@ struct ContentView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
+                        Button(action: {
+                            showingSearch.toggle()
+                        }) {
+                            Label("Search", systemImage: "magnifyingglass")
+                        }
+                        
                         Button(action: {
                             showingQRScanner = true
                         }) {
