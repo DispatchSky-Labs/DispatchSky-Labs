@@ -118,12 +118,12 @@ struct FlightRowView: View {
         return minutesDiff >= 0 ? minutesDiff : nil
     }
     
-    // Check if flight is 1 minute before deletion (14 minutes past ETA)
+    // Check if flight is 1 minute before deletion (13 minutes past ETA, 1 minute before 14-minute deletion)
     private var isDeletingSoon: Bool {
         guard let minutes = minutesPastEta,
               flight.autoRemoveScheduled else { return false }
-        // Deletion happens at 14 minutes 10 seconds, highlight 1 minute before (13 minutes 10 seconds to 14 minutes 10 seconds)
-        return minutes >= 13 && minutes < 15
+        // Deletion happens at 14 minutes past ETA, highlight 1 minute before (13 minutes to 14 minutes)
+        return minutes >= 13 && minutes < 14
     }
     
     var body: some View {
