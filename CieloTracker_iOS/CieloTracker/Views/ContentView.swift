@@ -43,7 +43,7 @@ struct ContentView: View {
                             selectedICAO = icao
                             showingWeather = true
                         },
-                        searchText: showingSearch ? searchText : "",
+                        searchText: searchText,
                         onSearchTextChange: { newText in
                             searchText = newText
                         }
@@ -86,11 +86,6 @@ struct ContentView: View {
                             Label("Refresh Weather", systemImage: "cloud.sun")
                         }
                         
-                        Button(action: {
-                            showingSearch.toggle()
-                        }) {
-                            Label(showingSearch ? "Hide Search" : "Search", systemImage: "magnifyingglass")
-                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }

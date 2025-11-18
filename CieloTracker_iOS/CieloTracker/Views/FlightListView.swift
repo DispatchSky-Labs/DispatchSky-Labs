@@ -20,7 +20,13 @@ struct FlightListView: View {
         if showRedTriggersOnly {
             result = result.filter { flight in
                 flight.triggers.contains { trigger in
-                    trigger.contains("red") || trigger.contains("critical") || trigger.contains("noalt")
+                    // Check for all red trigger patterns
+                    trigger.contains("red") || 
+                    trigger.contains("critical") || 
+                    trigger.contains("noalt") ||
+                    trigger.contains(":dest") ||
+                    trigger.contains(":dest-approach-mins") ||
+                    trigger.contains(":origin-red")
                 }
             }
         }
@@ -46,7 +52,8 @@ struct FlightListView: View {
                 FlightRowView(
                     flight: flight,
                     weatherData: weatherData,
-                    onICAOTap: onICAOTap
+                    onICAOTap: onICAOTap,
+                    searchText: searchText
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
@@ -73,12 +80,61 @@ struct FlightRowView: View {
     let flight: Flight
     let weatherData: [String: WeatherResponse]
     let onICAOTap: (String) -> Void
+    let searchText: String
+    
+    // Calculate minutes past ETA for auto-delete highlighting (using UTC)
+    private var minutesPastEta: Int? {
+        guard !flight.eta.isEmpty, flight.eta.count == 4 else { return nil }
+        guard let etaHours = Int(flight.eta.prefix(2)),
+              let etaMinutes = Int(flight.eta.suffix(2)) else { return nil }
+        
+        var calendar = Calendar.current
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? TimeZone.current
+        let now = Date()
+        
+        // Get current UTC time components
+        let nowComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: now)
+        guard let nowYear = nowComponents.year,
+              let nowMonth = nowComponents.month,
+              let nowDay = nowComponents.day,
+              let nowHour = nowComponents.hour,
+              let nowMinute = nowComponents.minute else { return nil }
+        
+        // Create ETA date in UTC
+        guard let etaDate = calendar.date(from: DateComponents(year: nowYear, month: nowMonth, day: nowDay, hour: etaHours, minute: etaMinutes)) else { return nil }
+        
+        // Calculate difference in minutes
+        var minutesDiff = calendar.dateComponents([.minute], from: etaDate, to: now).minute ?? 0
+        
+        // Handle day wrap-around
+        if minutesDiff < -12 * 60 {
+            // ETA might be tomorrow
+            if let nextDay = calendar.date(byAdding: .day, value: 1, to: etaDate) {
+                minutesDiff = calendar.dateComponents([.minute], from: nextDay, to: now).minute ?? 0
+            }
+        } else if minutesDiff > 12 * 60 {
+            // ETA might be yesterday
+            if let prevDay = calendar.date(byAdding: .day, value: -1, to: etaDate) {
+                minutesDiff = calendar.dateComponents([.minute], from: prevDay, to: now).minute ?? 0
+            }
+        }
+        
+        return minutesDiff >= 0 ? minutesDiff : nil
+    }
+    
+    // Check if flight is 1 minute before deletion (14 minutes past ETA)
+    private var isDeletingSoon: Bool {
+        guard let minutes = minutesPastEta,
+              flight.autoRemoveScheduled else { return false }
+        // Deletion happens at 14 minutes 10 seconds, highlight 1 minute before (13 minutes 10 seconds to 14 minutes 10 seconds)
+        return minutes >= 13 && minutes < 15
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Header row: Flight number and times
             HStack {
-                Text(flight.flightNumber)
+                highlightText(flight.flightNumber, searchText: searchText)
                     .font(.title3)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
@@ -119,16 +175,16 @@ struct FlightRowView: View {
             
             // Airport codes row
             HStack(spacing: 8) {
-                ICAOCell(icao: flight.origin, label: "ORG", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.origin), onTap: onICAOTap)
-                ICAOCell(icao: flight.dest, label: "DEST", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.dest), onTap: onICAOTap)
+                ICAOCell(icao: flight.origin, label: "ORG", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.origin), hasImproved: hasImproved(for: flight.origin), searchText: searchText, onTap: onICAOTap)
+                ICAOCell(icao: flight.dest, label: "DEST", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.dest), hasImproved: hasImproved(for: flight.dest), searchText: searchText, onTap: onICAOTap)
                 if !flight.takeoffAlt.isEmpty {
-                    ICAOCell(icao: flight.takeoffAlt, label: "T/ALT", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.takeoffAlt), onTap: onICAOTap)
+                    ICAOCell(icao: flight.takeoffAlt, label: "T/ALT", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.takeoffAlt), hasImproved: hasImproved(for: flight.takeoffAlt), searchText: searchText, onTap: onICAOTap)
                 }
                 if !flight.alt1.isEmpty {
-                    ICAOCell(icao: flight.alt1, label: "ALT1", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.alt1), onTap: onICAOTap)
+                    ICAOCell(icao: flight.alt1, label: "ALT1", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.alt1), hasImproved: hasImproved(for: flight.alt1), searchText: searchText, onTap: onICAOTap)
                 }
                 if !flight.alt2.isEmpty {
-                    ICAOCell(icao: flight.alt2, label: "ALT2", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.alt2), onTap: onICAOTap)
+                    ICAOCell(icao: flight.alt2, label: "ALT2", weatherData: weatherData, hasTrigger: hasTrigger(for: flight.alt2), hasImproved: hasImproved(for: flight.alt2), searchText: searchText, onTap: onICAOTap)
                 }
             }
             
@@ -188,9 +244,18 @@ struct FlightRowView: View {
         .padding(.vertical, 8)
         .background(backgroundColor.opacity(0.3))
         .cornerRadius(8)
+        .overlay(
+            // Red highlight for auto-delete (low saturation so it doesn't overlap with red triggers)
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isDeletingSoon ? Color.red.opacity(0.3) : Color.clear, lineWidth: 2)
+        )
     }
     
     private var backgroundColor: Color {
+        // Auto-delete highlight (low saturation red)
+        if isDeletingSoon {
+            return Color.red.opacity(0.15)
+        }
         if flight.isPastEta {
             return .red.opacity(0.1)
         } else if !flight.triggers.isEmpty {
@@ -204,13 +269,62 @@ struct FlightRowView: View {
     }
     
     private func hasTrigger(for icao: String) -> Bool {
-        flight.triggers.contains { $0.contains(icao) }
+        flight.triggers.contains { trigger in
+            trigger.contains(icao) && !trigger.contains("improved")
+        }
+    }
+    
+    private func hasImproved(for icao: String) -> Bool {
+        flight.triggers.contains { $0.contains("\(icao):improved") }
     }
     
     private func formatTime(_ time: String) -> String {
         guard time.count == 4 else { return time }
         let index = time.index(time.startIndex, offsetBy: 2)
         return "\(time[..<index]):\(time[index...])"
+    }
+    
+    // Highlight search text in a string
+    private func highlightText(_ text: String, searchText: String) -> Text {
+        guard !searchText.isEmpty else {
+            return Text(text)
+        }
+        
+        let lowerText = text.lowercased()
+        let lowerSearch = searchText.lowercased()
+        
+        guard lowerText.contains(lowerSearch) else {
+            return Text(text)
+        }
+        
+        var result = Text("")
+        var remaining = text
+        var searchIndex = remaining.lowercased().startIndex
+        
+        while let range = remaining.lowercased().range(of: lowerSearch, range: searchIndex..<remaining.lowercased().endIndex) {
+            // Add text before match
+            let beforeMatch = String(remaining[..<range.lowerBound])
+            if !beforeMatch.isEmpty {
+                result = result + Text(beforeMatch)
+            }
+            
+            // Add highlighted match
+            let match = String(remaining[range])
+            result = result + Text(match)
+                .foregroundColor(.white)
+                .background(Color.yellow)
+            
+            // Update remaining text
+            remaining = String(remaining[range.upperBound...])
+            searchIndex = remaining.lowercased().startIndex
+        }
+        
+        // Add remaining text
+        if !remaining.isEmpty {
+            result = result + Text(remaining)
+        }
+        
+        return result
     }
     
     private func triggerColor(for trigger: String) -> Color {
@@ -230,7 +344,52 @@ struct ICAOCell: View {
     let label: String
     let weatherData: [String: WeatherResponse]
     let hasTrigger: Bool
+    let hasImproved: Bool
+    let searchText: String
     let onTap: (String) -> Void
+    
+    // Highlight search text in ICAO code
+    private func highlightICAO(_ text: String, searchText: String) -> Text {
+        guard !searchText.isEmpty, !text.isEmpty else {
+            return Text(text)
+        }
+        
+        let lowerText = text.lowercased()
+        let lowerSearch = searchText.lowercased()
+        
+        guard lowerText.contains(lowerSearch) else {
+            return Text(text)
+        }
+        
+        var result = Text("")
+        var remaining = text
+        var searchIndex = remaining.lowercased().startIndex
+        
+        while let range = remaining.lowercased().range(of: lowerSearch, range: searchIndex..<remaining.lowercased().endIndex) {
+            // Add text before match
+            let beforeMatch = String(remaining[..<range.lowerBound])
+            if !beforeMatch.isEmpty {
+                result = result + Text(beforeMatch)
+            }
+            
+            // Add highlighted match
+            let match = String(remaining[range])
+            result = result + Text(match)
+                .foregroundColor(.white)
+                .background(Color.yellow)
+            
+            // Update remaining text
+            remaining = String(remaining[range.upperBound...])
+            searchIndex = remaining.lowercased().startIndex
+        }
+        
+        // Add remaining text
+        if !remaining.isEmpty {
+            result = result + Text(remaining)
+        }
+        
+        return result
+    }
     
     var body: some View {
         Button(action: {
@@ -242,10 +401,25 @@ struct ICAOCell: View {
                 Text(label)
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                Text(icao.isEmpty ? "—" : icao)
-                    .font(.system(.body, design: .monospaced))
-                    .fontWeight(hasTrigger ? .bold : .medium)
-                    .foregroundColor(cellColor)
+                HStack(spacing: 2) {
+                    if icao.isEmpty {
+                        Text("—")
+                            .font(.system(.body, design: .monospaced))
+                            .fontWeight(.medium)
+                            .foregroundColor(cellColor)
+                    } else {
+                        highlightICAO(icao, searchText: searchText)
+                            .font(.system(.body, design: .monospaced))
+                            .fontWeight(hasTrigger ? .bold : .medium)
+                            .foregroundColor(cellColor)
+                    }
+                    if hasImproved {
+                        Text("+")
+                            .font(.system(.body, design: .monospaced))
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
+                    }
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

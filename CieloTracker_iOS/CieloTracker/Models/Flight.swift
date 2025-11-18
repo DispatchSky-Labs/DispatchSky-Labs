@@ -24,6 +24,7 @@ final class Flight {
     var autoRemoveScheduled: Bool
     var lastUpdated: Date
     var displayOrder: Int // Preserve order from HTML export
+    var minutesPastEta: Int? // Calculated minutes past ETA for auto-delete highlighting
     
     // Weather triggers (stored as comma-separated string, converted to Set in code)
     var triggersString: String

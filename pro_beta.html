@@ -2330,8 +2330,7 @@ function renderTable(){
     }
     
     const durationMin=parseInt(flight.duration,10);
-    const durCellClass=durationMin<60?'font-weight:bold;':'';
-    const durCellStyle=durationMin<60?'style="font-weight:bold;"':'';
+    const durCellStyle=durationMin<60&&!isNaN(durationMin)?'style="font-weight:bold;"':'';
     
     // Apply filters - hide row if it doesn't match filter criteria
     const originMatch=!filters.origin||flight.origin.toUpperCase().includes(filters.origin.toUpperCase());
