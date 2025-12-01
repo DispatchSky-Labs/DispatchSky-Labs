@@ -186,8 +186,8 @@
 'use strict';
 const METAR_URL="https://aviationweather.gov/data/cache/metars.cache.xml.gz";
 const TAF_URL="https://aviationweather.gov/data/cache/tafs.cache.xml.gz";
-const CUSTOM_PROXY=localStorage.getItem('ct_weather_proxy')||null;
-const CORS_PROXIES=CUSTOM_PROXY?[CUSTOM_PROXY]:[
+const CLOUDFLARE_WORKER_URL=localStorage.getItem('ct_cloudflare_worker_url')||'';
+const CORS_PROXIES=CLOUDFLARE_WORKER_URL?[CLOUDFLARE_WORKER_URL+'?url=']:[
   "https://api.allorigins.win/raw?url=",
   "https://corsproxy.io/?",
   "https://api.codetabs.com/v1/proxy?quest=",
@@ -1022,11 +1022,13 @@ function parseTafXml(xmlText){
 }
 async function fetchWithProxy(url,proxyIndex=0){
   if(proxyIndex>=CORS_PROXIES.length){
-    throw new Error('All CORS proxies failed. Please set up a backend proxy endpoint.');
+    throw new Error('All CORS proxies failed. Please set up a Cloudflare Worker proxy.');
   }
   const proxy=CORS_PROXIES[proxyIndex];
   let proxyUrl;
-  if(proxy.includes('freeboard.io')){
+  if(proxy.includes('cloudflare')||proxy.includes('workers')){
+    proxyUrl=proxy+encodeURIComponent(url);
+  }else if(proxy.includes('freeboard.io')){
     proxyUrl=proxy+url;
   }else if(proxy.includes('codetabs.com')){
     proxyUrl=proxy+encodeURIComponent(url);
