@@ -51,7 +51,7 @@ This enables CloudKit sync for SwiftData.
    - Should be: `iCloud.com.yourname.CielotTrackerPro`
 
 3. **Check Entitlements:**
-   - Verify `CielotTrackerPro.entitlements` file exists
+   - Verify `CieloTracker/CielotTrackerPro.entitlements` file exists
    - Should have CloudKit enabled
 
 4. **Wait for Sync:**

@@ -65,6 +65,11 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is needed to scan QR codes for syncing flights from the web app.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>background-fetch</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>
 

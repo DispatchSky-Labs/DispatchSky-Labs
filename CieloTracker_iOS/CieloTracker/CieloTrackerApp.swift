@@ -30,6 +30,11 @@ struct CieloTrackerApp: App {
         }
     }()
     
+    init() {
+        // Register background tasks
+        BackgroundRefreshService.shared.registerBackgroundTasks()
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()

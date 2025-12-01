@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct FlightListView: View {
     let flights: [Flight]
@@ -11,16 +12,18 @@ struct FlightListView: View {
     let onICAOTap: (String) -> Void
     let searchText: String
     let onSearchTextChange: (String) -> Void
+    var onMove: ((IndexSet, Int) -> Void)? = nil
+    var onFlightTap: ((Flight) -> Void)? = nil
     @State private var showRedTriggersOnly = false
     
     var filteredFlights: [Flight] {
+        // flights are already sorted by displayOrder from @Query in ContentView
         var result = flights
         
         // Filter by red triggers if enabled
         if showRedTriggersOnly {
             result = result.filter { flight in
                 flight.triggers.contains { trigger in
-                    // Check for all red trigger patterns
                     trigger.contains("red") || 
                     trigger.contains("critical") || 
                     trigger.contains("noalt") ||
@@ -43,6 +46,7 @@ struct FlightListView: View {
             }
         }
         
+        // Filtering preserves order, so result is still sorted by displayOrder
         return result
     }
     
@@ -56,7 +60,12 @@ struct FlightListView: View {
                     searchText: searchText
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onFlightTap?(flight)
+                }
             }
+            .onMove(perform: onMove)
         }
         .listStyle(.plain)
         .toolbar {
@@ -77,6 +86,7 @@ struct FlightRowView: View {
     let weatherData: [String: WeatherResponse]
     let onICAOTap: (String) -> Void
     let searchText: String
+    @State private var showingEditTaxiBurn = false
     
     // Calculate minutes past ETA for auto-delete highlighting (using UTC)
     private var minutesPastEta: Int? {
@@ -245,6 +255,16 @@ struct FlightRowView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(isDeletingSoon ? Color.red.opacity(0.3) : Color.clear, lineWidth: 2)
         )
+        .contextMenu {
+            Button(action: {
+                showingEditTaxiBurn = true
+            }) {
+                Label("Edit Taxi & Burn", systemImage: "pencil")
+            }
+        }
+        .sheet(isPresented: $showingEditTaxiBurn) {
+            EditTaxiBurnView(flight: flight)
+        }
     }
     
     private var backgroundColor: Color {

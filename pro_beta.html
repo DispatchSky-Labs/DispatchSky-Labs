@@ -184,7 +184,8 @@
   <script>
 (function(){
 'use strict';
-const API_URL="https://us-central1-handy-coil-469714-j2.cloudfunctions.net/process-weather-data-clean";
+const METAR_URL="https://aviationweather.gov/data/cache/metars.cache.xml.gz";
+const TAF_URL="https://aviationweather.gov/data/cache/tafs.cache.xml.gz";
 const ERROR_THRESHOLD_MS=5*60*1000;
 const HEADER_KEYWORDS=['FLT','ORG','ETD','DST','ETA','DEST','BURN','TAXI','DUR','T/ALT','ALT1','ALT2'];
 const TRIGGER_TERMS=['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS','SQ'];
@@ -403,12 +404,32 @@ function showToast(message,type='info',duration=3000,undoCallback=null,delayCall
   requestAnimationFrame(()=>{
     updateToastPositions();
   });
-  setTimeout(()=>{
-    const index=activeToasts.indexOf(toast);
-    if(index>-1)activeToasts.splice(index,1);
-    toast.remove();
-    requestAnimationFrame(updateToastPositions);
+  const timeoutId=setTimeout(()=>{
+    try{
+      const index=activeToasts.indexOf(toast);
+      if(index>-1)activeToasts.splice(index,1);
+      if(toast&&toast.parentNode){
+        toast.remove();
+      }
+      requestAnimationFrame(updateToastPositions);
+    }catch(e){
+      console.error('Error removing toast:',e);
+    }
   },duration);
+  // Store timeout ID on toast element for potential cleanup
+  toast.dataset.timeoutId=timeoutId;
+  // Also add a click handler to dismiss on tap (for mobile)
+  toast.addEventListener('click',(e)=>{
+    if(e.target===toast||e.target===msgSpan){
+      try{
+        clearTimeout(timeoutId);
+        const index=activeToasts.indexOf(toast);
+        if(index>-1)activeToasts.splice(index,1);
+        toast.remove();
+        requestAnimationFrame(updateToastPositions);
+      }catch(e){}
+    }
+  });
 }
 function updateClock(){
   const now=new Date();
@@ -926,30 +947,102 @@ function calculateDurationAndETA(flight){
   flight.duration=String(totalMin);
   if(flight.etd)flight.eta=addMinutesToZulu(flight.etd,totalMin);
 }
+async function decompressGzip(arrayBuffer){
+  const stream=new DecompressionStream('gzip');
+  const writer=stream.writable.getWriter();
+  writer.write(arrayBuffer);
+  writer.close();
+  const reader=stream.readable.getReader();
+  const chunks=[];
+  while(true){
+    const{done,value}=await reader.read();
+    if(done)break;
+    chunks.push(value);
+  }
+  const decompressed=new Uint8Array(chunks.reduce((acc,chunk)=>acc+chunk.length,0));
+  let offset=0;
+  for(const chunk of chunks){
+    decompressed.set(chunk,offset);
+    offset+=chunk.length;
+  }
+  return new TextDecoder().decode(decompressed);
+}
+function parseMetarXml(xmlText){
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(xmlText,'text/xml');
+  const lookup={};
+  const metars=doc.querySelectorAll('METAR');
+  metars.forEach(metar=>{
+    const icaoEl=metar.querySelector('station_id');
+    const rawTextEl=metar.querySelector('raw_text');
+    if(icaoEl&&rawTextEl){
+      const icao=icaoEl.textContent?.trim();
+      const rawText=rawTextEl.textContent?.trim();
+      if(icao&&rawText){
+        if(!lookup[icao])lookup[icao]={};
+        lookup[icao].metar={raw:rawText};
+      }
+    }
+  });
+  return lookup;
+}
+function parseTafXml(xmlText){
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(xmlText,'text/xml');
+  const lookup={};
+  const tafs=doc.querySelectorAll('TAF');
+  tafs.forEach(taf=>{
+    const icaoEl=taf.querySelector('station_id');
+    const rawTextEl=taf.querySelector('raw_text');
+    if(icaoEl&&rawTextEl){
+      const icao=icaoEl.textContent?.trim();
+      const rawText=rawTextEl.textContent?.trim();
+      if(icao&&rawText){
+        if(!lookup[icao])lookup[icao]={};
+        lookup[icao].taf={raw:rawText};
+      }
+    }
+  });
+  return lookup;
+}
 async function fetchWeather(icaoList){
   if(!icaoList||!icaoList.length)return {};
-  const params=new URLSearchParams({
-    ids:icaoList.join(','),
-    ceil:'2000',
-    vis:'3',
-    metar:'1',
-    taf:'1',
-    alpha:'0',
-    filter:'all'
-  });
+  const icaoSet=new Set(icaoList.map(s=>s.toUpperCase()));
   try{
-    const res=await fetch(`${API_URL}?${params}`,{method:'GET',mode:'cors'});
-    if(!res.ok)throw new Error(`API ${res.status}`);
-    const data=await res.json();
+    const[metarRes,tafRes]=await Promise.all([
+      fetch(METAR_URL,{method:'GET',mode:'cors'}),
+      fetch(TAF_URL,{method:'GET',mode:'cors'})
+    ]);
+    if(!metarRes.ok)throw new Error(`METAR fetch ${metarRes.status}`);
+    if(!tafRes.ok)throw new Error(`TAF fetch ${tafRes.status}`);
+    const[metarArrayBuffer,tafArrayBuffer]=await Promise.all([
+      metarRes.arrayBuffer(),
+      tafRes.arrayBuffer()
+    ]);
+    const[metarXml,tafXml]=await Promise.all([
+      decompressGzip(metarArrayBuffer),
+      decompressGzip(tafArrayBuffer)
+    ]);
+    const metarLookup=parseMetarXml(metarXml);
+    const tafLookup=parseTafXml(tafXml);
+    const lookup={};
+    icaoSet.forEach(icao=>{
+      const metar=metarLookup[icao];
+      const taf=tafLookup[icao];
+      if(metar||taf){
+        lookup[icao]={};
+        if(metar)lookup[icao].metar=metar.metar;
+        if(taf)lookup[icao].taf=taf.taf;
+      }
+    });
     lastSuccessfulUpdate=new Date();
     errorDisplay.classList.add('hidden');
     const hh=pad2(lastSuccessfulUpdate.getUTCHours());
     const mm=pad2(lastSuccessfulUpdate.getUTCMinutes());
     lastUpdateEl.textContent=`Updated: ${hh}:${mm} UTC`;
-    const lookup={};
-    if(data.results)data.results.forEach(r=>{lookup[r.icao]=r});
     return lookup;
   }catch(err){
+    console.error('Weather fetch error:',err);
     if(lastSuccessfulUpdate&&(Date.now()-lastSuccessfulUpdate.getTime())>ERROR_THRESHOLD_MS){
       errorDisplay.classList.remove('hidden');
       const hh=pad2(lastSuccessfulUpdate.getUTCHours());
@@ -2554,7 +2647,7 @@ function startEdit(cell){
   input.select();
 }
 function updateStats(){statTotal.textContent=flights.length}
-function startAutoRefresh(){autoRefreshInterval=setInterval(refreshWeather,5*60*1000)}
+function startAutoRefresh(){autoRefreshInterval=setInterval(refreshWeather,60*1000)}
 function startAlwaysOnCheck(){alwaysOnCheckInterval=setInterval(()=>{checkWeatherTriggers();renderTable()},ALWAYS_ON_CHECK_INTERVAL)}
 function startDeletionWarningCheck(){
   // Clear any existing interval

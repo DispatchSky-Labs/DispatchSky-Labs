@@ -322,6 +322,11 @@ function normalizeICAO(iata){
   return 'K'+clean;
 }
 function showToast(message,type='info',duration=3000,undoCallback=null,delayCallback=null){
+  // Remove any existing toasts first to prevent stacking
+  const existingToasts=document.querySelectorAll('.toast');
+  existingToasts.forEach(t=>{
+    try{t.remove()}catch(e){}
+  });
   const toast=document.createElement('div');
   toast.className=`toast toast-${type}`;
   const msgSpan=document.createElement('span');
@@ -331,17 +336,43 @@ function showToast(message,type='info',duration=3000,undoCallback=null,delayCall
     const delayBtn=document.createElement('button');
     delayBtn.className='toast-btn';
     delayBtn.textContent='Delay';
-    delayBtn.addEventListener('click',()=>{delayCallback();toast.remove()});
+    delayBtn.addEventListener('click',()=>{
+      try{delayCallback()}catch(e){}
+      try{toast.remove()}catch(e){}
+    });
     toast.appendChild(delayBtn);
   }else if(undoCallback){
     const undoBtn=document.createElement('button');
     undoBtn.className='toast-btn';
     undoBtn.textContent='Undo';
-    undoBtn.addEventListener('click',()=>{undoCallback();toast.remove()});
+    undoBtn.addEventListener('click',()=>{
+      try{undoCallback()}catch(e){}
+      try{toast.remove()}catch(e){}
+    });
     toast.appendChild(undoBtn);
   }
   document.body.appendChild(toast);
-  setTimeout(()=>toast.remove(),duration);
+  // Ensure toast is removed after duration, with fallback
+  const timeoutId=setTimeout(()=>{
+    try{
+      if(toast&&toast.parentNode){
+        toast.remove();
+      }
+    }catch(e){
+      console.error('Error removing toast:',e);
+    }
+  },duration);
+  // Store timeout ID on toast element for potential cleanup
+  toast.dataset.timeoutId=timeoutId;
+  // Also add a click handler to dismiss on tap (for mobile)
+  toast.addEventListener('click',(e)=>{
+    if(e.target===toast||e.target===msgSpan){
+      try{
+        clearTimeout(timeoutId);
+        toast.remove();
+      }catch(e){}
+    }
+  });
 }
 function updateClock(){
   const now=new Date();
@@ -609,7 +640,24 @@ function etaToUtcDateWithinTaf(etaHHMM,tafStart,tafEnd){
   if(!etaHHMM||etaHHMM.length!==4)return null;
   const h=parseInt(etaHHMM.slice(0,2),10);
   const m=parseInt(etaHHMM.slice(2),10);
-  let candidate=new Date(Date.UTC(tafStart.getUTCFullYear(),tafStart.getUTCMonth(),tafStart.getUTCDate(),h,m,0));
+  const now=new Date();
+  const currentYear=now.getUTCFullYear();
+  const currentMonth=now.getUTCMonth();
+  const currentDay=now.getUTCDate();
+  // Try current day first
+  let candidate=new Date(Date.UTC(currentYear,currentMonth,currentDay,h,m,0));
+  // If candidate is before TAF start, try next day
+  if(candidate<tafStart){
+    candidate=new Date(Date.UTC(currentYear,currentMonth,currentDay+1,h,m,0));
+  }
+  // If candidate is after TAF end, try previous day
+  if(candidate>=tafEnd){
+    candidate=new Date(Date.UTC(currentYear,currentMonth,currentDay-1,h,m,0));
+  }
+  // Final check: ensure candidate is within TAF validity period
+  if(candidate>=tafStart&&candidate<tafEnd)return candidate;
+  // If still not valid, try the TAF start day as fallback (original logic)
+  candidate=new Date(Date.UTC(tafStart.getUTCFullYear(),tafStart.getUTCMonth(),tafStart.getUTCDate(),h,m,0));
   if(candidate<tafStart)candidate=new Date(candidate.getTime()+24*3600*1000);
   if(candidate>=tafEnd)candidate=new Date(candidate.getTime()-24*3600*1000);
   if(candidate>=tafStart&&candidate<tafEnd)return candidate;
@@ -626,19 +674,26 @@ function getTafSegmentsForWindow(tafRaw,etaHHMM){
   const{segments}=buildTafSegments(tafRaw);
   if(!segments.length)return[];
   const filteredSegments=segments.filter(seg=>seg.end>windowStart&&seg.start<windowEnd);
-  const tempoRegex=/\bTEMPO\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\s+([^\n]+?)(?=\s*(?:FM\d{6}|TEMPO|BECMG|PROB\d+|$|\n\s*[A-Z]|\n\s*$))/g;
+  // Match TEMPO and PROB conditional periods
+  // Format: TEMPO/PROB30/PROB40 DDHH/DDHH ... (end time is 1 minute before the hour)
+  const tempoRegex=/\b(TEMPO|PROB30|PROB40)\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\s+([^\n]+?)(?=\s*(?:FM\d{6}|TEMPO|BECMG|PROB\d+|$|\n\s*[A-Z]|\n\s*$))/g;
   const tempoMatches=[...tafRaw.matchAll(tempoRegex)];
   const validTempos=[];
   tempoMatches.forEach(tempoMatch=>{
-    const d=parseInt(tempoMatch[1],10);
-    const h1=parseInt(tempoMatch[2],10);
-    const d2=parseInt(tempoMatch[3],10);
-    const h2=parseInt(tempoMatch[4],10);
-    const tempoText=(tempoMatch[5]||'').trim();
+    const d=parseInt(tempoMatch[2],10);
+    const h1=parseInt(tempoMatch[3],10);
+    const d2=parseInt(tempoMatch[4],10);
+    const h2=parseInt(tempoMatch[5],10);
+    const tempoText=(tempoMatch[6]||'').trim();
     if(!tempoText)return;
     const tempoStart=new Date(Date.UTC(Y,M,d,h1,0,0));
+    // CRITICAL: End time is 1 minute before the hour (e.g., PROB 0000-0300 ends at 0259, not 0300)
     let tempoEnd=new Date(Date.UTC(Y,M,d2,h2===24?0:h2,0,0));
     if(h2===24)tempoEnd=new Date(tempoEnd.getTime()+24*3600*1000);
+    // Subtract 1 minute from end time to account for conditional period ending 1 minute before the hour
+    tempoEnd=new Date(tempoEnd.getTime()-60*1000);
+    // Only include if the conditional period overlaps with our arrival window
+    // The period must start before windowEnd and end after windowStart
     if(tempoEnd>windowStart&&tempoStart<windowEnd){
       validTempos.push({start:tempoStart,end:tempoEnd,text:tempoText});
     }
@@ -1907,7 +1962,17 @@ function startEdit(cell){
 }
 function updateStats(){statTotal.textContent=flights.length}
 function startAutoRefresh(){autoRefreshInterval=setInterval(refreshWeather,5*60*1000)}
-function startAlwaysOnCheck(){alwaysOnCheckInterval=setInterval(()=>{checkWeatherTriggers();renderTable()},ALWAYS_ON_CHECK_INTERVAL)}
+function startAlwaysOnCheck(){
+  // Check weather triggers and update METAR expiration indicators every minute
+  alwaysOnCheckInterval=setInterval(()=>{
+    checkWeatherTriggers();
+    renderTable(); // Re-render to update METAR expiration indicators
+  },ALWAYS_ON_CHECK_INTERVAL);
+  // Also update METAR indicators every 30 seconds to ensure accurate expiration display
+  setInterval(()=>{
+    renderTable(); // Re-render just to update METAR expiration indicators
+  },30*1000);
+}
 window.flightActions={
   delay(idx){
     showDelayModal(idx);
