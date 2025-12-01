@@ -970,17 +970,21 @@ async function decompressGzip(arrayBuffer){
 function parseMetarXml(xmlText){
   const parser=new DOMParser();
   const doc=parser.parseFromString(xmlText,'text/xml');
+  const parseError=doc.querySelector('parsererror');
+  if(parseError){
+    console.error('METAR XML parse error:',parseError.textContent);
+    return {};
+  }
   const lookup={};
   const metars=doc.querySelectorAll('METAR');
   metars.forEach(metar=>{
     const icaoEl=metar.querySelector('station_id');
     const rawTextEl=metar.querySelector('raw_text');
     if(icaoEl&&rawTextEl){
-      const icao=icaoEl.textContent?.trim();
-      const rawText=rawTextEl.textContent?.trim();
+      const icao=(icaoEl.textContent||'').trim().toUpperCase();
+      const rawText=(rawTextEl.textContent||'').trim();
       if(icao&&rawText){
-        if(!lookup[icao])lookup[icao]={};
-        lookup[icao].metar={raw:rawText};
+        lookup[icao]={metar:{raw:rawText}};
       }
     }
   });
@@ -989,17 +993,21 @@ function parseMetarXml(xmlText){
 function parseTafXml(xmlText){
   const parser=new DOMParser();
   const doc=parser.parseFromString(xmlText,'text/xml');
+  const parseError=doc.querySelector('parsererror');
+  if(parseError){
+    console.error('TAF XML parse error:',parseError.textContent);
+    return {};
+  }
   const lookup={};
   const tafs=doc.querySelectorAll('TAF');
   tafs.forEach(taf=>{
     const icaoEl=taf.querySelector('station_id');
     const rawTextEl=taf.querySelector('raw_text');
     if(icaoEl&&rawTextEl){
-      const icao=icaoEl.textContent?.trim();
-      const rawText=rawTextEl.textContent?.trim();
+      const icao=(icaoEl.textContent||'').trim().toUpperCase();
+      const rawText=(rawTextEl.textContent||'').trim();
       if(icao&&rawText){
-        if(!lookup[icao])lookup[icao]={};
-        lookup[icao].taf={raw:rawText};
+        lookup[icao]={taf:{raw:rawText}};
       }
     }
   });
@@ -1023,16 +1031,20 @@ async function fetchWeather(icaoList){
       decompressGzip(metarArrayBuffer),
       decompressGzip(tafArrayBuffer)
     ]);
+    if(!metarXml||!tafXml){
+      throw new Error('Failed to decompress weather data');
+    }
     const metarLookup=parseMetarXml(metarXml);
     const tafLookup=parseTafXml(tafXml);
     const lookup={};
     icaoSet.forEach(icao=>{
-      const metar=metarLookup[icao];
-      const taf=tafLookup[icao];
-      if(metar||taf){
-        lookup[icao]={};
-        if(metar)lookup[icao].metar=metar.metar;
-        if(taf)lookup[icao].taf=taf.taf;
+      const icaoUpper=icao.toUpperCase();
+      const metarData=metarLookup[icaoUpper];
+      const tafData=tafLookup[icaoUpper];
+      if(metarData||tafData){
+        lookup[icaoUpper]={};
+        if(metarData&&metarData.metar)lookup[icaoUpper].metar=metarData.metar;
+        if(tafData&&tafData.taf)lookup[icaoUpper].taf=tafData.taf;
       }
     });
     lastSuccessfulUpdate=new Date();
@@ -1043,13 +1055,19 @@ async function fetchWeather(icaoList){
     return lookup;
   }catch(err){
     console.error('Weather fetch error:',err);
-    if(lastSuccessfulUpdate&&(Date.now()-lastSuccessfulUpdate.getTime())>ERROR_THRESHOLD_MS){
+    console.error('Error details:',err.message,err.stack);
+    if(!lastSuccessfulUpdate||(Date.now()-lastSuccessfulUpdate.getTime())>ERROR_THRESHOLD_MS){
       errorDisplay.classList.remove('hidden');
-      const hh=pad2(lastSuccessfulUpdate.getUTCHours());
-      const mm=pad2(lastSuccessfulUpdate.getUTCMinutes());
-      errorTimeEl.textContent=`${hh}:${mm}`;
+      if(lastSuccessfulUpdate){
+        const hh=pad2(lastSuccessfulUpdate.getUTCHours());
+        const mm=pad2(lastSuccessfulUpdate.getUTCMinutes());
+        errorTimeEl.textContent=`${hh}:${mm}`;
+      }else{
+        errorTimeEl.textContent='Never';
+        lastUpdateEl.textContent='Updated: Never';
+      }
     }
-    return weatherData;
+    return weatherData||{};
   }
 }
 async function refreshWeather(){
@@ -1502,11 +1520,11 @@ function checkWeatherTriggers(){
     flight.taltHasAdverseWeather=false;
     flight.taltBelowApproachMins=false;
 
-    const originWx=weatherData[flight.origin];
-    const destWx=weatherData[flight.dest];
-    const taltWx=flight.takeoffAlt?weatherData[flight.takeoffAlt]:null;
-    const alt1Wx=flight.alt1?weatherData[flight.alt1]:null;
-    const alt2Wx=flight.alt2?weatherData[flight.alt2]:null;
+    const originWx=weatherData[(flight.origin||'').toUpperCase()];
+    const destWx=weatherData[(flight.dest||'').toUpperCase()];
+    const taltWx=flight.takeoffAlt?weatherData[(flight.takeoffAlt||'').toUpperCase()]:null;
+    const alt1Wx=flight.alt1?weatherData[(flight.alt1||'').toUpperCase()]:null;
+    const alt2Wx=flight.alt2?weatherData[(flight.alt2||'').toUpperCase()]:null;
 
     const etaHHMM=flight.eta&&flight.eta.length===4?flight.eta:null;
     const etdHHMM=flight.etd&&flight.etd.length===4?flight.etd:null;
@@ -1621,7 +1639,7 @@ function checkMetarHasAdverseWeather(metarText){
 }
 function getMetarIndicators(icao){
   if(!icao)return'';
-  const wx=weatherData[icao];
+  const wx=weatherData[(icao||'').toUpperCase()];
   if(!wx)return'';
   let indicators='';
   const metarText=wx.metar?.raw||'';
@@ -1633,7 +1651,7 @@ function getMetarIndicators(icao){
 }
 function getMetarSymbols(icao){
   if(!icao)return'';
-  const wx=weatherData[icao];
+  const wx=weatherData[(icao||'').toUpperCase()];
   if(!wx)return'';
   let symbols='';
   const metarText=wx.metar?.raw||'';
@@ -1648,7 +1666,8 @@ function escapeHtml(text){
   return text.replace(/[&<>"']/g,m=>map[m]);
 }
 function showWeatherModal(icao){
-  const wx=weatherData[icao];
+  const icaoUpper=(icao||'').toUpperCase();
+  const wx=weatherData[icaoUpper];
   const overlay=document.createElement('div');
   overlay.className='wx-modal-overlay';
   const modal=document.createElement('div');
@@ -2050,10 +2069,12 @@ function showContextMenu(e){
     const weatherToPass={};
     flightsToPass.forEach(f=>{
       [f.dest,f.takeoffAlt,f.alt1,f.alt2].forEach(icao=>{
-        if(!icao||weatherToPass[icao])return;
-        const wx=weatherData[icao];
+        if(!icao)return;
+        const icaoUpper=(icao||'').toUpperCase();
+        if(weatherToPass[icaoUpper])return;
+        const wx=weatherData[icaoUpper];
         if(!wx)return;
-        weatherToPass[icao]={
+        weatherToPass[icaoUpper]={
           metar:wx.metar&&typeof wx.metar.raw==='string'?{raw:formatMetarForPassdown(wx.metar.raw)}:null,
           taf:wx.taf&&typeof wx.taf.raw==='string'?{raw:formatTafForPassdown(wx.taf.raw)}:null
         };
