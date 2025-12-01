@@ -186,7 +186,7 @@
 'use strict';
 const METAR_URL="https://aviationweather.gov/data/cache/metars.cache.xml.gz";
 const TAF_URL="https://aviationweather.gov/data/cache/tafs.cache.xml.gz";
-const CLOUDFLARE_WORKER_URL=localStorage.getItem('ct_cloudflare_worker_url')||'';
+const CLOUDFLARE_WORKER_URL=localStorage.getItem('ct_cloudflare_worker_url')||'https://spring-shadow-4289.thorbito.workers.dev';
 const CORS_PROXIES=CLOUDFLARE_WORKER_URL?[CLOUDFLARE_WORKER_URL+'?url=']:[
   "https://api.allorigins.win/raw?url=",
   "https://corsproxy.io/?",
