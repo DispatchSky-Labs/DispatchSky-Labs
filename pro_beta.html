@@ -186,7 +186,13 @@
 'use strict';
 const METAR_URL="https://aviationweather.gov/data/cache/metars.cache.xml.gz";
 const TAF_URL="https://aviationweather.gov/data/cache/tafs.cache.xml.gz";
-const CORS_PROXY="https://api.allorigins.win/raw?url=";
+const CUSTOM_PROXY=localStorage.getItem('ct_weather_proxy')||null;
+const CORS_PROXIES=CUSTOM_PROXY?[CUSTOM_PROXY]:[
+  "https://api.allorigins.win/raw?url=",
+  "https://corsproxy.io/?",
+  "https://api.codetabs.com/v1/proxy?quest=",
+  "https://thingproxy.freeboard.io/fetch/"
+];
 const ERROR_THRESHOLD_MS=5*60*1000;
 const HEADER_KEYWORDS=['FLT','ORG','ETD','DST','ETA','DEST','BURN','TAXI','DUR','T/ALT','ALT1','ALT2'];
 const TRIGGER_TERMS=['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS','SQ'];
@@ -1014,18 +1020,45 @@ function parseTafXml(xmlText){
   });
   return lookup;
 }
+async function fetchWithProxy(url,proxyIndex=0){
+  if(proxyIndex>=CORS_PROXIES.length){
+    throw new Error('All CORS proxies failed. Please set up a backend proxy endpoint.');
+  }
+  const proxy=CORS_PROXIES[proxyIndex];
+  let proxyUrl;
+  if(proxy.includes('freeboard.io')){
+    proxyUrl=proxy+url;
+  }else if(proxy.includes('codetabs.com')){
+    proxyUrl=proxy+encodeURIComponent(url);
+  }else if(proxy.includes('corsproxy.io')){
+    proxyUrl=proxy+encodeURIComponent(url);
+  }else{
+    proxyUrl=proxy+encodeURIComponent(url);
+  }
+  try{
+    const controller=new AbortController();
+    const timeoutId=setTimeout(()=>controller.abort(),30000);
+    const res=await fetch(proxyUrl,{method:'GET',mode:'cors',signal:controller.signal});
+    clearTimeout(timeoutId);
+    if(!res.ok)throw new Error(`Proxy ${proxyIndex} returned ${res.status}`);
+    return res;
+  }catch(err){
+    if(err.name==='AbortError'){
+      console.warn(`Proxy ${proxyIndex} timed out, trying next...`);
+    }else{
+      console.warn(`Proxy ${proxyIndex} failed, trying next...`,err.message);
+    }
+    return fetchWithProxy(url,proxyIndex+1);
+  }
+}
 async function fetchWeather(icaoList){
   if(!icaoList||!icaoList.length)return {};
   const icaoSet=new Set(icaoList.map(s=>s.toUpperCase()));
   try{
-    const metarProxyUrl=CORS_PROXY+encodeURIComponent(METAR_URL);
-    const tafProxyUrl=CORS_PROXY+encodeURIComponent(TAF_URL);
     const[metarRes,tafRes]=await Promise.all([
-      fetch(metarProxyUrl,{method:'GET',mode:'cors'}),
-      fetch(tafProxyUrl,{method:'GET',mode:'cors'})
+      fetchWithProxy(METAR_URL),
+      fetchWithProxy(TAF_URL)
     ]);
-    if(!metarRes.ok)throw new Error(`METAR fetch ${metarRes.status}`);
-    if(!tafRes.ok)throw new Error(`TAF fetch ${tafRes.status}`);
     const[metarArrayBuffer,tafArrayBuffer]=await Promise.all([
       metarRes.arrayBuffer(),
       tafRes.arrayBuffer()
