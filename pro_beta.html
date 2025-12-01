@@ -186,6 +186,7 @@
 'use strict';
 const METAR_URL="https://aviationweather.gov/data/cache/metars.cache.xml.gz";
 const TAF_URL="https://aviationweather.gov/data/cache/tafs.cache.xml.gz";
+const CORS_PROXY="https://api.allorigins.win/raw?url=";
 const ERROR_THRESHOLD_MS=5*60*1000;
 const HEADER_KEYWORDS=['FLT','ORG','ETD','DST','ETA','DEST','BURN','TAXI','DUR','T/ALT','ALT1','ALT2'];
 const TRIGGER_TERMS=['TSRA','VCTS','FZRA','FZDZ','+SN','PSN','FZFG','GR','UP','TS','SQ'];
@@ -1017,9 +1018,11 @@ async function fetchWeather(icaoList){
   if(!icaoList||!icaoList.length)return {};
   const icaoSet=new Set(icaoList.map(s=>s.toUpperCase()));
   try{
+    const metarProxyUrl=CORS_PROXY+encodeURIComponent(METAR_URL);
+    const tafProxyUrl=CORS_PROXY+encodeURIComponent(TAF_URL);
     const[metarRes,tafRes]=await Promise.all([
-      fetch(METAR_URL,{method:'GET',mode:'cors'}),
-      fetch(TAF_URL,{method:'GET',mode:'cors'})
+      fetch(metarProxyUrl,{method:'GET',mode:'cors'}),
+      fetch(tafProxyUrl,{method:'GET',mode:'cors'})
     ]);
     if(!metarRes.ok)throw new Error(`METAR fetch ${metarRes.status}`);
     if(!tafRes.ok)throw new Error(`TAF fetch ${tafRes.status}`);
