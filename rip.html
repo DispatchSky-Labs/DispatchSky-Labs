@@ -95,7 +95,7 @@
     .single-flight-modal,.taxi-burn-modal,.delay-modal{max-width:400px}
     @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
     .theme-dark .wx-modal,.theme-dark .upload-modal,.theme-dark .single-flight-modal,.theme-dark .taxi-burn-modal,.theme-dark .delay-modal{background:#1f2937}
-    .wx-modal-header{display:flex;justify-content:flex-end;align-items:center;margin-bottom:16px}
+    .wx-modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px}
     .wx-modal-close{background:transparent;border:none;font-size:28px;cursor:pointer;color:var(--muted);padding:0;width:36px;height:36px;border-radius:6px}
     .wx-modal-close:hover{background:rgba(0,0,0,0.1)}
     .wx-modal-body{font-family:monospace;font-size:13px;line-height:1.8;white-space:pre-wrap;word-break:break-word;color:var(--fg);user-select:text;-webkit-user-select:text}
@@ -244,20 +244,12 @@ function getCurrentZuluMinutes(){
 function getAirportTimezone(icao){
   if(!icao)return null;
   const code=icao.toUpperCase();
-  // Common US airport timezone mappings
-  // Eastern Time (EST/EDT)
   if(/^(KJFK|KLGA|KEWR|KPHL|KBOS|KDCA|KIAD|KATL|KMIA|KMCO|KFLL|KTPA|KRDU|KCLT|KCHA)$/.test(code))return'America/New_York';
-  // Central Time (CST/CDT)
   if(/^(KORD|KMDW|KDFW|KIAH|KDAL|KMSY|KMEM|KBNA|KSTL|KMCI|KIND|KCVG|KCMH|KDTW|KMSP)$/.test(code))return'America/Chicago';
-  // Mountain Time (MST/MDT)
   if(/^(KDEN|KPHX|KSLC|KABQ|KBOI|KBIL|KELP|KTUS)$/.test(code))return'America/Denver';
-  // Pacific Time (PST/PDT)
   if(/^(KLAX|KSFO|KSAN|KSNA|KSJC|KSEA|KPDX|KLAS|KRNO|KSMF|KOAK|KBUR|KLGB|KONT)$/.test(code))return'America/Los_Angeles';
-  // Alaska Time (AKST/AKDT)
   if(/^PA/.test(code)||/^(PANC|PAFA|PAJN)$/.test(code))return'America/Anchorage';
-  // Hawaii Time (HST)
   if(/^PH/.test(code)||/^(PHNL|PHOG|PHKO)$/.test(code))return'Pacific/Honolulu';
-  // Default to browser local timezone if airport not found
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 function convertUtcToLocalTime(utcHHMM,timezone){
@@ -270,28 +262,22 @@ function convertUtcToLocalTime(utcHHMM,timezone){
     const day=now.getUTCDate();
     const hours=parseInt(utcHHMM.slice(0,2),10);
     const minutes=parseInt(utcHHMM.slice(2),10);
-    // Create UTC date - handle day wrap-around
     let utcDate=new Date(Date.UTC(year,month,day,hours,minutes,0));
     const currentUtcMinutes=now.getUTCHours()*60+now.getUTCMinutes();
     const etaUtcMinutes=hours*60+minutes;
-    // If ETA is more than 12 hours in the past, assume it's tomorrow
     let diffMinutes=etaUtcMinutes-currentUtcMinutes;
     if(diffMinutes<-12*60){
       utcDate=new Date(utcDate.getTime()+24*3600*1000);
     }else if(diffMinutes>12*60){
-      // If ETA is more than 12 hours in the future, assume it was yesterday (shouldn't happen, but handle it)
       utcDate=new Date(utcDate.getTime()-24*3600*1000);
     }
-    // Convert to local time in the specified timezone with 12-hour format
     const formatter=new Intl.DateTimeFormat('en-US',{timeZone:timezone,hour12:true,hour:'numeric',minute:'2-digit'});
     const formattedTime=formatter.format(utcDate);
-    // Parse the formatted time (e.g., "8:00 PM" or "7:00 AM" or "12:00 AM" for midnight)
     const timeMatch=formattedTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
     if(timeMatch){
       let localHours=parseInt(timeMatch[1],10);
       const localMinutes=parseInt(timeMatch[2],10);
       const period=timeMatch[3].toUpperCase();
-      // Convert to 24-hour format for calculations (but keep 12-hour format for display)
       let hours24;
       if(period==='PM'){
         hours24=localHours===12?12:localHours+12;
@@ -407,7 +393,6 @@ function showToast(message,type='info',duration=3000,undoCallback=null,delayCall
   }
   document.body.appendChild(toast);
   activeToasts.push(toast);
-  // Use requestAnimationFrame to ensure DOM is rendered before calculating positions
   requestAnimationFrame(()=>{
     updateToastPositions();
   });
@@ -423,9 +408,7 @@ function showToast(message,type='info',duration=3000,undoCallback=null,delayCall
       console.error('Error removing toast:',e);
     }
   },duration);
-  // Store timeout ID on toast element for potential cleanup
   toast.dataset.timeoutId=timeoutId;
-  // Also add a click handler to dismiss on tap (for mobile)
   toast.addEventListener('click',(e)=>{
     if(e.target===toast||e.target===msgSpan){
       try{
@@ -536,70 +519,58 @@ function exportForiOS(){
     if(typeof crypto!=='undefined'&&crypto.randomUUID)return crypto.randomUUID();
     return Date.now()+'-'+Math.random().toString(36).substr(2,9);
   };
-  // Ultra-compact export: use single-letter keys to minimize size, no ID needed
   const exportedFlights=flights.map((f,index)=>{
     const flight={
-      f:f.flight||'', // flight -> f
-      o:f.origin||'', // origin -> o
-      d:f.dest||'', // dest -> d
+      f:f.flight||'',
+      o:f.origin||'',
+      d:f.dest||'',
       etd:f.etd||'',
       eta:f.eta||'',
-      do:index // displayOrder -> do (preserve order)
+      do:index
     };
-    // Only include optional fields if they have values, use short keys
-    if(f.takeoffAlt)flight.ta=f.takeoffAlt; // takeoffAlt -> ta
-    if(f.alt1)flight.a1=f.alt1; // alt1 -> a1
-    if(f.alt2)flight.a2=f.alt2; // alt2 -> a2
-    if(f.taxiOut)flight.to=f.taxiOut; // taxiOut -> to
-    if(f.burnoff)flight.bo=f.burnoff; // burnoff -> bo
-    if(f.duration)flight.dur=f.duration; // duration -> dur
-    if(f.isPastEta)flight.pe=true; // isPastEta -> pe
-    if(f.autoRemoveScheduled)flight.ar=true; // autoRemoveScheduled -> ar
+    if(f.takeoffAlt)flight.ta=f.takeoffAlt;
+    if(f.alt1)flight.a1=f.alt1;
+    if(f.alt2)flight.a2=f.alt2;
+    if(f.taxiOut)flight.to=f.taxiOut;
+    if(f.burnoff)flight.bo=f.burnoff;
+    if(f.duration)flight.dur=f.duration;
+    if(f.isPastEta)flight.pe=true;
+    if(f.autoRemoveScheduled)flight.ar=true;
     const triggers=Array.from(f.triggers||[]);
-    if(triggers.length>0)flight.t=triggers; // triggers -> t
+    if(triggers.length>0)flight.t=triggers;
     return flight;
   });
-  // Create compact JSON (no pretty printing, minimal whitespace)
   const jsonString=JSON.stringify(exportedFlights);
-  
-  // Try raw JSON first (smaller, more readable by cameras)
-  // If too large, split into 2 parts
+
   const jsonSizeBytes=new Blob([jsonString]).size;
-  const maxQRBytes=2800; // Conservative limit for QR code v40 with medium error correction
-  
+  const maxQRBytes=2800;
+
   if(jsonSizeBytes<=maxQRBytes){
-    // Single QR code - use raw JSON
     const qrData=jsonString;
     showQRCodeModal(qrData,jsonString,exportedFlights.length,false,1,1);
   }else{
-    // Split into 2 parts
     const midPoint=Math.ceil(exportedFlights.length/2);
     const part1=exportedFlights.slice(0,midPoint);
     const part2=exportedFlights.slice(midPoint);
     const jsonPart1=JSON.stringify(part1);
     const jsonPart2=JSON.stringify(part2);
-    
-    // Create metadata objects for each part
+
     const metadata1={part:1,total:2,count:part1.length,data:part1};
     const metadata2={part:2,total:2,count:part2.length,data:part2};
     const qrData1=JSON.stringify(metadata1);
     const qrData2=JSON.stringify(metadata2);
-    
-    // Check if parts fit in QR codes
+
     const size1=new Blob([qrData1]).size;
     const size2=new Blob([qrData2]).size;
-    
+
     if(size1<=maxQRBytes&&size2<=maxQRBytes){
-      // Both parts fit - show 2 QR codes
       showMultiQRCodeModal([qrData1,qrData2],jsonString,exportedFlights.length);
     }else{
-      // Even split parts are too large - use base64 encoding
       const base64Data=btoa(unescape(encodeURIComponent(jsonString)));
       const base64Size=new Blob([base64Data]).size;
       if(base64Size<=maxQRBytes){
         showQRCodeModal(base64Data,jsonString,exportedFlights.length,true,1,1);
       }else{
-        // Still too large even with base64 - show error with clipboard option
         showQRCodeModal(null,jsonString,exportedFlights.length,false,0,0);
       }
     }
@@ -607,7 +578,6 @@ function exportForiOS(){
 }
 function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1,totalParts=1){
   if(!qrData){
-    // Data too large - show error with clipboard option
     const existingModal=document.querySelector('.qr-modal-overlay');
     if(existingModal)existingModal.remove();
     const overlay=document.createElement('div');
@@ -646,15 +616,14 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1
     overlay.addEventListener('click',(e)=>{if(e.target===overlay)overlay.remove()});
     return;
   }
-  
+
   const dataSizeBytes=new Blob([qrData]).size;
   const originalSizeBytes=new Blob([originalJson]).size;
   console.log('Generating QR code for',flightCount,'flights. QR data size:',dataSizeBytes,'bytes, Original:',originalSizeBytes,'bytes, Base64:',useBase64);
-  
-  // Remove any existing QR modal
+
   const existingModal=document.querySelector('.qr-modal-overlay');
   if(existingModal)existingModal.remove();
-  
+
   const overlay=document.createElement('div');
   overlay.className='qr-modal-overlay';
   const modal=document.createElement('div');
@@ -677,8 +646,7 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1
   instructions.innerHTML=totalParts>1?
     '<strong>Instructions:</strong><br/>1. Scan Part '+currentPart+' of '+totalParts+'<br/>2. The iOS app will prompt for Part '+(currentPart===1?2:1)+' after scanning this one<br/>3. Scan both parts to import all '+flightCount+' flights<br/><br/><strong>Tip:</strong> Ensure good lighting and hold phone steady':
     '<strong>Instructions:</strong><br/>1. Open CieloTracker Pro on your iPhone<br/>2. Tap Menu (⋯) → Scan QR Code<br/>3. Point camera at this QR code<br/>4. Flights will import automatically<br/><br/><strong>Tip:</strong> Ensure good lighting and hold phone steady';
-  
-  // Add clipboard button as alternative
+
   const clipboardBtn=document.createElement('button');
   clipboardBtn.className='btn';
   clipboardBtn.style.cssText='margin-top:12px;width:100%;';
@@ -690,7 +658,7 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1
       showToast('Copy failed', 'error');
     });
   };
-  
+
   modal.appendChild(closeBtn);
   modal.appendChild(title);
   modal.appendChild(container);
@@ -701,8 +669,7 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1
   overlay.addEventListener('click',(e)=>{
     if(e.target===overlay)overlay.remove();
   });
-  
-  // Wait for DOM and library to be ready, then generate QR code
+
   let attempts=0;
   const maxAttempts=50;
   function tryGenerateQR(){
@@ -719,28 +686,24 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1
       qrDiv.innerHTML='<p style="color:var(--danger);padding:20px;">QR Code container not ready.</p>';
       return;
     }
-    
+
     try{
-      // Check data size - QR codes can handle up to ~2953 bytes for v40 with M error correction
       const maxSizeBytes=2953;
-      
+
       if(dataSizeBytes>maxSizeBytes){
         qrDiv.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);margin-bottom:16px;">Data too large for QR code ('+Math.round(dataSizeBytes/1024*10)/10+'KB).</p><p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Use clipboard method instead.</p></div>';
         return;
       }
-      
-      // Clear any existing QR code in the div
+
       qrDiv.innerHTML='';
-      
-      // Use larger QR code size for better readability (especially for cameras)
+
       const qrSize=Math.min(600,Math.max(400,Math.ceil(Math.sqrt(dataSizeBytes)*20)));
-      
-      // Start with lower error correction (L) and smaller size for better compatibility
+
       let qrCode=null;
       let error=null;
       const sizes=[400,350,300];
       const levels=[QRCode.CorrectLevel.L,QRCode.CorrectLevel.M];
-      
+
       for(let level of levels){
         if(qrCode)break;
         for(let size of sizes){
@@ -763,18 +726,17 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1
           }
         }
       }
-      
+
       if(!qrCode){
         console.error('All QRCode generation attempts failed. Last error:',error);
         throw error||new Error('QRCode generation failed');
       }
-      
-      // Show data size info on success
+
       const info=document.createElement('div');
       info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
       info.textContent=flightCount+' flights • '+Math.round(originalSizeBytes)+' bytes'+(useBase64?' (base64)':'')+(totalParts>1?` • Part ${currentPart}/${totalParts}`:'');
       container.appendChild(info);
-      
+
     }catch(err){
       console.error('QR Code generation error:',err);
       const dataSizeBytes=new Blob([originalJson]).size;
@@ -789,14 +751,13 @@ function showQRCodeModal(qrData,originalJson,flightCount,useBase64,currentPart=1
       qrDiv.appendChild(copyBtn);
     }
   }
-  
+
   setTimeout(tryGenerateQR,200);
 }
 function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
-  // Remove any existing QR modal
   const existingModal=document.querySelector('.qr-modal-overlay');
   if(existingModal)existingModal.remove();
-  
+
   const overlay=document.createElement('div');
   overlay.className='qr-modal-overlay';
   const modal=document.createElement('div');
@@ -810,7 +771,7 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
   closeBtn.className='qr-modal-close';
   closeBtn.innerHTML='&times;';
   closeBtn.addEventListener('click',()=>overlay.remove());
-  
+
   const container=document.createElement('div');
   container.className='qr-code-container';
   container.style.display='flex';
@@ -818,8 +779,7 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
   container.style.gap='20px';
   container.style.justifyContent='center';
   container.style.flexWrap='wrap';
-  
-  // Create QR code containers for both parts
+
   const part1Div=document.createElement('div');
   part1Div.style.display='flex';
   part1Div.style.flexDirection='column';
@@ -834,7 +794,7 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
   part1QR.id='qrcode-part1-'+Date.now();
   part1Div.appendChild(part1Label);
   part1Div.appendChild(part1QR);
-  
+
   const part2Div=document.createElement('div');
   part2Div.style.display='flex';
   part2Div.style.flexDirection='column';
@@ -849,14 +809,14 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
   part2QR.id='qrcode-part2-'+Date.now();
   part2Div.appendChild(part2Label);
   part2Div.appendChild(part2QR);
-  
+
   container.appendChild(part1Div);
   container.appendChild(part2Div);
-  
+
   const instructions=document.createElement('div');
   instructions.className='qr-modal-instructions';
   instructions.innerHTML='<strong>Instructions:</strong><br/>1. Scan Part 1 first<br/>2. Then scan Part 2<br/>3. The iOS app will combine both parts automatically<br/>4. All '+flightCount+' flights will import<br/><br/><strong>Tip:</strong> Scan them in order (1, then 2)';
-  
+
   const clipboardBtn=document.createElement('button');
   clipboardBtn.className='btn';
   clipboardBtn.style.cssText='margin-top:12px;width:100%;';
@@ -868,7 +828,7 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
       showToast('Copy failed', 'error');
     });
   };
-  
+
   modal.appendChild(closeBtn);
   modal.appendChild(title);
   modal.appendChild(container);
@@ -879,8 +839,7 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
   overlay.addEventListener('click',(e)=>{
     if(e.target===overlay)overlay.remove();
   });
-  
-  // Generate both QR codes
+
   let attempts=0;
   const maxAttempts=50;
   function tryGenerateQRs(){
@@ -894,9 +853,8 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
       part2QR.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--warning);">QR Code library not loaded.</p></div>';
       return;
     }
-    
+
     try{
-      // Generate Part 1 QR code
       new QRCode(part1QR,{
         text:qrDataParts[0],
         width:350,
@@ -906,8 +864,7 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
         correctLevel:QRCode.CorrectLevel.M,
         useSVG:false
       });
-      
-      // Generate Part 2 QR code
+
       new QRCode(part2QR,{
         text:qrDataParts[1],
         width:350,
@@ -917,7 +874,7 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
         correctLevel:QRCode.CorrectLevel.M,
         useSVG:false
       });
-      
+
       const info=document.createElement('div');
       info.style.cssText='margin-top:12px;font-size:12px;color:var(--muted);text-align:center;';
       info.textContent=flightCount+' flights • '+Math.round(new Blob([originalJson]).size)+' bytes • 2-part QR codes';
@@ -928,7 +885,7 @@ function showMultiQRCodeModal(qrDataParts,originalJson,flightCount){
       part2QR.innerHTML='<div style="padding:20px;text-align:center;"><p style="color:var(--danger);">Error generating QR code</p></div>';
     }
   }
-  
+
   setTimeout(tryGenerateQRs,200);
 }
 function loadFlights(){
@@ -1287,28 +1244,21 @@ function findWorstWeather(text){
   if(!text)return{ceiling:null,visibility:null};
   let worstCeiling=Infinity;
   let worstVis=Infinity;
-  
-  // Ceilings: Only look at BKN, OVC, or VV (lowest value)
-  // SCT and FEW are NOT ceilings - they are scattered/few clouds, not ceilings
+
   const vvMatches=text.match(/\bVV(\d{3})\b/g)||[];
   vvMatches.forEach(m=>{
     const height=parseInt(m.slice(2),10);
     if(height<worstCeiling)worstCeiling=height;
   });
-  // Only match BKN and OVC for ceilings, explicitly exclude SCT and FEW
   const ceilingMatches=text.match(/\b(BKN|OVC)(\d{3})\b/g)||[];
   ceilingMatches.forEach(m=>{
     const height=parseInt(m.slice(-3),10);
     if(height<worstCeiling)worstCeiling=height;
   });
-  
-  // Visibility parsing: Find the first/main visibility value (before RMK section if present)
-  // Split by RMK to ignore visibility values in remarks
+
   const mainSection=text.split(/\bRMK\b/i)[0];
   if(!mainSection)return{ceiling:worstCeiling===Infinity?null:worstCeiling,visibility:worstVis===Infinity?null:worstVis};
-  
-  // First check for mixed format like "2 1/2SM" (whole number + fraction)
-  // Pattern: number, space, fraction, SM
+
   const mixedVisPattern=/(\d+)\s+(\d+)\/(\d+)SM\b/;
   const mixedVisMatch=mainSection.match(mixedVisPattern);
   if(mixedVisMatch){
@@ -1320,11 +1270,9 @@ function findWorstWeather(text){
       worstVis=vis;
     }
   }else{
-    // Check for simple fraction like "1/2SM" (no whole number)
     const fracVisPattern=/\b(P?)(\d+)\/(\d+)SM\b/;
     const fracVisMatch=mainSection.match(fracVisPattern);
     if(fracVisMatch&&!fracVisMatch[1]){
-      // No "P" prefix
       const num=parseInt(fracVisMatch[2],10);
       const den=parseInt(fracVisMatch[3],10);
       if(den>0){
@@ -1332,23 +1280,20 @@ function findWorstWeather(text){
         worstVis=vis;
       }
     }else{
-      // Check for whole number visibility like "5SM" or "P6SM"
       const visPattern=/\b(P?)(\d+)SM\b/;
       const visMatch=mainSection.match(visPattern);
       if(visMatch){
         if(visMatch[1]==='P'){
-          // P prefix means "plus" or "greater than" - treat as > value (use value + 1 for threshold checks)
           const vis=parseInt(visMatch[2],10);
-          worstVis=vis+1; // P6SM means >6SM, so use 7 for threshold comparisons
+          worstVis=vis+1;
         }else{
-          // No "P" prefix
           const vis=parseInt(visMatch[2],10);
           worstVis=vis;
         }
       }
     }
   }
-  
+
   return{ceiling:worstCeiling===Infinity?null:worstCeiling,visibility:worstVis===Infinity?null:worstVis};
 }
 function findTriggerTerms(text){
@@ -1412,7 +1357,7 @@ function checkDestRequiresAlternate(wx,flight){
 function checkDestBelowApproachMins(wx,etaHHMM){
   if(!wx||!etaHHMM)return false;
   const etaHH=etaHHMM.slice(0,2);
-  
+
   if(wx.metar&&wx.metar.raw){
     const metarHH=getMetarHourHH(wx.metar.raw);
     if(metarHH===etaHH){
@@ -1421,7 +1366,7 @@ function checkDestBelowApproachMins(wx,etaHHMM){
       if(worst.visibility!==null&&worst.visibility<=0.5)return true;
     }
   }
-  
+
   if(wx.taf&&wx.taf.raw){
     const tafTextAtHour=getTafBaseTextAtEtaHour(wx.taf.raw,etaHHMM);
     if(tafTextAtHour){
@@ -1430,7 +1375,7 @@ function checkDestBelowApproachMins(wx,etaHHMM){
       if(worst.visibility!==null&&worst.visibility<=0.5)return true;
     }
   }
-  
+
   return false;
 }
 function checkAlternateAtEta(wx,etaHHMM,flight){
@@ -1490,7 +1435,7 @@ function checkAlternateBelowApproachMins(wx,etaHHMM,flight){
   if(!wx||!etaHHMM)return false;
   const etaHH=etaHHMM.slice(0,2);
   const durationMin=flight?parseInt(flight.duration,10):999;
-  
+
   if(wx.taf&&wx.taf.raw){
     const tafTextAtHour=getTafBaseTextAtEtaHour(wx.taf.raw,etaHHMM);
     if(tafTextAtHour){
@@ -1499,7 +1444,7 @@ function checkAlternateBelowApproachMins(wx,etaHHMM,flight){
       if(worst.visibility!==null&&worst.visibility<=0.5)return true;
     }
   }
-  
+
   if(durationMin<60&&wx.metar&&wx.metar.raw){
     const metarHH=getMetarHourHH(wx.metar.raw);
     if(metarHH===etaHH){
@@ -1508,7 +1453,7 @@ function checkAlternateBelowApproachMins(wx,etaHHMM,flight){
       if(worst.visibility!==null&&worst.visibility<=0.5)return true;
     }
   }
-  
+
   return false;
 }
 function checkTakeoffAltRequired(originWx,flight){
@@ -1519,7 +1464,7 @@ function checkTakeoffAltRequired(originWx,flight){
   const currentMinutes=getCurrentZuluMinutes();
   const etdMinutes=zuluToMinutes(etdHHMM);
   const minutesUntilEtd=etdMinutes!==null?etdMinutes-currentMinutes:null;
-  
+
   if(originWx.metar&&originWx.metar.raw){
     const metarHH=getMetarHourHH(originWx.metar.raw);
     const metarHHInt=metarHH?parseInt(metarHH,10):null;
@@ -1533,7 +1478,7 @@ function checkTakeoffAltRequired(originWx,flight){
       }
     }
   }
-  
+
   if(originWx.taf&&originWx.taf.raw){
     const tafTextAtHour=getTafBaseTextAtEtaHour(originWx.taf.raw,etdHHMM);
     if(tafTextAtHour){
@@ -1541,7 +1486,7 @@ function checkTakeoffAltRequired(originWx,flight){
       if(worst.visibility!==null&&worst.visibility<1)return true;
     }
   }
-  
+
   return false;
 }
 function checkWeatherTriggers(){
@@ -1703,7 +1648,8 @@ function escapeHtml(text){
   const map={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'};
   return text.replace(/[&<>"']/g,m=>map[m]);
 }
-function showWeatherModal(icao){
+// UPDATED: showWeatherModal now accepts optional sourceCell for iOS edit button
+function showWeatherModal(icao,sourceCell){
   const icaoUpper=(icao||'').toUpperCase();
   const wx=weatherData[icaoUpper];
   const overlay=document.createElement('div');
@@ -1717,11 +1663,32 @@ function showWeatherModal(icao){
     content+=escapeHtml(formatTAFPretty(wx.taf.raw));
   }
   if(!content)content='No weather data available';
-  modal.innerHTML=`<div class="wx-modal-header"><button class="wx-modal-close" id="closeModal">×</button></div><div class="wx-modal-body">${content}</div>`;
+
+  // Build header with optional Edit button for iOS
+  let headerHtml='<div class="wx-modal-header">';
+  if(sourceCell){
+    headerHtml+='<button type="button" class="btn btn-secondary" id="editAirportBtn" style="height:28px;padding:0 12px;font-size:12px;">Edit</button>';
+  }else{
+    headerHtml+='<span></span>'; // spacer for flex layout
+  }
+  headerHtml+='<button class="wx-modal-close" id="closeModal">×</button></div>';
+
+  modal.innerHTML=headerHtml+`<div class="wx-modal-body">${content}</div>`;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   const closeModal=()=>overlay.remove();
   modal.querySelector('#closeModal').addEventListener('click',closeModal);
+
+  // Wire up Edit button if sourceCell was provided
+  const editBtn=modal.querySelector('#editAirportBtn');
+  if(editBtn&&sourceCell){
+    editBtn.addEventListener('click',()=>{
+      closeModal();
+      // Small delay to ensure modal is fully closed before starting edit
+      setTimeout(()=>startEdit(sourceCell),50);
+    });
+  }
+
   overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()},{once:true});
 }
@@ -1849,29 +1816,21 @@ function showReceivePassdownModal(){
     if(!text){showToast('Please enter flight data','warning');return}
     const parsed=parseRawInput(text);
     if(parsed.length>0){
-      // Calculate taxi and burn for each flight based on duration = ETA - ETD
       parsed.forEach(flight=>{
         if(flight.etd&&flight.eta){
           const etdMinutes=zuluToMinutes(flight.etd);
           const etaMinutes=zuluToMinutes(flight.eta);
           if(etdMinutes!==null&&etaMinutes!==null){
             let durationMinutes=etaMinutes-etdMinutes;
-            // Handle day wrap-around
             if(durationMinutes<0)durationMinutes+=24*60;
-            // Ensure minimum duration of 1 minute
             if(durationMinutes<=0)durationMinutes=1;
-            // Divide by 2 for taxi and burn
             const halfDuration=Math.floor(durationMinutes/2);
             flight.taxiOut=String(halfDuration);
             flight.burnoff=String(durationMinutes-halfDuration);
-            // Calculate duration field - this prevents ETA from being recalculated
             flight.duration=String(durationMinutes);
-            // Note: We preserve the original ETA from input, so calculateDurationAndETA won't override it
-            // because it only updates ETA if etd exists, but we want to keep the input ETA
           }
         }
       });
-      // Append to existing flights instead of replacing
       flights.push(...parsed);
       renderTable();
       refreshWeather();
@@ -1983,7 +1942,7 @@ function checkFlightTimes(){
     let diff=etaMinutes-currentMinutes;
     if(diff<-12*60)diff+=24*60;
     else if(diff>12*60)diff-=24*60;
-    
+
     if(diff<=0){
       flight.isPastEta=true;
       flight.minutesPastEta=Math.abs(diff);
@@ -2041,10 +2000,8 @@ function closeContextMenu(){
   if(existing)existing.remove();
 }
 function deleteFlightDirectly(idx,flight){
-  // Store flight data for undo
   const deletedFlight={...flight};
   const deletedIdx=idx;
-  // Clean up auto-remove timeouts if scheduled
   if(flight.autoRemoveScheduled){
     const timeoutId=autoRemoveTimeouts.get(flight.id);
     if(timeoutId)clearTimeout(timeoutId);
@@ -2053,13 +2010,10 @@ function deleteFlightDirectly(idx,flight){
     autoRemoveTimeouts.delete(flight.id);
     autoRemoveTimeouts.delete(flight.id+'_delete');
   }
-  // Delete the flight immediately
   flights.splice(idx,1);
   renderTable();
   saveFlights();
-  // Show red toast with undo button
   showToast(`${flight.flight} ${flight.origin} ${flight.dest}`,'error',10000,()=>{
-    // Undo: restore the flight at its original index
     flights.splice(deletedIdx,0,deletedFlight);
     renderTable();
     saveFlights();
@@ -2153,7 +2107,6 @@ function showContextMenu(e){
 headerTitle.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();showContextMenu(e)});
 headerTitle.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();showContextMenu(e)});
 
-// Setup filter functionality for header cells
 function setupFilters(){
   $$('th[data-filter]').forEach(headerCell=>{
     const field=headerCell.dataset.filter;
@@ -2166,8 +2119,7 @@ function setupFilters(){
       });
     }
   });
-  
-  // Close filter menu when clicking outside
+
   document.addEventListener('click',e=>{
     if(activeFilterMenu&&!activeFilterMenu.contains(e.target)&&!e.target.closest('.filterable')){
       closeFilterMenu();
@@ -2179,12 +2131,12 @@ function showFilterMenu(headerCell,field){
   closeFilterMenu();
   activeFilterMenu=document.createElement('div');
   activeFilterMenu.className='filter-menu';
-  
+
   const header=document.createElement('div');
   header.className='filter-menu-header';
   header.textContent=`Filter ${field.toUpperCase()}`;
   activeFilterMenu.appendChild(header);
-  
+
   const inputDiv=document.createElement('div');
   inputDiv.className='filter-menu-input';
   const input=document.createElement('input');
@@ -2201,15 +2153,14 @@ function showFilterMenu(headerCell,field){
   });
   inputDiv.appendChild(input);
   activeFilterMenu.appendChild(inputDiv);
-  
-  // Get unique values for this field
+
   const uniqueValues=new Set();
   flights.forEach(f=>{
     const val=f[field];
     if(val&&val.trim())uniqueValues.add(val.toUpperCase());
   });
   const sortedValues=Array.from(uniqueValues).sort();
-  
+
   if(sortedValues.length>0){
     const optionsDiv=document.createElement('div');
     optionsDiv.className='filter-menu-options';
@@ -2233,7 +2184,7 @@ function showFilterMenu(headerCell,field){
     });
     activeFilterMenu.appendChild(optionsDiv);
   }
-  
+
   const clearOption=document.createElement('div');
   clearOption.className='filter-menu-option clear';
   clearOption.textContent='Clear Filter';
@@ -2245,7 +2196,7 @@ function showFilterMenu(headerCell,field){
     updateFilterHeaderState();
   });
   activeFilterMenu.appendChild(clearOption);
-  
+
   headerCell.appendChild(activeFilterMenu);
   headerCell.classList.add('active');
   input.focus();
@@ -2273,20 +2224,16 @@ function updateFilterHeaderState(){
   });
 }
 
-// Initialize filters on page load
 document.addEventListener('DOMContentLoaded',()=>{
   setupFilters();
 });
-// Keyboard shortcut: 't' or 'T' to open taxi edit for next yellow (due-soon) flight
 document.addEventListener('keydown',e=>{
   if((e.key==='t'||e.key==='T')&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
-    // Check if user is typing in an input field
     const activeElement=document.activeElement;
     if(activeElement&&(activeElement.tagName==='INPUT'||activeElement.tagName==='TEXTAREA')){
-      return; // Don't trigger if typing in input
+      return;
     }
     e.preventDefault();
-    // Find the first flight that is due-soon (yellow) - flights without taxi/burn within 2 hours of ETD
     const currentMinutes=getCurrentZuluMinutes();
     for(let i=0;i<flights.length;i++){
       const flight=flights[i];
@@ -2303,7 +2250,6 @@ document.addEventListener('keydown',e=>{
         }
       }
     }
-    // If no due-soon flight found, find first flight without taxi/burn
     for(let i=0;i<flights.length;i++){
       const flight=flights[i];
       if(!flight.taxiOut&&!flight.burnoff){
@@ -2312,26 +2258,20 @@ document.addEventListener('keydown',e=>{
       }
     }
   }
-  // Keyboard shortcut: 'm' or 'M' to get clipboard and highlight matching flights
   if((e.key==='m'||e.key==='M')&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
-    // Check if user is typing in an input field
     const activeElement=document.activeElement;
     if(activeElement&&(activeElement.tagName==='INPUT'||activeElement.tagName==='TEXTAREA')){
-      return; // Don't trigger if typing in input
+      return;
     }
     e.preventDefault();
-    // Get clipboard content
     navigator.clipboard.readText().then(text=>{
-      // Parse for flight numbers in format "FLT 5302" or "FLT5302"
       const flightNumberPattern=/\bFLT\s*(\d+)\b/gi;
       const matches=[...text.matchAll(flightNumberPattern)];
       const flightNumbers=new Set();
       matches.forEach(match=>{
         if(match[1])flightNumbers.add(match[1]);
       });
-      // Remove existing highlights
       $$('tbody tr').forEach(row=>row.classList.remove('highlighted'));
-      // Highlight matching rows
       if(flightNumbers.size>0){
         let highlightCount=0;
         const rows=flightTableBody.querySelectorAll('tbody tr');
@@ -2343,7 +2283,6 @@ document.addEventListener('keydown',e=>{
         });
         if(highlightCount>0){
           showToast(`Highlighted ${highlightCount} flight${highlightCount!==1?'s':''}`,'info',3000);
-          // Scroll to first highlighted row
           const firstHighlighted=flightTableBody.querySelector('tr.highlighted');
           if(firstHighlighted)firstHighlighted.scrollIntoView({behavior:'smooth',block:'center'});
         }else{
@@ -2384,7 +2323,6 @@ function updateTriggerCounts(){
     const white=whiteCounts[col]||0;
     if(orange>0||white>0){
       let html='';
-      // Red triggers first, then orange triggers
       if(white>0)html+=`<span class="white-count">${white}</span>`;
       if(orange>0)html+=`<span class="orange-count">${orange}</span>`;
       span.innerHTML=html;
@@ -2411,63 +2349,48 @@ function renderTable(){
     row.draggable=true;
     row.dataset.index=actualIdx;
     if(flight.isPastEta)row.classList.add('faded');
-    
-    // Highlight row 10 seconds before deletion (14 minutes past ETA, last 10 seconds)
+
     if(flight.autoRemoveScheduled&&flight.minutesPastEta!==undefined){
-      // Deletion is scheduled at 7 minutes past ETA, then waits 7 more minutes (AUTO_REMOVE_DELAY),
-      // then shows toast and waits 10 seconds. So deletion happens at 14 minutes 10 seconds past ETA.
-      // Highlight when we're in the 10-second warning window (14:00 to 14:10 minutes past ETA)
       if(flight.minutesPastEta===14&&currentSeconds<10){
-        // We're in the exact 10-second warning window (0-10 seconds of the 14th minute)
         row.classList.add('deleting-soon');
       }else if(flight.minutesPastEta===13&&currentSeconds>=50){
-        // We're approaching the warning window (50-59 seconds of the 13th minute, about to hit 14:00)
         row.classList.add('deleting-soon');
       }
     }
-    
+
     const etdMinutes=flight.etd?zuluToMinutes(flight.etd):null;
     if(etdMinutes!==null){
       let minutesUntilEtd=etdMinutes-currentMinutes;
       if(minutesUntilEtd<-12*60)minutesUntilEtd+=24*60;
       else if(minutesUntilEtd>12*60)minutesUntilEtd-=24*60;
-      // Highlight if within 1.5 hours (90 minutes) of ETD
       if(minutesUntilEtd>=0&&minutesUntilEtd<=90){
         row.classList.add('within-90min');
       }
-      // Also apply due-soon class if taxi/burn are not set and within 2 hours
       if(!flight.taxiOut&&!flight.burnoff&&minutesUntilEtd>=0&&minutesUntilEtd<=120){
         row.classList.add('due-soon');
       }
     }
-    
-    // Action column logic: Show local time if alt1/alt2 exists and ETA is 8:00 PM to 7:00 AM next day
+
     let actionsHtml='';
     const etaMinutes=flight.eta?zuluToMinutes(flight.eta):null;
     const currentUtcMinutes=getCurrentZuluMinutes();
-    // Check if flight has arrived (handle day wrap-around)
     let hasArrived=false;
     if(etaMinutes!==null&&currentUtcMinutes!==null){
       let diffMinutes=currentUtcMinutes-etaMinutes;
-      // Handle day wrap-around: if difference is more than 12 hours, adjust
       if(diffMinutes<-12*60)diffMinutes+=24*60;
       else if(diffMinutes>12*60)diffMinutes-=24*60;
-      hasArrived=diffMinutes>=0; // Flight has arrived if current time >= ETA
+      hasArrived=diffMinutes>=0;
     }
-    
-    // Only show local time if flight hasn't arrived yet
+
     if(!hasArrived&&!flight.isPastEta){
-      // Check if alt1 or alt2 exists
       if((flight.alt1||flight.alt2)&&flight.eta&&flight.dest){
         const destTimezone=getAirportTimezone(flight.dest);
         if(destTimezone){
           const localTime=convertUtcToLocalTime(flight.eta,destTimezone);
           if(localTime){
-            // Check if local time is between 8:00 PM (20:00) and 7:00 AM (07:00) next day
-            // This means: time >= 20:00 (8:00 PM) OR time < 07:00 (7:00 AM)
             const localTimeMinutes24=localTime.hours24*60+localTime.minutes;
-            const eightPMMinutes=20*60; // 8:00 PM = 20:00 = 1200 minutes
-            const sevenAMMinutes=7*60; // 7:00 AM = 07:00 = 420 minutes
+            const eightPMMinutes=20*60;
+            const sevenAMMinutes=7*60;
             if(localTimeMinutes24>=eightPMMinutes||localTimeMinutes24<sevenAMMinutes){
               actionsHtml=localTime.timeString;
             }
@@ -2475,26 +2398,24 @@ function renderTable(){
         }
       }
     }
-    
-    // If flight has arrived (current UTC >= ETA UTC), show Delay button instead of local time
+
     if(flight.isPastEta||hasArrived){
       actionsHtml=`<button class="btn btn-warning action-btn" onclick="window.flightActions.delay(${actualIdx})">Delay</button>`;
     }
-    
+
     const durationMin=parseInt(flight.duration,10);
     const durCellStyle=durationMin<60&&!isNaN(durationMin)?'style="font-weight:bold;"':'';
-    
-    // Apply filters - hide row if it doesn't match filter criteria
+
     const originMatch=!filters.origin||flight.origin.toUpperCase().includes(filters.origin.toUpperCase());
     const destMatch=!filters.dest||flight.dest.toUpperCase().includes(filters.dest.toUpperCase());
     const takeoffAltMatch=!filters.takeoffAlt||(flight.takeoffAlt&&flight.takeoffAlt.toUpperCase().includes(filters.takeoffAlt.toUpperCase()));
     const alt1Match=!filters.alt1||(flight.alt1&&flight.alt1.toUpperCase().includes(filters.alt1.toUpperCase()));
     const alt2Match=!filters.alt2||(flight.alt2&&flight.alt2.toUpperCase().includes(filters.alt2.toUpperCase()));
-    
+
     if(!originMatch||!destMatch||!takeoffAltMatch||!alt1Match||!alt2Match){
       row.classList.add('filtered-out');
     }
-    
+
     row.innerHTML=`<td class="flt-cell" data-idx="${actualIdx}">${flight.flight}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="origin" data-icao="${flight.origin}">${renderICAO(flight,'origin')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="dest" data-icao="${flight.dest}">${renderICAO(flight,'dest')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="takeoffAlt" data-icao="${flight.takeoffAlt||''}">${renderICAO(flight,'takeoffAlt')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt1" data-icao="${flight.alt1||''}">${renderICAO(flight,'alt1')}</td><td class="icao-cell editable" data-idx="${actualIdx}" data-field="alt2" data-icao="${flight.alt2||''}">${renderICAO(flight,'alt2')}</td><td class="editable" data-idx="${actualIdx}" data-field="etd">${formatZuluTime(flight.etd)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="taxiOut">${formatDuration(flight.taxiOut)}</td><td class="taxi-burn-cell" data-idx="${actualIdx}" data-field="burnoff">${formatDuration(flight.burnoff)}</td><td ${durCellStyle}>${formatDuration(flight.duration)}</td><td>${formatZuluTime(flight.eta)}</td><td style="white-space:nowrap;">${actionsHtml}</td><td><span class="drag-handle">⋮⋮</span></td>`;
     const fltCell=row.querySelector('.flt-cell');
     fltCell.addEventListener('contextmenu',e=>{
@@ -2577,16 +2498,16 @@ function renderICAO(flight,field){
 
   html+=getMetarIndicators(icao);
 
-  // Show + for improved weather on all stations
   if(flight.triggers.has(`${icao}:improved`)){
     if(field==='dest'&&!flight.destRequiresAlt)html+=' +';
     else if(field!=='dest')html+=' +';
   }
-  
+
   html+=getMetarSymbols(icao);
 
   return html;
 }
+// UPDATED: attachEditListeners now passes `this` to showWeatherModal for iOS edit button
 function attachEditListeners(){
   flightTableBody.querySelectorAll('[data-field="taxiOut"]').forEach(cell=>{
     cell.addEventListener('click',function(){const idx=parseInt(this.dataset.idx,10);showTaxiBurnModal(idx)});
@@ -2594,29 +2515,24 @@ function attachEditListeners(){
   flightTableBody.querySelectorAll('.editable').forEach(cell=>{
     const icao=cell.dataset.icao;
     const isICAOCell=cell.classList.contains('icao-cell');
-    // For ICAO cells (ORG, DEST, T/ALT, ALT1, ALT2)
     if(isICAOCell){
       const icaoValue=icao&&icao!=='—'?icao:null;
-      // Left click on ICAO cells shows weather (if ICAO exists)
       cell.addEventListener('click',function(e){
         if(e.button!==0||this.querySelector('input'))return;
         e.preventDefault();
         e.stopPropagation();
         if(icaoValue){
-          showWeatherModal(icaoValue);
+          showWeatherModal(icaoValue,this); // Pass cell reference for Edit button
         }else{
-          // If empty, left click edits
           startEdit(this);
         }
       });
-      // Right click on ICAO cells edits the cell
       cell.addEventListener('contextmenu',function(e){
         if(this.querySelector('input'))return;
         e.preventDefault();
         e.stopPropagation();
         startEdit(this);
       });
-      // Long press on touch devices for weather (if ICAO exists)
       let touchStartTime=0,touchMoved=false;
       cell.addEventListener('touchstart',function(){touchStartTime=Date.now();touchMoved=false},{passive:true});
       cell.addEventListener('touchmove',function(){touchMoved=true},{passive:true});
@@ -2625,14 +2541,12 @@ function attachEditListeners(){
         if(!touchMoved&&touchDuration>500&&icaoValue){
           e.preventDefault();
           e.stopPropagation();
-          showWeatherModal(icaoValue);
+          showWeatherModal(icaoValue,this); // Pass cell reference for Edit button
         }else if(!touchMoved&&Date.now()-touchStartTime<=500&&!icaoValue){
-          // Short tap on empty ICAO cell edits
           startEdit(this);
         }
       });
     }else{
-      // For non-ICAO cells, normal click editing
       cell.addEventListener('click',function(e){if(e.button!==0||this.querySelector('input'))return;startEdit(this)});
       let touchStartTime=0,touchMoved=false;
       cell.addEventListener('touchstart',function(){touchStartTime=Date.now();touchMoved=false},{passive:true});
@@ -2662,29 +2576,24 @@ function startEdit(cell){
         renderTable();
         return;
       }
-      // Check if both taxi and burn are empty (not set)
       const taxiEmpty=!flights[idx].taxiOut||flights[idx].taxiOut==='';
       const burnEmpty=!flights[idx].burnoff||flights[idx].burnoff==='';
-      // If taxi out and burnoff are BOTH empty, update ETA based on ETD change
       if(taxiEmpty&&burnEmpty&&oldEtd&&flights[idx].eta){
         const oldEtdMinutes=zuluToMinutes(oldEtd);
         const newEtdMinutes=zuluToMinutes(normalizedNewValue);
         if(oldEtdMinutes!==null&&newEtdMinutes!==null){
           let diffMinutes=newEtdMinutes-oldEtdMinutes;
-          // Handle day wrap-around - assume difference is in range -12 to +12 hours
           if(diffMinutes>12*60)diffMinutes-=24*60;
           else if(diffMinutes<-12*60)diffMinutes+=24*60;
           const oldEtaMinutes=zuluToMinutes(flights[idx].eta);
           if(oldEtaMinutes!==null){
             let newEtaMinutes=oldEtaMinutes+diffMinutes;
-            // Normalize to 0-1439 range (one day)
             while(newEtaMinutes<0)newEtaMinutes+=24*60;
             while(newEtaMinutes>=24*60)newEtaMinutes-=24*60;
             flights[idx].eta=minutesToZulu(newEtaMinutes);
           }
         }
       }else{
-        // If taxi or burn are set, recalculate ETA normally
         calculateDurationAndETA(flights[idx]);
       }
       flights[idx][field]=normalizedNewValue;
@@ -2709,9 +2618,7 @@ function updateStats(){statTotal.textContent=flights.length}
 function startAutoRefresh(){autoRefreshInterval=setInterval(refreshWeather,60*1000)}
 function startAlwaysOnCheck(){alwaysOnCheckInterval=setInterval(()=>{checkWeatherTriggers();renderTable()},ALWAYS_ON_CHECK_INTERVAL)}
 function startDeletionWarningCheck(){
-  // Clear any existing interval
   if(deletionWarningInterval)clearInterval(deletionWarningInterval);
-  // Check every second if any flights are in the deletion warning window
   deletionWarningInterval=setInterval(()=>{
     const hasFlightsNearDeletion=flights.some(flight=>{
       if(!flight.autoRemoveScheduled||flight.minutesPastEta===undefined)return false;
@@ -2719,7 +2626,6 @@ function startDeletionWarningCheck(){
       const currentSeconds=now.getUTCSeconds();
       return(flight.minutesPastEta===14&&currentSeconds<10)||(flight.minutesPastEta===13&&currentSeconds>=50);
     });
-    // Only re-render if there are flights in the warning window
     if(hasFlightsNearDeletion)renderTable();
   },1000);
 }
