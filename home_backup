@@ -1,0 +1,136 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-59T34PRT4E"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-59T34PRT4E');
+</script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CieloTracker – METAR/TAF Board</title>
+  <!-- Google AdSense -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4340045707749192"
+     crossorigin="anonymous"></script>
+  <style>
+    :root { --bg:#f9fafb; --fg:#111827; --muted:#6b7280; --border:#e5e7eb; --brand:#0f5fff; }
+    body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif; background:var(--bg); color:var(--fg); }
+    .theme-dark { --bg:#0b0f14; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; }
+    .badges { display:flex; gap:8px; font-size:12px; }
+    .badge { background:#eef2ff; padding:3px 8px; border-radius:6px; }
+    .theme-dark .badge { background:#1f2937; }
+    /* controls — compact */
+    form.controls {
+      display:flex; flex-wrap:wrap; gap:10px 12px; align-items:end;
+      padding:10px 16px; border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+    }
+    .field { display:flex; flex-direction:column; gap:3px; }
+    .field label { font-size:12px; color:var(--muted); }
+    .ctl, .btn { height:32px; padding:5px 8px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--fg); }
+    .theme-dark .ctl { background:#111827; border-color:#374151; color:#e5e7eb; }
+    .btn { background:var(--brand); color:#fff; border:0; font-weight:600; cursor:pointer; }
+    .chk { display:flex; align-items:center; gap:6px; height:32px; }
+    /* width by expected chars */
+    .w-ids { width: 26ch; max-width: 60vw; }
+    .w4 { width: 6ch; }
+    .w3 { width: 5ch; }
+    .w4d { width: 6ch; }
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+    input[type=number] { -moz-appearance:textfield; }
+    .section { padding: 8px 16px; }
+    pre.wx, .taf-line {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 16px;
+      line-height: 1.25;
+      white-space: pre-wrap;
+      margin: 0;
+    }
+    .taf-indent { text-indent: 16px; }
+    .hit { color:#ef4444; font-weight:700; }
+    .after-shift { color:#9ca3af; }
+    .muted { color:var(--muted); font-size:14px; margin:0; }
+    footer { margin-top:12px; padding:14px 16px; font-size:14px; color:var(--muted); }
+    footer a { color:inherit; text-decoration:none; margin-right:12px; }
+    footer a:hover { text-decoration:underline; }
+    .instructions {
+      padding: 14px 16px;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body class="theme-light">
+  <header>
+    <div>CieloTracker</div>
+    <div class="badges">
+      <span id="utcNow" class="badge">UTC --:--</span>
+      <span id="timestamp" class="badge">Updated: --:-- UTC</span>
+    </div>
+    <div>
+      Theme
+      <select id="theme" class="ctl">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  </header>
+  <div class="section">
+    <label style="font-size:12px; color:var(--muted);">News: Celebrating October with tons of new features in the BETA version, available through the link below!</label>
+  </div>
+  <form id="controlsForm" class="controls">
+    <div class="field">
+      <label for="ids">IDs</label>
+      <input id="ids" class="ctl w-ids" placeholder="KDEN KSGU KACV" title="Enter ICAO IDs separated by comma, space, or semicolon">
+    </div>
+    <div class="field">
+      <label for="ceil">Ceiling (in feet)</label>
+      <input id="ceil" class="ctl w4" type="text" inputmode="numeric" pattern="[0-9]{1,4}" maxlength="4" value="700" title="Lowest ceiling threshold in feet AGL (1–4 digits)">
+    </div>
+    <div class="field">
+      <label for="vis">Visibility (SM)</label>
+      <input id="vis" class="ctl w3" type="text" inputmode="decimal" pattern="^[0-9]{1,2}(\.[0-9])?$" maxlength="3" value="2" title="Visibility threshold in statute miles (e.g., 2 or 2.5)">
+    </div>
+    <div class="field">
+      <label for="shiftEnd">Shift End in Zulu</label>
+      <input id="shiftEnd" class="ctl w4d" type="text" inputmode="numeric" pattern="^[0-9]{4}$" maxlength="4" placeholder="DDHH"
+        title="Enter the last flight ETA in Zulu day+hour (example: 2321). A 3-hour buffer is added automatically; rollovers are handled (e.g., 2321 → 2400).">
+    </div>
+    <label class="chk"><input type="checkbox" id="applyTime"> Apply Shift End</label>
+    <label class="chk"><input type="checkbox" id="showMetar" checked> Show METAR</label>
+    <label class="chk"><input type="checkbox" id="showTaf" checked> Show TAF</label>
+    <label class="chk"><input type="checkbox" id="alpha"> Sort A→Z</label>
+    <label class="chk"><input type="checkbox" id="filter"> Filter triggers</label>
+    <button type="submit" id="loadBtn" class="btn">Load</button>
+    <span id="spin" style="display:none">⏳</span>
+  </form>
+  <div id="summary" class="section">Ready.</div>
+  <div id="err" class="section" style="display:none;color:#ef4444;"></div>
+  <section id="board-body" class="section"></section>
+  <div class="instructions">
+    Enter the airport ICAOs under IDs, separated by spaces or commas.
+    Low ceilings/vis will be marked bold and red for easy use and toggling Filter Triggers shows only airports that fall below the low ceilings or visibility criteria.
+    Enter desired Ceiling limit in feet such as 700 which will look for anything under BKN007 or OVC007.
+    Enter visibility minimum such as 2 (statute miles) will look for anything under 2SM.
+    Follow these example minimum amounts of 700' and 2SM for a recommended alternate minimum buffer to monitor and detect when an alternate in your list may possibly go below derived alternate minimums.
+    Use 2000' and 3SM if you entered a destination list to easily track when a station's weather has been updated to require an alternate.
+    Shift end: Enter day and hour in zulu of your last flight arrival such as 2321 for the 23rd day at the 21st hour.
+    This will grey out and not highlight lines outside your shift. Toggle Apply Shift End to disable this feature.
+    This web app is free to use with ad support. It is for informational purposes only, always verify your official sources, the developer will not be liable for any consequences from use of this site.
+    © 2025 by Sadiom.
+  </div>
+  <footer>
+    <a href="privacy.html">Privacy</a>
+    <a href="support.html">Support</a>
+    <a href="https://discord.gg/4Tz4NRcqca" target="_blank" rel="noopener">Discord</a>
+    <a href="https://sadiom.com/beta.html" target="_blank" rel="noopener" class="btn">Try Beta!</a>
+  </footer>
+  <script defer src="app.v8.js?v=2025-08-26-3"></script>
+</body>
+</html>
