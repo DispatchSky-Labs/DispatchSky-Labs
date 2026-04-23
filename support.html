@@ -12,8 +12,8 @@
 
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CieloTracker Support — Sadiom</title>
-  <meta name="description" content="CieloTracker support, FAQs, privacy policy, and contact information."/>
+  <title>Sadiom iOS Support</title>
+  <meta name="description" content="Support, FAQs, privacy, and contact information for Sadiom iOS apps."/>
   <style>
     :root { --ink:#0b6; --fg:#0b0b0b; --muted:#555; --bg:#fff; --card:#f7f7f7; }
     *{box-sizing:border-box}
@@ -33,35 +33,80 @@
     li{margin-bottom:10px}
     .muted{color:var(--muted)}
     .privacy,.disclaimer{font-size:0.95em; color:var(--muted)}
+    .jump-links{display:flex; flex-wrap:wrap; gap:10px; margin:14px 0 4px}
+    .jump-links a{display:inline-block; padding:7px 12px; border-radius:999px; text-decoration:none; background:#eef7f4; color:#0b6; font-weight:600}
     hr{border:0; border-top:1px solid #e6e6e6; margin:24px 0}
     footer{font-size:.9em; color:var(--muted); margin-top:36px; text-align:center}
   </style>
 </head>
 <body>
   <header>
-    <h1>CieloTracker Support</h1>
-    <p>by <strong>Sadiom</strong></p>
+    <h1>Sadiom iOS App Support</h1>
+    <p>Support center for Flight Dispatch Question Bank and CieloTracker</p>
     <nav>
       <a href="/">Home</a>
-      <a href="/support.html">iOS Support</a>
+      <a href="/support.html">Support</a>
       <a href="/privacy/">Privacy</a>
     </nav>
   </header>
 
   <main>
     <p>
-      Welcome to CieloTracker Support by Sadiom. CieloTracker provides aviation weather monitoring
-      (METARs and TAFs) with alerting tailored for dispatchers and pilots.
+      Welcome to Sadiom support. This page provides help, privacy details, and contact information for:
+      <strong>Flight Dispatch Question Bank</strong> and <strong>CieloTracker</strong>.
     </p>
 
-    <h2>Frequently Asked Questions</h2>
+    <div class="jump-links">
+      <a href="#fdqb">Flight Dispatch Question Bank</a>
+      <a href="#ct">CieloTracker</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#contact">Contact</a>
+    </div>
+
+    <h2 id="fdqb">Flight Dispatch Question Bank Support</h2>
+    <p>
+      Flight Dispatch Question Bank is a structured study app for dispatcher and aviation knowledge practice,
+      with cloze-style recall, guided sessions, and optional community submissions.
+    </p>
+
+    <h3>Frequently Asked Questions</h3>
+    <ul>
+      <li><strong>How do I start studying?</strong><br/>
+        Open the app and begin a session from Home. The default flow supports tap-to-reveal and quick Got it / Missed responses.
+      </li>
+      <li><strong>How do cloze blanks work?</strong><br/>
+        Hidden segments are shown inline and revealed step-by-step. Multi-blank questions are supported.
+      </li>
+      <li><strong>Can I submit or suggest question fixes?</strong><br/>
+        Yes. Use the submission tools in-app. If signed in with Apple, submissions can be sent for moderation.
+      </li>
+      <li><strong>My sync looks stale. What should I do?</strong><br/>
+        Check internet connection, reopen the app, then try again. If it persists, contact support below with app version and screenshots.
+      </li>
+      <li><strong>Does the app force required updates?</strong><br/>
+        Required app updates may block access until the latest version is installed when version verification indicates an update is needed.
+      </li>
+    </ul>
+
+    <h3>Aviation Disclaimer</h3>
+    <p class="disclaimer">
+      Flight Dispatch Question Bank is for educational and training support only. It is not an operational dispatch authority.
+      Always use official regulatory publications, carrier procedures, and approved operational systems for live operations.
+    </p>
+
+    <h2 id="ct">CieloTracker Support</h2>
+    <p>
+      CieloTracker provides aviation weather monitoring (METARs and TAFs) with alerting tailored for dispatchers and pilots.
+    </p>
+
+    <h3>Frequently Asked Questions</h3>
     <ul>
       <li><strong>What is CieloTracker?</strong><br/>
         CieloTracker monitors METARs and TAFs and highlights conditions that meet your alert thresholds.
         It is for informational use only; always verify with official sources such as
         <a href="https://1800wxbrief.com" target="_blank" rel="noopener">1800WXBRIEF</a>.
       </li>
-      <li><strong>Where does the weather data come from?</strong><br/>
+      <li><strong>Where does weather data come from?</strong><br/>
         Data is retrieved from NOAA’s Aviation Weather Center and compatible aviation weather APIs.
       </li>
       <li><strong>How often is weather updated?</strong><br/>
@@ -71,8 +116,6 @@
       <li><strong>How do I set up alerts?</strong><br/>
         Enter ICAO identifiers in the app. Under <em>Settings → Thresholds</em>, set your own
         <strong>Ceiling (feet)</strong> and <strong>Visibility (miles)</strong>.
-        For example, entering <code>2000 ft</code> is evaluated as <code>020</code> (hundreds of feet)
-        against BKN/OVC layers. Alerts trigger when reported or forecast conditions fall below your thresholds.
       </li>
       <li><strong>Why isn’t data loading?</strong><br/>
         Check connectivity and try a manual refresh. If issues persist, email
@@ -80,53 +123,47 @@
       </li>
     </ul>
 
-    <h2>Aviation Disclaimer</h2>
+    <h3>Aviation Disclaimer</h3>
     <p class="disclaimer">
       CieloTracker is intended for informational use only. Always consult official FAA/ICAO sources before making
       operational decisions. Sadiom assumes no responsibility for use of this app in flight planning or operations.
     </p>
 
-    <h2>Privacy Policy</h2>
-    <p class="privacy"><em>Last Updated: January 2026</em></p>
+    <h2 id="privacy">Privacy Policy</h2>
+    <p class="privacy"><em>Last Updated: April 2026</em></p>
     <p class="privacy">
-      Sadiom respects your privacy. CieloTracker does not create user accounts, does not collect any personal data,
-      and does not use any third-party advertising, analytics, or tracking services. Your alert thresholds, preferences,
-      and all other app data are stored locally on your device only.
+      Sadiom respects your privacy. Our apps do not sell personal data and do not use third-party advertising networks.
+      App data such as study progress, preferences, and local settings is stored on-device.
     </p>
     <p class="privacy">
-      The only network activity is sending ICAO codes (airport identifiers) you enter to public weather services
-      (e.g., NOAA Aviation Weather Center) to fetch METAR/TAF data. These requests contain no personal information,
-      device identifiers, location data beyond what you explicitly input, or any other tracking elements.
+      For Flight Dispatch Question Bank, optional community features may use Sign in with Apple and network services to
+      submit and sync content. For CieloTracker, network requests fetch public weather data for user-entered airport identifiers.
     </p>
 
     <h3>Data We Process</h3>
     <ul>
-      <li><strong>Weather Requests</strong> — Only ICAO codes are sent to weather providers; no personal data is included or collected.</li>
-      <li><strong>Support Email</strong> — If you email us, we receive your email address and message solely to respond.</li>
+      <li><strong>App Function Data</strong> — Study state, preferences, and app configuration needed for core functionality.</li>
+      <li><strong>Optional Support Email</strong> — If you contact us, we use your email/message only to respond.</li>
+      <li><strong>Optional Community Submissions</strong> — Submitted content and moderation metadata used to review and distribute shared questions.</li>
     </ul>
 
     <h3>Sharing & Retention</h3>
     <ul>
-      <li>No data is shared with any third-party services for advertising, analytics, or profiling.</li>
-      <li>Weather request history is never stored on our servers (or any servers we control).</li>
-      <li>Support emails are retained only as long as needed to respond and resolve your inquiry.</li>
+      <li>No personal data is shared for advertising or profiling.</li>
+      <li>Operational app data is retained only as needed for product functionality.</li>
+      <li>Support communications are retained only as needed to resolve inquiries.</li>
     </ul>
 
     <h3>Children</h3>
     <p class="privacy">
-      CieloTracker is intended for professional and general aviation users and is not directed to children under 13.
+      These apps are not directed to children under 13.
     </p>
 
-    <h3>Contact</h3>
+    <h2 id="contact">Contact</h2>
     <p class="privacy">
-      For privacy questions, support, or any requests, email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
+      For support, privacy questions, or App Store review follow-up, email
+      <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
       Typical response time: 24–48 hours.
-    </p>
-
-    <h2>CieloCheck Lite Privacy Policy</h2>
-    <p class="privacy">
-      CieloCheck Lite processes all data on-device and does not collect personal information.
-      For inquiries, contact <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
     </p>
 
     <footer>
@@ -134,11 +171,11 @@
       <div style="max-width:880px;margin:0 auto;padding:14px 12px;
                   display:flex;justify-content:space-between;flex-wrap:wrap;
                   font-size:14px;color:#555;">
-        <div>© 2025 Sadiom</div>
+        <div>© 2026 Sadiom</div>
         <div>
           <a href="/home.html">Home</a> &nbsp;|&nbsp;
           <a href="/privacy.html">Privacy</a> &nbsp;|&nbsp;
-          <a href="/support.html">iOS Support</a>
+          <a href="/support.html">Support</a>
         </div>
       </div>
     </footer>
