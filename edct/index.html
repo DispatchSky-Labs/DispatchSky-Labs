@@ -22,11 +22,11 @@
         </button>
       </header>
 
-      <p class="disclaimer">Awareness aid only. Verify EDCTs in the official operational source.</p>
+      <p class="disclaimer">Awareness aid only. Verify in the official operational source.</p>
 
       <section id="warningBanner" class="warning" hidden></section>
 
-      <button id="showAddBtn" class="add-card" type="button">Add Flight</button>
+      <button id="showAddBtn" class="add-card" type="button"><span class="wide-label">Add Flight</span><span class="compact-label">+ Add</span></button>
 
       <section id="addPanel" class="add-panel" hidden>
         <form id="lookupForm" class="lookup-form">
@@ -62,7 +62,7 @@
         <div id="historyList" class="alert-list"></div>
       </section>
 
-      <footer>Watch flights. Get EDCT change alerts.</footer>
+      <footer>Watch flights. Get change alerts.</footer>
     </main>
 
     <dialog id="summaryModal">
@@ -78,6 +78,7 @@
         <h2>Recent alerts</h2>
         <button id="closeAlertsBtn" class="secondary" type="button">Close</button>
       </div>
+      <div id="notificationHelp" class="notification-help"></div>
       <div id="alertsModalList" class="alert-list modal-list"></div>
     </dialog>
 

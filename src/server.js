@@ -318,7 +318,7 @@ async function api(req, res, pathname) {
       }
       return send(res, 200, {
         candidates: matches,
-        message: matches.length ? (matches.some((candidate) => candidate.current_edct_utc) ? "" : `Flight found in ${destination} feed, no active EDCT.`) : "No matching flight found in destination feed."
+        message: matches.length ? (matches.some((candidate) => candidate.current_edct_utc) ? "" : `Flight found in ${destination} feed, no active time.`) : "No matching flight found in destination feed."
       });
     }
     if (req.method === "POST" && pathname === "/api/edct/lookup/add") {

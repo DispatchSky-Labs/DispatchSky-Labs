@@ -98,6 +98,7 @@ h1 {
   margin-bottom: 10px;
   font-weight: 700;
 }
+.compact-label { display: none; }
 .add-panel, .watchlist, .recent-alerts {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -273,6 +274,11 @@ dialog {
 .modal-head h2 {
   font-size: 16px;
 }
+.notification-help {
+  padding: 10px 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
 .summary-content, .modal-list {
   padding: 12px;
 }
@@ -280,7 +286,7 @@ dialog {
   display: grid;
   gap: 8px;
 }
-@media (min-width: 680px) {
+@media (min-width: 980px) {
   .shell {
     width: min(960px, calc(100vw - 48px));
     display: grid;
@@ -307,5 +313,98 @@ dialog {
   }
   .flight-row {
     grid-template-columns: 120px 120px 80px 86px 34px;
+  }
+}
+
+@media (min-width: 560px) and (max-width: 979px) {
+  .shell {
+    width: min(680px, calc(100vw - 32px));
+  }
+  .lookup-form {
+    grid-template-columns: 1fr 150px auto;
+    align-items: center;
+  }
+  .form-actions {
+    grid-template-columns: 112px 86px;
+  }
+}
+
+@media (max-width: 430px) {
+  body { background: #fff; }
+  .shell {
+    width: 100%;
+    padding: 8px 8px 18px;
+  }
+  .topbar {
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-size: 22px;
+  }
+  .topbar p,
+  .disclaimer,
+  footer {
+    display: none;
+  }
+  .icon-button {
+    min-width: 38px;
+    min-height: 34px;
+  }
+  .add-card {
+    width: auto;
+    min-height: 34px;
+    margin-bottom: 4px;
+    padding: 0 10px;
+  }
+  .wide-label { display: none; }
+  .compact-label { display: inline; }
+  .watchlist {
+    border: 0;
+    border-radius: 0;
+    margin-bottom: 4px;
+  }
+  .flight-rows {
+    border-radius: 0;
+  }
+  .flight-row {
+    grid-template-columns: minmax(68px, .95fr) minmax(64px, .9fr) 52px 54px 26px;
+    gap: 5px;
+    min-height: 32px;
+    padding: 4px 2px;
+  }
+  .flight-row strong,
+  .flight-row span {
+    font-size: 12px;
+  }
+  .change {
+    min-width: 44px;
+    padding: 2px 5px;
+    font-size: 11px;
+  }
+  .delete-btn {
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    min-height: 24px;
+    background: #fff;
+    border-color: transparent;
+  }
+  .recent-alerts {
+    display: none;
+  }
+  .add-panel {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    top: 54px;
+    z-index: 4;
+    box-shadow: 0 18px 48px rgba(15, 32, 42, .2);
+  }
+  .candidate {
+    grid-template-columns: 1fr auto;
+  }
+  .candidate span:nth-of-type(2),
+  .candidate span:nth-of-type(3) {
+    font-size: 12px;
   }
 }

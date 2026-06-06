@@ -57,7 +57,7 @@ function compactChange(flight) {
 }
 
 function alertText(event) {
-  return event.message || "EDCT changed.";
+  return event.message || "Change detected.";
 }
 
 function render() {
@@ -74,9 +74,31 @@ function renderWarning() {
 }
 
 function notificationWarning() {
-  if (!("Notification" in window)) return "Browser notifications are unavailable. Keep this page open and verify official source.";
-  if (Notification.permission === "denied") return "Browser notifications are blocked. Enable them to receive EDCT change alerts.";
+  const status = notificationStatus();
+  if (status.level === "warning") return status.message;
   return "";
+}
+
+function notificationStatus() {
+  const ua = navigator.userAgent || "";
+  const isIos = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+  const hasNotification = typeof window.Notification === "function" && typeof Notification.permission === "string";
+  const hasServiceWorker = "serviceWorker" in navigator;
+  const hasPush = "PushManager" in window;
+  if (isIos && !standalone) {
+    return { cta: "Enable alerts", level: "warning", message: "On iPhone, add Sadiom Flow to your Home Screen, then reopen it to enable alerts." };
+  }
+  if (!hasNotification) {
+    return { cta: "Alerts unavailable", level: "warning", message: "Browser notifications are not available here. Keep this page open or use a supported browser." };
+  }
+  if (Notification.permission === "denied") {
+    return { cta: "Alerts blocked", level: "warning", message: "Browser notifications are blocked. Enable them in browser settings or keep this page open." };
+  }
+  if (Notification.permission !== "granted") {
+    return { cta: "Enable alerts", level: "info", message: hasServiceWorker && hasPush ? "Enable alerts. Alerts work while this page is open." : "Enable alerts. Alerts work while this page is open." };
+  }
+  return { cta: "Alerts on", level: "info", message: hasServiceWorker && hasPush ? "Alerts are enabled. Keep this page open for polling alerts." : "Alerts are enabled while this page is open." };
 }
 
 function renderFlights() {
@@ -98,13 +120,15 @@ function renderAlerts() {
   const latest = state.events.slice(0, 3);
   $("recentAlerts").hidden = latest.length === 0;
   $("historyList").innerHTML = latest.map((event) => `<div class="alert-line">${escapeHtml(alertText(event))}</div>`).join("");
-  $("alertsModalList").innerHTML = state.events.map((event) => `<div class="alert-line">${escapeHtml(alertText(event))}</div>`).join("") || `<div class="empty">No EDCT alerts yet.</div>`;
+  $("alertsModalList").innerHTML = state.events.map((event) => `<div class="alert-line">${escapeHtml(alertText(event))}</div>`).join("") || `<div class="empty">No alerts yet.</div>`;
 }
 
 function renderBadge() {
   const count = state.pending.length;
   $("alertBadge").hidden = count === 0;
   $("alertBadge").textContent = String(Math.min(count, 99));
+  $("notifyBtn").title = notificationStatus().cta;
+  $("notificationHelp").textContent = notificationStatus().message;
 }
 
 async function loadAll() {
@@ -138,7 +162,7 @@ function renderCandidates(candidates) {
       <strong>${escapeHtml(candidate.flight_number)}</strong>
       <span>${escapeHtml(candidate.origin)}-${escapeHtml(candidate.destination)}</span>
       <span>${escapeHtml(candidate.etd_utc ? `ETD ${hhmmz(candidate.etd_utc)}` : "ETD --")}</span>
-      <span>${escapeHtml(candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "No EDCT")}</span>
+      <span>${escapeHtml(candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "No time")}</span>
     </button>
   `).join("");
 }
@@ -154,7 +178,7 @@ async function monitorCandidate(candidateId) {
 
 async function pollNotifications() {
   try {
-    const permission = "Notification" in window ? Notification.permission : "unsupported";
+    const permission = typeof window.Notification === "function" && typeof Notification.permission === "string" ? Notification.permission : "unsupported";
     if (permission !== state.session?.notification_permission) {
       await api("/api/session/label", {
         method: "POST",
@@ -200,11 +224,11 @@ function showSummary(flightKey) {
   const previous = flight.state?.previous_edct_utc;
   const change = flight.state?.last_change || "UNCHANGED";
   const lines = [
-    `Current EDCT: ${hhmmz(current)}`,
+    `Current time: ${hhmmz(current)}`,
     change === "EDCT_ASSIGNED" ? `Assigned ${hhmmz(current)}` : "",
     change === "EDCT_WORSENED" ? `Worsened from ${hhmmz(previous)}` : "",
     change === "EDCT_IMPROVED" ? `Improved from ${hhmmz(previous)}` : "",
-    change === "EDCT_REMOVED" ? "EDCT removed" : "",
+    change === "EDCT_REMOVED" ? "Removed" : "",
     flight.state?.last_checked_utc ? `Last checked: ${hhmmz(flight.state.last_checked_utc)}` : "",
     "Verify in official operational source."
   ].filter(Boolean);
@@ -268,10 +292,12 @@ $("bulkAddBtn").addEventListener("click", async () => {
 });
 
 $("notifyBtn").addEventListener("click", async () => {
-  if ("Notification" in window && Notification.permission === "default") await Notification.requestPermission();
+  const status = notificationStatus();
+  if (typeof window.Notification === "function" && Notification.permission === "default" && status.level !== "warning") await Notification.requestPermission();
   await pollNotifications();
   $("alertsModal").showModal();
   renderWarning();
+  renderBadge();
 });
 
 document.addEventListener("click", async (event) => {
@@ -300,7 +326,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 loadAll().then(pollNotifications).catch((error) => {
-  $("warningBanner").textContent = "EDCT backend unavailable. Verify official source.";
+  $("warningBanner").textContent = "Backend unavailable. Verify official source.";
   $("warningBanner").hidden = false;
 });
 setInterval(loadAll, 60_000);

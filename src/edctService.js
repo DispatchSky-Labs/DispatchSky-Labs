@@ -103,10 +103,10 @@ export async function refreshWorkspace(store, workspaceId, manual = false, sessi
 
 function messageFor(type, flight, prev, next) {
   const route = `${flight.display_flight_number} ${flight.origin}-${flight.destination}`;
-  if (type === "EDCT_ASSIGNED") return `${route} EDCT assigned ${formatHHMMZ(next)}`;
-  if (type === "EDCT_WORSENED") return `${route} EDCT worsened ${formatHHMMZ(prev)} -> ${formatHHMMZ(next)}`;
-  if (type === "EDCT_IMPROVED") return `${route} EDCT improved ${formatHHMMZ(prev)} -> ${formatHHMMZ(next)}`;
-  return `${route} EDCT removed`;
+  if (type === "EDCT_ASSIGNED") return `${route} assigned ${formatHHMMZ(next)}`;
+  if (type === "EDCT_WORSENED") return `${route} worsened ${formatHHMMZ(prev)} -> ${formatHHMMZ(next)}`;
+  if (type === "EDCT_IMPROVED") return `${route} improved ${formatHHMMZ(prev)} -> ${formatHHMMZ(next)}`;
+  return `${route} removed`;
 }
 
 export function statusForWorkspace(store, workspaceId) {
@@ -135,14 +135,14 @@ export async function refreshDueAirports(store) {
 }
 
 function warningFor(lastSuccess, lastError) {
-  if (!lastSuccess && lastError) return { message: "EDCT data may be stale. Verify official source." };
+  if (!lastSuccess && lastError) return { message: "Data may be stale. Verify official source." };
   if (!lastSuccess) return null;
   const ageMinutes = Math.round((Date.now() - new Date(lastSuccess.fetched_at).getTime()) / 60000);
   if (lastError && new Date(lastError.fetched_at) > new Date(lastSuccess.fetched_at)) {
-    return { message: `EDCT data may be stale. Last successful update ${Math.max(ageMinutes, 1)} min ago. Verify official source.` };
+    return { message: `Data may be stale. Last update ${Math.max(ageMinutes, 1)} min ago. Verify official source.` };
   }
   if (ageMinutes > Math.max(10, config.pollMinutes * 3)) {
-    return { message: `EDCT data may be stale. Last successful update ${ageMinutes} min ago. Verify official source.` };
+    return { message: `Data may be stale. Last update ${ageMinutes} min ago. Verify official source.` };
   }
   return null;
 }
