@@ -389,7 +389,7 @@ async function api(req, res, pathname) {
       res.setHeader("X-Robots-Tag", "noindex, nofollow");
       const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
       if (!config.adminToken || token !== config.adminToken) return send(res, 403, { error: "Forbidden." });
-      return send(res, 200, adminUsage());
+      return send(res, 200, pathname === "/api/admin/summary" ? adminSummary() : adminUsage());
     }
     return send(res, 404, { error: "Not found." });
   } catch (error) {
@@ -425,6 +425,169 @@ function adminUsage() {
       label: store.data.workspaces.find((w) => w.id === s.workspace_id)?.optional_label || ""
     }))
   };
+}
+
+function adminSummary() {
+  const now = Date.now();
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayMs = todayStart.getTime();
+  const activeSince = now - 15 * 60 * 1000;
+  const sleepCutoff = now - config.idleSleepMinutes * 60 * 1000;
+  const activeFlights = store.data.flights.filter((f) => f.active);
+  const activeSessionsNow = store.data.sessions.filter((s) => dateMs(s.last_seen_at) >= activeSince).length;
+  const hasRecentSession = store.data.sessions.some((s) => dateMs(s.last_seen_at) >= sleepCutoff);
+  const destinationCounts = countBy(activeFlights.map((f) => f.destination).filter(Boolean));
+  const airports = Object.keys(destinationCounts).sort();
+  const snapshotByAirport = latestSnapshotsByAirport(store.data.source_airport_snapshots);
+  const sourceHealthByAirport = airports.map((airport) => adminAirportHealth(airport, snapshotByAirport.get(airport)));
+  const staleAirports = sourceHealthByAirport
+    .filter((item) => item.state !== "healthy")
+    .map((item) => item.airport);
+  const latestSessionSeenAt = latestDate(store.data.sessions.map((s) => s.last_seen_at));
+  const latestUserEventAt = latestDate(store.data.usage_events.map((event) => event.created_at));
+  const latestFetchAt = latestDate(store.data.source_airport_snapshots.map((snapshot) => snapshot.fetched_at));
+  const sleeping = !hasRecentSession && activeFlights.length === 0;
+  const degraded = sourceHealthByAirport.some((item) => item.state === "degraded" || item.state === "failed");
+  const lastActivityAt = latestDate([
+    latestSessionSeenAt,
+    latestUserEventAt,
+    ...store.data.flights.map((f) => f.updated_at || f.created_at)
+  ]);
+
+  return {
+    backendState: degraded ? "degraded" : sleeping ? "sleeping" : "awake",
+    activeSessionsNow,
+    sessionsToday: store.data.sessions.filter((s) => dateMs(s.created_at) >= todayMs || dateMs(s.last_seen_at) >= todayMs).length,
+    flightsWatchedNow: activeFlights.length,
+    flightsWatchedToday: store.data.flights.filter((f) => dateMs(f.created_at) >= todayMs || dateMs(f.updated_at) >= todayMs).length,
+    airportsWatched: airports.length,
+    topDestinations: Object.entries(destinationCounts)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 10)
+      .map(([airport, count]) => ({ airport, count })),
+    alertsGeneratedToday: store.data.edct_events.filter((event) => dateMs(event.created_at) >= todayMs).length,
+    lookupFailuresToday: store.data.usage_events.filter((event) =>
+      dateMs(event.created_at) >= todayMs &&
+      (event.event_type === "LOOKUP_FAILED" || event.event_type === "FLIGHT_LOOKUP_FAILED")
+    ).length,
+    sourceHealthByAirport,
+    staleAirports,
+    lastUserQueryAt: latestUserEventAt,
+    lastHeartbeatAt: latestSessionSeenAt,
+    lastFaaFetchAt: latestFetchAt,
+    nextSleepAt: !sleeping && activeFlights.length === 0 && lastActivityAt ? new Date(dateMs(lastActivityAt) + config.idleSleepMinutes * 60 * 1000).toISOString() : null,
+    lastSleepAt: sleeping && lastActivityAt ? new Date(dateMs(lastActivityAt) + config.idleSleepMinutes * 60 * 1000).toISOString() : null,
+    lastWakeAt: sleeping ? null : lastActivityAt,
+    recentAdminEvents: recentAdminEvents()
+  };
+}
+
+function countBy(values) {
+  const counts = {};
+  for (const value of values) counts[value] = (counts[value] || 0) + 1;
+  return counts;
+}
+
+function dateMs(value) {
+  const parsed = Date.parse(value || "");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function latestDate(values) {
+  const latest = values
+    .filter(Boolean)
+    .map((value) => ({ value, ms: dateMs(value) }))
+    .filter((item) => item.ms > 0)
+    .sort((a, b) => b.ms - a.ms)[0];
+  return latest?.value || null;
+}
+
+function latestSnapshotsByAirport(snapshots) {
+  const latest = new Map();
+  for (const snapshot of snapshots) {
+    const airport = sanitizeAirportForAdmin(snapshot.airport);
+    if (!airport) continue;
+    const existing = latest.get(airport);
+    if (!existing || dateMs(snapshot.fetched_at) > dateMs(existing.fetched_at)) latest.set(airport, snapshot);
+  }
+  return latest;
+}
+
+function adminAirportHealth(airport, snapshot) {
+  if (!snapshot) {
+    return { airport, state: "unknown", detail: "No recent fetch", lastFetchAt: null };
+  }
+  const ageMinutes = Math.round((Date.now() - dateMs(snapshot.fetched_at)) / 60000);
+  if (!snapshot.success) {
+    return {
+      airport,
+      state: "failed",
+      detail: "Last fetch failed",
+      lastFetchAt: snapshot.fetched_at || null
+    };
+  }
+  if (ageMinutes > Math.max(10, config.pollMinutes * 3)) {
+    return {
+      airport,
+      state: "stale",
+      detail: "Cache is stale",
+      lastFetchAt: snapshot.fetched_at || null
+    };
+  }
+  return {
+    airport,
+    state: "healthy",
+    detail: null,
+    lastFetchAt: snapshot.fetched_at || null
+  };
+}
+
+function sanitizeAirportForAdmin(value) {
+  const airport = String(value || "").trim().toUpperCase();
+  return /^[A-Z]{3,4}$/.test(airport) ? airport : "";
+}
+
+function recentAdminEvents() {
+  const usageEvents = store.data.usage_events.map((event) => ({
+    createdAt: event.created_at,
+    message: adminUsageMessage(event)
+  }));
+  const edctEvents = store.data.edct_events.map((event) => ({
+    createdAt: event.created_at,
+    message: sanitizeText(event.message || event.event_type || "EDCT event", 120)
+  }));
+  return [...usageEvents, ...edctEvents]
+    .filter((event) => event.createdAt && event.message)
+    .sort((a, b) => dateMs(b.createdAt) - dateMs(a.createdAt))
+    .slice(0, 20);
+}
+
+function adminUsageMessage(event) {
+  const metadata = event.metadata && typeof event.metadata === "object" ? event.metadata : {};
+  const airport = sanitizeAirportForAdmin(metadata.destination || metadata.airport);
+  const suffix = airport ? ` ${airport}` : "";
+  switch (event.event_type) {
+    case "SESSION_CREATED":
+      return "Session created";
+    case "PAGE_OR_SESSION_LOAD":
+      return "Page loaded";
+    case "FLIGHT_ADDED":
+      return `Flight added${suffix}`;
+    case "FLIGHT_EDITED":
+      return `Flight edited${suffix}`;
+    case "FLIGHT_DELETED":
+      return `Flight deleted${suffix}`;
+    case "MANUAL_REFRESH":
+      return "Manual refresh";
+    case "EDCT_EVENT_GENERATED":
+      return `Alert generated${suffix}`;
+    case "LOOKUP_FAILED":
+    case "FLIGHT_LOOKUP_FAILED":
+      return `Lookup failed${suffix}`;
+    default:
+      return sanitizeText(String(event.event_type || "Usage event").replaceAll("_", " ").toLowerCase(), 80);
+  }
 }
 
 function staticFile(req, res, pathname) {
