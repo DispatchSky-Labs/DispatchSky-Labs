@@ -2,7 +2,9 @@
 
 Static Sadiom site plus a standalone secure EDCT tracker served by `npm start` at `/edct`.
 
-## EDCT Tracker
+## Sadiom Flow
+
+EDCT change alerts for watched flights. The browser route remains `/edct`.
 
 ```sh
 cp .env.example .env
@@ -40,7 +42,7 @@ The admin response summarizes sessions and usage patterns without source secrets
 
 ### EDCT Workflow
 
-Users enter active flights. The backend normalizes flight numbers and airports, determines monitored destination airports, fetches source data server-side, matches records by exact normalized ACID/origin/destination, compares against persisted state, writes EDCT history, and creates notification events from persisted EDCT events only.
+Users enter a callsign and destination. The backend normalizes the callsign and airport, fetches the destination airport feed server-side, matches source records by exact normalized callsign and destination, compares watched flights against persisted state, writes EDCT history, and creates notification events from persisted EDCT events only.
 
 EDCT source polling runs server-side. Browser polling is limited to Sadiom APIs and notification delivery checks.
 

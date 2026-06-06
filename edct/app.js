@@ -57,7 +57,7 @@ function compactChange(flight) {
 }
 
 function alertText(event) {
-  return event.message ? `${event.message}. Verify official source.` : "EDCT changed. Verify official source.";
+  return event.message || "EDCT changed.";
 }
 
 function render() {
@@ -137,7 +137,8 @@ function renderCandidates(candidates) {
       <button class="candidate" type="button" data-candidate="${escapeHtml(candidate.candidate_key)}">
       <strong>${escapeHtml(candidate.flight_number)}</strong>
       <span>${escapeHtml(candidate.origin)}-${escapeHtml(candidate.destination)}</span>
-      <span>${escapeHtml(candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "--")}</span>
+      <span>${escapeHtml(candidate.etd_utc ? `ETD ${hhmmz(candidate.etd_utc)}` : "ETD --")}</span>
+      <span>${escapeHtml(candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "No EDCT")}</span>
     </button>
   `).join("");
 }
@@ -236,24 +237,22 @@ $("lookupForm").addEventListener("submit", async (event) => {
   const form = event.currentTarget;
   const fd = new FormData(form);
   const flight = String(fd.get("flight") || "").trim();
-  const origin = String(fd.get("origin") || "").trim();
   const destination = String(fd.get("destination") || "").trim();
   $("candidateList").innerHTML = "";
   setLookupMessage("Searching...");
   try {
     const params = new URLSearchParams({ flight, destination });
-    if (origin) params.set("origin", origin);
     const data = await api(`/api/edct/lookup?${params.toString()}`);
-    if (data.candidates.length === 1) {
+    if (data.candidates.length === 1 && data.candidates[0].current_edct_utc) {
       await monitorCandidate(data.candidates[0].candidate_key);
       return;
     }
-    if (data.candidates.length > 1) {
+    if (data.candidates.length > 0) {
       renderCandidates(data.candidates);
-      setLookupMessage("Multiple matches found. Choose the flight to monitor.");
+      setLookupMessage(data.message || "Choose the flight to monitor.");
       return;
     }
-    setLookupMessage(data.message || "No active EDCT record found for this flight and destination. Verify flight number, origin, and destination.", true);
+    setLookupMessage(data.message || "No matching flight found in destination feed.", true);
   } catch (error) {
     setLookupMessage(error.message || "Lookup failed.", true);
   }

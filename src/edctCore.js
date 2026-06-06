@@ -32,8 +32,8 @@ export function normalizeAirport(value) {
 export function normalizeFlightNumber(value) {
   const display = sanitizeText(value, 16).toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!display) throw new Error("Flight number is required.");
-  const normalizedAcid = display.startsWith("SKW") ? display : `SKW${display.replace(/\D/g, "")}`;
-  if (!/^SKW\d{1,5}$/.test(normalizedAcid)) throw new Error("Flight number must contain 1 to 5 digits.");
+  const normalizedAcid = /^\d{1,5}$/.test(display) ? `SKW${display}` : display;
+  if (!/^[A-Z]{2,4}[A-Z0-9]{1,7}$/.test(normalizedAcid)) throw new Error("Callsign must include an airline prefix and flight number.");
   return { display, normalizedAcid };
 }
 
@@ -86,16 +86,18 @@ export function formatHHMMZ(iso) {
 }
 
 export function normalizeSourceRecord(record, referenceIso) {
-  const acid = sanitizeText(record.acid ?? record.ACID ?? record.flight ?? "", 16).toUpperCase();
+  const acid = sanitizeText(record.acid ?? record.ACID ?? record.flight ?? "", 16).toUpperCase().replace(/[^A-Z0-9]/g, "");
   const origin = normalizeAirport(record.origin ?? record.ORIGIN ?? record.dep ?? "");
   const destination = normalizeAirport(record.destination ?? record.DESTINATION ?? record.dest ?? "");
   const rawEdct = record.edct ?? record.EDCT ?? record.etd ?? record.ETD ?? record.etdRaw ?? record["etd raw string"];
+  const etdRaw = record.scheduled_etd ?? record.scheduledEtd ?? record.departure_time ?? record.departureTime ?? record.etd_time ?? record.etdTime ?? rawEdct;
   return {
     acid,
     type: sanitizeText(record.type ?? record.TYPE ?? "", 20),
     origin,
     destination,
     etd_raw: sanitizeText(rawEdct ?? "", 20),
+    etd_utc: parseCompactEdct(etdRaw, referenceIso),
     edct_utc: parseCompactEdct(rawEdct, referenceIso),
     eta: sanitizeText(record.eta ?? record.ETA ?? "", 20),
     ete: sanitizeText(record.ete ?? record.ETE ?? "", 20),
@@ -120,18 +122,18 @@ export function notificationFor(event, flight) {
   if (event.event_type === EVENT_TYPES.ASSIGNED && next) {
     const delay = Math.round((next - etd) / 60000);
     if (delay < 20) return null;
-    return { title: "EDCT assigned", body: `${flightText} EDCT assigned ${formatHHMMZ(event.new_edct_utc)}. Verify official source.` };
+    return { title: "EDCT assigned", body: `${flightText} EDCT assigned ${formatHHMMZ(event.new_edct_utc)}.` };
   }
   if (event.event_type === EVENT_TYPES.WORSENED && prev && next) {
     if (Math.round((next - prev) / 60000) < 15) return null;
-    return { title: "EDCT worsened", body: `${flightText} EDCT worsened ${formatHHMMZ(event.previous_edct_utc)} -> ${formatHHMMZ(event.new_edct_utc)}. Verify official source.` };
+    return { title: "EDCT worsened", body: `${flightText} EDCT worsened ${formatHHMMZ(event.previous_edct_utc)} -> ${formatHHMMZ(event.new_edct_utc)}.` };
   }
   if (event.event_type === EVENT_TYPES.IMPROVED && prev && next) {
     if (Math.round((prev - next) / 60000) < 15) return null;
-    return { title: "EDCT improved", body: `${flightText} EDCT improved ${formatHHMMZ(event.previous_edct_utc)} -> ${formatHHMMZ(event.new_edct_utc)}. Verify official source.` };
+    return { title: "EDCT improved", body: `${flightText} EDCT improved ${formatHHMMZ(event.previous_edct_utc)} -> ${formatHHMMZ(event.new_edct_utc)}.` };
   }
   if (event.event_type === EVENT_TYPES.REMOVED && event.previous_edct_utc) {
-    return { title: "EDCT removed", body: `${flightText} EDCT removed. Verify official source.` };
+    return { title: "EDCT removed", body: `${flightText} EDCT removed.` };
   }
   return null;
 }

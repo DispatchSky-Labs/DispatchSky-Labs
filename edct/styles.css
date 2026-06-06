@@ -46,13 +46,23 @@ button.secondary {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 h1, h2, p { margin: 0; }
 h1 {
   font-size: 30px;
   line-height: 1.1;
   letter-spacing: 0;
+}
+.topbar p {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.disclaimer {
+  color: #3d4c56;
+  font-size: 12px;
+  margin-bottom: 10px;
 }
 .icon-button {
   position: relative;
@@ -135,7 +145,7 @@ textarea {
 }
 .candidate {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 8px;
   align-items: center;
   min-height: 40px;
@@ -271,8 +281,22 @@ dialog {
   gap: 8px;
 }
 @media (min-width: 680px) {
+  .shell {
+    width: min(960px, calc(100vw - 48px));
+    display: grid;
+    grid-template-columns: minmax(520px, 680px) minmax(240px, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .topbar, .disclaimer, .warning, .add-card, .add-panel, .watchlist, footer {
+    grid-column: 1;
+  }
+  .recent-alerts {
+    grid-column: 2;
+    grid-row: 4 / span 2;
+  }
   .lookup-form {
-    grid-template-columns: 1.1fr .8fr .9fr auto;
+    grid-template-columns: 1fr 150px auto;
     align-items: center;
   }
   .form-actions {
@@ -282,6 +306,6 @@ dialog {
     grid-template-columns: 1fr 90px 90px 190px 78px;
   }
   .flight-row {
-    grid-template-columns: 110px 94px 70px 76px 34px;
+    grid-template-columns: 120px 120px 80px 86px 34px;
   }
 }

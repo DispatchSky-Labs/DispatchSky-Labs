@@ -3,14 +3,17 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sadiom EDCT Tracker</title>
+    <title>Sadiom Flow</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.sadiom.com; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'">
     <link rel="stylesheet" href="/edct/styles.css">
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
-        <h1>EDCT Tracker</h1>
+        <div>
+          <h1>Sadiom Flow</h1>
+          <p>EDCT change alerts</p>
+        </div>
         <button id="notifyBtn" class="icon-button" type="button" aria-label="Notifications">
           <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
             <path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M9.5 21h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -19,14 +22,15 @@
         </button>
       </header>
 
+      <p class="disclaimer">Awareness aid only. Verify EDCTs in the official operational source.</p>
+
       <section id="warningBanner" class="warning" hidden></section>
 
       <button id="showAddBtn" class="add-card" type="button">Add Flight</button>
 
       <section id="addPanel" class="add-panel" hidden>
         <form id="lookupForm" class="lookup-form">
-          <input name="flight" autocomplete="off" placeholder="SKW5592 or 5592" required>
-          <input name="origin" autocomplete="off" placeholder="Origin optional" maxlength="4">
+          <input name="flight" autocomplete="off" placeholder="UAL1597 or 5592" required>
           <input name="destination" autocomplete="off" placeholder="Destination e.g. SFO" maxlength="4" required>
           <div class="form-actions">
             <button type="submit">Find flight</button>
@@ -58,7 +62,7 @@
         <div id="historyList" class="alert-list"></div>
       </section>
 
-      <footer>Awareness aid only. Verify EDCTs in the official operational source.</footer>
+      <footer>Watch flights. Get EDCT change alerts.</footer>
     </main>
 
     <dialog id="summaryModal">

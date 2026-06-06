@@ -202,7 +202,7 @@ function lookupCandidate(record, fetchedAt) {
     normalized_acid: record.acid,
     origin: record.origin,
     destination: record.destination,
-    etd_utc: null,
+    etd_utc: record.etd_utc || null,
     current_edct_utc: record.edct_utc,
     source_freshness_at: fetchedAt
   };
@@ -306,22 +306,19 @@ async function api(req, res, pathname) {
       purgeLookupCache();
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const flight = normalizeFlightNumber(url.searchParams.get("flight") || "");
-      const rawOrigin = sanitizeText(url.searchParams.get("origin") || "", 8);
-      const origin = rawOrigin ? normalizeAirport(rawOrigin) : "";
       const destination = normalizeAirport(url.searchParams.get("destination") || "");
       const matches = [];
       const snapshot = await fetchSourceForAirport(destination, nowIso());
       if (snapshot.success) {
         for (const record of snapshot.records) {
           if (record.acid !== flight.normalizedAcid) continue;
-          if (origin && record.origin !== origin) continue;
           if (record.destination !== destination) continue;
           matches.push(lookupCandidate(record, snapshot.fetched_at));
         }
       }
       return send(res, 200, {
         candidates: matches,
-        message: matches.length ? "" : "No active EDCT record found for this flight and destination. Verify flight number, origin, and destination."
+        message: matches.length ? (matches.some((candidate) => candidate.current_edct_utc) ? "" : `Flight found in ${destination} feed, no active EDCT.`) : "No matching flight found in destination feed."
       });
     }
     if (req.method === "POST" && pathname === "/api/edct/lookup/add") {
