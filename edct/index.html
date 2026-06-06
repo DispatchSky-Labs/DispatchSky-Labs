@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sadiom EDCT Tracker</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.sadiom.com; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'">
+    <link rel="stylesheet" href="/edct/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>EDCT Tracker</h1>
+          <p id="workspaceLabel">Anonymous workspace</p>
+        </div>
+        <div class="actions">
+          <button id="notifyBtn" type="button">Notifications</button>
+          <button id="refreshBtn" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <section class="entry-band">
+        <form id="flightForm" class="flight-form">
+          <input name="flight_number" autocomplete="off" placeholder="Flight" required>
+          <input name="origin" autocomplete="off" placeholder="Origin" maxlength="4" required>
+          <input name="destination" autocomplete="off" placeholder="Dest" maxlength="4" required>
+          <input name="etd" type="datetime-local" required>
+          <input name="scheduled_departure_utc" type="datetime-local" title="Scheduled departure UTC">
+          <input name="scheduled_arrival_utc" type="datetime-local" title="Scheduled arrival UTC">
+          <button type="submit">Add</button>
+        </form>
+        <textarea id="bulkInput" placeholder="Paste flights: flight origin destination ETD, one per line"></textarea>
+        <button id="bulkAddBtn" type="button">Import pasted flights</button>
+      </section>
+
+      <section class="toolbar">
+        <div id="airportFilters" class="filters"></div>
+        <label><input id="monitoringToggle" type="checkbox" checked> Monitoring</label>
+        <label>Interval <input id="intervalInput" type="number" min="1" max="30" value="5"> min</label>
+        <label>Label <input id="labelInput" placeholder="optional"></label>
+        <button id="saveSettingsBtn" type="button">Save</button>
+      </section>
+
+      <section class="status-grid">
+        <div><b>Airports</b><span id="statusAirports">-</span></div>
+        <div><b>Records</b><span id="statusRecords">0</span></div>
+        <div><b>Matches</b><span id="statusMatches">0</span></div>
+        <div><b>Updated</b><span id="statusUpdated">-</span></div>
+        <div><b>Error</b><span id="statusError">None</span></div>
+      </section>
+
+      <section class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Flight</th>
+              <th>Origin</th>
+              <th>Destination</th>
+              <th>ETD</th>
+              <th>Current EDCT</th>
+              <th>Delay</th>
+              <th>Previous</th>
+              <th>Change</th>
+              <th>Last update</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="flightRows"></tbody>
+        </table>
+      </section>
+
+      <section class="history">
+        <h2>EDCT History</h2>
+        <div id="historyList"></div>
+      </section>
+    </main>
+
+    <dialog id="detailModal">
+      <div class="modal-head">
+        <h2 id="detailTitle">Flight detail</h2>
+        <button id="closeModalBtn" type="button">Close</button>
+      </div>
+      <pre id="detailContent"></pre>
+    </dialog>
+
+    <script src="/edct/config.js"></script>
+    <script src="/edct/app.js"></script>
+  </body>
+</html>

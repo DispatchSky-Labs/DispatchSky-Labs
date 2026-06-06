@@ -1,0 +1,173 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f7f8;
+  --panel: #ffffff;
+  --ink: #172026;
+  --muted: #60707d;
+  --line: #d8e0e5;
+  --assigned: #2459a6;
+  --worse: #a2382a;
+  --better: #28744d;
+  --removed: #6a5a16;
+  --stale: #6b7280;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+button, input, textarea {
+  font: inherit;
+}
+button {
+  border: 1px solid var(--line);
+  background: #102533;
+  color: white;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+button.secondary { background: #fff; color: var(--ink); }
+.shell {
+  width: min(1500px, calc(100vw - 28px));
+  margin: 0 auto;
+  padding: 18px 0 40px;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+h1, h2, p { margin: 0; }
+h1 { font-size: 28px; letter-spacing: 0; }
+h2 { font-size: 16px; }
+.topbar p { color: var(--muted); margin-top: 2px; }
+.actions { display: flex; gap: 8px; }
+.entry-band, .toolbar, .status-grid, .history {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.flight-form {
+  display: grid;
+  grid-template-columns: 110px 90px 90px minmax(190px, 1fr) minmax(190px, 1fr) minmax(190px, 1fr) 80px;
+  gap: 8px;
+}
+input, textarea {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 7px 9px;
+  background: white;
+  color: var(--ink);
+  min-width: 0;
+}
+textarea {
+  width: 100%;
+  min-height: 62px;
+  margin-top: 8px;
+  resize: vertical;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.toolbar label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.toolbar input[type="number"] { width: 72px; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-right: auto; }
+.pill {
+  background: #eef3f5;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.pill.active { background: #102533; color: #fff; }
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+}
+.status-grid div { border-left: 3px solid #93a5b0; padding-left: 8px; min-width: 0; }
+.status-grid b { display: block; font-size: 12px; color: var(--muted); }
+.status-grid span { display: block; overflow-wrap: anywhere; }
+.table-wrap {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: auto;
+  margin-bottom: 12px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+th, td {
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  padding: 9px 10px;
+  white-space: nowrap;
+}
+th {
+  font-size: 12px;
+  color: var(--muted);
+  background: #f9fbfc;
+}
+tr:last-child td { border-bottom: 0; }
+.state {
+  display: inline-block;
+  min-width: 84px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: #fff;
+  text-align: center;
+  font-size: 12px;
+}
+.EDCT_ASSIGNED { background: var(--assigned); }
+.EDCT_WORSENED { background: var(--worse); }
+.EDCT_IMPROVED { background: var(--better); }
+.EDCT_REMOVED { background: var(--removed); }
+.UNCHANGED { background: var(--stale); }
+.history h2 { margin-bottom: 8px; }
+.event {
+  display: grid;
+  grid-template-columns: 160px 1fr 90px;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+dialog {
+  width: min(760px, calc(100vw - 24px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0;
+}
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+pre {
+  margin: 0;
+  padding: 12px;
+  max-height: 70vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .flight-form { grid-template-columns: repeat(3, 1fr); }
+  .status-grid { grid-template-columns: repeat(2, 1fr); }
+  .topbar { align-items: flex-start; flex-direction: column; }
+}
