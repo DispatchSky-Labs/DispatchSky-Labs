@@ -64,7 +64,9 @@ Required Railway variables:
 - `EDCT_SOURCE_TOKEN`: server-only source token, if required by the upstream source.
 - `EDCT_SOURCE_METHOD`: `GET` or `POST`.
 - `EDCT_SOURCE_TIMEOUT_MS`: optional, default `10000`.
+- `EDCT_AIRPORT_CACHE_TTL_SECONDS`: optional server-side airport feed cache TTL, default `60`.
 - `EDCT_POLL_INTERVAL_MINUTES`: optional, clamped to 1-30.
+- `EDCT_IDLE_SLEEP_MINUTES`: optional inactivity threshold for stopping scheduled polling, default `30`.
 - `EDCT_MONITORED_DESTINATIONS`: optional comma-separated default destinations.
 - `EDCT_ALLOWED_ORIGINS`: exact browser origins allowed to call the Railway API. Production should include `https://sadiom.com`; local dev can include `http://localhost:3000` or another local origin.
 - `ADMIN_TOKEN`: required for `GET /api/admin/usage`.

@@ -15,6 +15,7 @@ export const config = {
   port: Number.parseInt(process.env.PORT || "3000", 10),
   dbFile: process.env.EDCT_DB_FILE || "./data/edct-db.json",
   pollMinutes: clampPollMinutes(),
+  idleSleepMinutes: Math.max(1, Number.parseInt(process.env.EDCT_IDLE_SLEEP_MINUTES || "30", 10) || 30),
   adminToken: process.env.ADMIN_TOKEN || process.env.SADIOM_ADMIN_TOKEN || "",
   allowedOrigins: (process.env.EDCT_ALLOWED_ORIGINS || "https://sadiom.com,http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002")
     .split(",")
@@ -24,6 +25,7 @@ export const config = {
     url: process.env.EDCT_SOURCE_URL || "",
     method: (process.env.EDCT_SOURCE_METHOD || "GET").toUpperCase(),
     token: process.env.EDCT_SOURCE_TOKEN || "",
-    timeoutMs: Number.parseInt(process.env.EDCT_SOURCE_TIMEOUT_MS || "10000", 10)
+    timeoutMs: Number.parseInt(process.env.EDCT_SOURCE_TIMEOUT_MS || "10000", 10),
+    cacheTtlSeconds: Math.max(15, Number.parseInt(process.env.EDCT_AIRPORT_CACHE_TTL_SECONDS || "60", 10) || 60)
   }
 };

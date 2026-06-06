@@ -126,9 +126,6 @@ function rate(req, sessionId, name, limit, windowMs) {
 
 function publicSession(workspace, session) {
   return {
-    workspace_id: workspace.id,
-    session_created_at: session.created_at,
-    session_last_seen_at: session.last_seen_at,
     optional_label: workspace.optional_label || "",
     monitoring_enabled: workspace.monitoring_enabled !== false,
     refresh_interval_minutes: workspace.refresh_interval_minutes || clampPollMinutes(),
@@ -164,40 +161,36 @@ function flightsFor(workspaceId) {
 
 function publicFlight(flight, state = null) {
   return {
-    id: flight.id,
-    workspace_id: flight.workspace_id,
+    flight_key: flight.id,
     display_flight_number: flight.display_flight_number,
-    normalized_acid: flight.normalized_acid,
     origin: flight.origin,
     destination: flight.destination,
     etd_utc: flight.etd_utc,
-    scheduled_departure_utc: flight.scheduled_departure_utc,
-    scheduled_arrival_utc: flight.scheduled_arrival_utc,
-    operational_day_key: flight.operational_day_key,
-    created_at: flight.created_at,
-    updated_at: flight.updated_at,
     state: state ? {
       current_edct_utc: state.current_edct_utc,
       previous_edct_utc: state.previous_edct_utc,
       last_change: state.last_change,
-      last_seen_at: state.last_seen_at,
-      last_source_fetch_at: state.last_source_fetch_at
+      last_checked_utc: state.last_source_fetch_at
     } : null
   };
 }
 
 function publicEvent(event) {
   return {
-    id: event.id,
-    workspace_id: event.workspace_id,
-    flight_id: event.flight_id,
     event_type: event.event_type,
     previous_edct_utc: event.previous_edct_utc,
     new_edct_utc: event.new_edct_utc,
-    delay_minutes: event.delay_minutes,
-    source_fetch_at: event.source_fetch_at,
     message: event.message,
     created_at: event.created_at
+  };
+}
+
+function publicNotification(notification) {
+  return {
+    notification_key: notification.id,
+    title: notification.title,
+    body: notification.body,
+    created_at: notification.created_at
   };
 }
 
@@ -215,14 +208,13 @@ function lookupCandidate(record, fetchedAt) {
   };
   lookupCache.set(candidateId, { ...cached, expires_at: Date.now() + 10 * 60_000 });
   return {
-    candidate_id: candidateId,
+    candidate_key: candidateId,
     flight_number: cached.flight_number,
     origin: cached.origin,
     destination: cached.destination,
     etd_utc: cached.etd_utc,
     current_edct_utc: cached.current_edct_utc,
-    source_freshness_at: cached.source_freshness_at,
-    match: "matched"
+    status: "matched"
   };
 }
 
@@ -271,9 +263,9 @@ async function api(req, res, pathname) {
       if (!rate(req, session.id, "session", 20, 60_000)) return send(res, 429, { error: "Too many session updates." });
       const body = await readBody(req);
       const patch = {
-        optional_label: sanitizeText(body.label, 60),
-        monitoring_enabled: body.monitoring_enabled !== false,
-        refresh_interval_minutes: clampPollMinutes(String(body.refresh_interval_minutes || workspace.refresh_interval_minutes || 5)),
+        optional_label: body.label === undefined ? workspace.optional_label || "" : sanitizeText(body.label, 60),
+        monitoring_enabled: body.monitoring_enabled === undefined ? workspace.monitoring_enabled !== false : body.monitoring_enabled !== false,
+        refresh_interval_minutes: body.refresh_interval_minutes === undefined ? workspace.refresh_interval_minutes || clampPollMinutes() : clampPollMinutes(String(body.refresh_interval_minutes)),
         updated_at: nowIso()
       };
       store.update("workspaces", workspace.id, patch);
@@ -288,7 +280,7 @@ async function api(req, res, pathname) {
       const created = store.insert("flights", { ...flightPayload(body, workspace.id), created_at: nowIso() });
       store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination });
       await refreshWorkspace(store, workspace.id, false, session.id);
-      return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.id === created.id) });
+      return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.flight_key === created.id) });
     }
     const flightMatch = pathname.match(/^\/api\/flights\/([^/]+)$/);
     if (flightMatch && req.method === "PATCH") {
@@ -299,7 +291,7 @@ async function api(req, res, pathname) {
       const updated = store.update("flights", existing.id, flightPayload(body, workspace.id, existing));
       store.usage("FLIGHT_EDITED", workspace.id, session.id, { destination: updated.destination });
       await refreshWorkspace(store, workspace.id, false, session.id);
-      return send(res, 200, { flight: flightsFor(workspace.id).find((f) => f.id === updated.id) });
+      return send(res, 200, { flight: flightsFor(workspace.id).find((f) => f.flight_key === updated.id) });
     }
     if (flightMatch && req.method === "DELETE") {
       const existing = store.data.flights.find((f) => f.id === flightMatch[1] && f.workspace_id === workspace.id);
@@ -314,14 +306,15 @@ async function api(req, res, pathname) {
       purgeLookupCache();
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const flight = normalizeFlightNumber(url.searchParams.get("flight") || "");
-      const origin = normalizeAirport(url.searchParams.get("origin") || "");
+      const rawOrigin = sanitizeText(url.searchParams.get("origin") || "", 8);
+      const origin = rawOrigin ? normalizeAirport(rawOrigin) : "";
       const destination = normalizeAirport(url.searchParams.get("destination") || "");
       const matches = [];
       const snapshot = await fetchSourceForAirport(destination, nowIso());
       if (snapshot.success) {
         for (const record of snapshot.records) {
           if (record.acid !== flight.normalizedAcid) continue;
-          if (record.origin !== origin) continue;
+          if (origin && record.origin !== origin) continue;
           if (record.destination !== destination) continue;
           matches.push(lookupCandidate(record, snapshot.fetched_at));
         }
@@ -335,7 +328,7 @@ async function api(req, res, pathname) {
       if (!rate(req, session.id, "flight-entry", 40, 60_000)) return send(res, 429, { error: "Too many flight changes." });
       purgeLookupCache();
       const body = await readBody(req);
-      const candidate = lookupCache.get(sanitizeText(body.candidate_id, 80));
+      const candidate = lookupCache.get(sanitizeText(body.candidate_key || body.candidate_id, 80));
       if (!candidate) return send(res, 404, { error: "Flight candidate expired. Search again." });
       const existing = store.data.flights.find((f) =>
         f.workspace_id === workspace.id &&
@@ -344,7 +337,7 @@ async function api(req, res, pathname) {
         f.origin === candidate.origin &&
         f.destination === candidate.destination
       );
-      if (existing) return send(res, 200, { flight: flightsFor(workspace.id).find((f) => f.id === existing.id), duplicate: true });
+      if (existing) return send(res, 200, { flight: flightsFor(workspace.id).find((f) => f.flight_key === existing.id), duplicate: true });
       const etd = candidate.etd_utc || candidate.current_edct_utc || candidate.source_freshness_at || nowIso();
       const created = store.insert("flights", {
         workspace_id: workspace.id,
@@ -362,26 +355,27 @@ async function api(req, res, pathname) {
       });
       store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination, lookup: true });
       await refreshWorkspace(store, workspace.id, false, session.id);
-      return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.id === created.id) });
+      return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.flight_key === created.id) });
     }
     if (req.method === "POST" && pathname === "/api/edct/refresh") {
       if (!rate(req, session.id, "refresh", 12, 60_000)) return send(res, 429, { error: "Too many refreshes." });
       return send(res, 200, await refreshWorkspace(store, workspace.id, true, session.id));
     }
     if (req.method === "GET" && pathname === "/api/edct/events") {
-      return send(res, 200, { events: store.data.edct_events.filter((e) => e.workspace_id === workspace.id).sort((a, b) => b.created_at.localeCompare(a.created_at)).map(publicEvent) });
+      return send(res, 200, { events: store.data.edct_events.filter((e) => e.workspace_id === workspace.id).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 10).map(publicEvent) });
     }
     const flightEvents = pathname.match(/^\/api\/edct\/flights\/([^/]+)\/events$/);
     if (flightEvents && req.method === "GET") {
-      return send(res, 200, { events: store.data.edct_events.filter((e) => e.workspace_id === workspace.id && e.flight_id === flightEvents[1]).sort((a, b) => b.created_at.localeCompare(a.created_at)).map(publicEvent) });
+      return send(res, 404, { error: "Not found." });
     }
     if (req.method === "GET" && pathname === "/api/notifications/pending") {
       if (!rate(req, session.id, "notifications", 60, 60_000)) return send(res, 429, { error: "Too many notification checks." });
-      return send(res, 200, { notifications: pendingNotifications(workspace.id, session.id) });
+      return send(res, 200, { notifications: pendingNotifications(workspace.id, session.id).map(publicNotification) });
     }
     if (req.method === "POST" && pathname === "/api/notifications/mark-delivered") {
       const body = await readBody(req);
-      for (const notificationId of Array.isArray(body.notification_event_ids) ? body.notification_event_ids : []) {
+      const notificationIds = Array.isArray(body.notification_keys) ? body.notification_keys : Array.isArray(body.notification_ids) ? body.notification_ids : Array.isArray(body.notification_event_ids) ? body.notification_event_ids : [];
+      for (const notificationId of notificationIds) {
         if (store.data.notification_events.some((n) => n.id === notificationId && n.workspace_id === workspace.id)) {
           store.insert("notification_deliveries", {
             notification_event_id: notificationId,
