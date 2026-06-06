@@ -49,6 +49,15 @@ h1 { font-size: 28px; letter-spacing: 0; }
 h2 { font-size: 16px; }
 .topbar p { color: var(--muted); margin-top: 2px; }
 .actions { display: flex; gap: 8px; }
+.disclaimer {
+  border-left: 3px solid #2459a6;
+  color: #33444f;
+  background: #eef5fb;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
 .entry-band, .toolbar, .status-grid, .history {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -56,9 +65,15 @@ h2 { font-size: 16px; }
   padding: 12px;
   margin-bottom: 12px;
 }
+.lookup-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(130px, 170px) 120px;
+  gap: 8px;
+  align-items: center;
+}
 .flight-form {
   display: grid;
-  grid-template-columns: 110px 90px 90px minmax(190px, 1fr) minmax(190px, 1fr) minmax(190px, 1fr) 80px;
+  grid-template-columns: 110px 90px 90px minmax(190px, 1fr) 80px;
   gap: 8px;
 }
 input, textarea {
@@ -75,6 +90,39 @@ textarea {
   min-height: 62px;
   margin-top: 8px;
   resize: vertical;
+}
+.lookup-message {
+  min-height: 20px;
+  margin-top: 8px;
+  color: var(--muted);
+}
+.lookup-message.error { color: var(--worse); }
+.candidate-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.candidate {
+  display: grid;
+  grid-template-columns: 110px 90px 90px 100px 110px 90px;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfd;
+}
+.candidate b { font-size: 14px; }
+.candidate span { color: var(--muted); }
+.advanced-import {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.advanced-import summary {
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: 8px;
 }
 .toolbar {
   display: flex;
@@ -109,7 +157,7 @@ textarea {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 980px;
+  min-width: 760px;
 }
 th, td {
   text-align: left;
@@ -167,7 +215,12 @@ pre {
   font-size: 12px;
 }
 @media (max-width: 900px) {
-  .flight-form { grid-template-columns: repeat(3, 1fr); }
+  .lookup-form { grid-template-columns: 1fr; }
+  .flight-form { grid-template-columns: 1fr; }
+  .candidate { grid-template-columns: 1fr 1fr; }
   .status-grid { grid-template-columns: repeat(2, 1fr); }
   .topbar { align-items: flex-start; flex-direction: column; }
+  .actions { width: 100%; }
+  .actions button { flex: 1; }
+  .shell { width: min(100vw - 16px, 1500px); }
 }

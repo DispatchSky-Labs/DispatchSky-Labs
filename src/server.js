@@ -15,11 +15,14 @@ import {
 } from "./edctCore.js";
 import { refreshDueAirports, refreshWorkspace, statusForWorkspace } from "./edctService.js";
 import { RateLimiter } from "./rateLimit.js";
+import { fetchSourceForAirport } from "./sourceClient.js";
 import { Store } from "./store.js";
+import { monitoredDestinations } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const store = new Store(config.dbFile);
 const limiter = new RateLimiter();
+const lookupCache = new Map();
 
 const csp = [
   "default-src 'self'",
@@ -199,6 +202,29 @@ function publicEvent(event) {
   };
 }
 
+function lookupCandidate(record, fetchedAt) {
+  const candidateId = id("cand");
+  const candidate = {
+    candidate_id: candidateId,
+    flight_number: record.acid,
+    normalized_acid: record.acid,
+    origin: record.origin,
+    destination: record.destination,
+    etd_utc: null,
+    current_edct_utc: record.edct_utc,
+    source_freshness_at: fetchedAt
+  };
+  lookupCache.set(candidateId, { ...candidate, expires_at: Date.now() + 10 * 60_000 });
+  return candidate;
+}
+
+function purgeLookupCache() {
+  const now = Date.now();
+  for (const [key, value] of lookupCache.entries()) {
+    if (value.expires_at <= now) lookupCache.delete(key);
+  }
+}
+
 function pendingNotifications(workspaceId, sessionId) {
   return store.data.notification_events.filter((n) =>
     n.workspace_id === workspaceId &&
@@ -275,6 +301,63 @@ async function api(req, res, pathname) {
       return send(res, 200, { ok: true });
     }
     if (req.method === "GET" && pathname === "/api/edct/status") return send(res, 200, statusForWorkspace(store, workspace.id));
+    if (req.method === "GET" && pathname === "/api/edct/lookup") {
+      if (!rate(req, session.id, "lookup", 30, 60_000)) return send(res, 429, { error: "Too many lookups." });
+      purgeLookupCache();
+      const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+      const flight = normalizeFlightNumber(url.searchParams.get("flight") || "");
+      const originParam = sanitizeText(url.searchParams.get("origin") || "", 8);
+      const origin = originParam ? normalizeAirport(originParam) : "";
+      const activeAirports = new Set(store.data.flights.filter((f) => f.active).map((f) => f.destination));
+      const airports = [...new Set([...monitoredDestinations, ...activeAirports])];
+      const matches = [];
+      for (const airport of airports) {
+        const snapshot = await fetchSourceForAirport(airport, nowIso());
+        if (!snapshot.success) continue;
+        for (const record of snapshot.records) {
+          if (record.acid !== flight.normalizedAcid) continue;
+          if (origin && record.origin !== origin) continue;
+          matches.push(lookupCandidate(record, snapshot.fetched_at));
+        }
+      }
+      return send(res, 200, {
+        candidates: matches,
+        message: matches.length ? "" : "No active EDCT record found. Try adding origin to narrow the search."
+      });
+    }
+    if (req.method === "POST" && pathname === "/api/edct/lookup/add") {
+      if (!rate(req, session.id, "flight-entry", 40, 60_000)) return send(res, 429, { error: "Too many flight changes." });
+      purgeLookupCache();
+      const body = await readBody(req);
+      const candidate = lookupCache.get(sanitizeText(body.candidate_id, 80));
+      if (!candidate) return send(res, 404, { error: "Flight candidate expired. Search again." });
+      const existing = store.data.flights.find((f) =>
+        f.workspace_id === workspace.id &&
+        f.active &&
+        f.normalized_acid === candidate.normalized_acid &&
+        f.origin === candidate.origin &&
+        f.destination === candidate.destination
+      );
+      if (existing) return send(res, 200, { flight: flightsFor(workspace.id).find((f) => f.id === existing.id), duplicate: true });
+      const etd = candidate.etd_utc || candidate.current_edct_utc || candidate.source_freshness_at || nowIso();
+      const created = store.insert("flights", {
+        workspace_id: workspace.id,
+        display_flight_number: candidate.flight_number,
+        normalized_acid: candidate.normalized_acid,
+        origin: candidate.origin,
+        destination: candidate.destination,
+        etd_utc: parseDateInput(etd, "Candidate time is unavailable."),
+        scheduled_departure_utc: null,
+        scheduled_arrival_utc: null,
+        operational_day_key: operationalDayKey(etd),
+        active: true,
+        created_at: nowIso(),
+        updated_at: nowIso()
+      });
+      store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination, lookup: true });
+      await refreshWorkspace(store, workspace.id, false, session.id);
+      return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.id === created.id) });
+    }
     if (req.method === "POST" && pathname === "/api/edct/refresh") {
       if (!rate(req, session.id, "refresh", 12, 60_000)) return send(res, 429, { error: "Too many refreshes." });
       return send(res, 200, await refreshWorkspace(store, workspace.id, true, session.id));

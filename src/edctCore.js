@@ -120,18 +120,18 @@ export function notificationFor(event, flight) {
   if (event.event_type === EVENT_TYPES.ASSIGNED && next) {
     const delay = Math.round((next - etd) / 60000);
     if (delay < 20) return null;
-    return { title: "EDCT assigned", body: `${flightText} EDCT assigned ${formatHHMMZ(event.new_edct_utc)} (+${delay} min)` };
+    return { title: "EDCT assigned", body: `${flightText} EDCT assigned ${formatHHMMZ(event.new_edct_utc)} (+${delay} min). Verify in the official source before use.` };
   }
   if (event.event_type === EVENT_TYPES.WORSENED && prev && next) {
     if (Math.round((next - prev) / 60000) < 15) return null;
-    return { title: "EDCT worsened", body: `${flightText} EDCT worsened to ${formatHHMMZ(event.new_edct_utc)}` };
+    return { title: "EDCT worsened", body: `${flightText} EDCT worsened to ${formatHHMMZ(event.new_edct_utc)}. Verify in the official source before use.` };
   }
   if (event.event_type === EVENT_TYPES.IMPROVED && prev && next) {
     if (Math.round((prev - next) / 60000) < 15) return null;
-    return { title: "EDCT improved", body: `${flightText} EDCT improved to ${formatHHMMZ(event.new_edct_utc)}` };
+    return { title: "EDCT improved", body: `${flightText} EDCT improved to ${formatHHMMZ(event.new_edct_utc)}. Verify in the official source before use.` };
   }
   if (event.event_type === EVENT_TYPES.REMOVED && event.previous_edct_utc) {
-    return { title: "EDCT removed", body: `${flightText} EDCT removed` };
+    return { title: "EDCT removed", body: `${flightText} EDCT removed. Verify in the official source before use.` };
   }
   return null;
 }

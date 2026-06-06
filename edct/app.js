@@ -40,8 +40,6 @@ function changeClass(change) {
 }
 
 function render() {
-  const label = state.session?.optional_label ? `Workspace: ${state.session.optional_label}` : `Workspace: ${state.session?.workspace_id || "anonymous"}`;
-  $("workspaceLabel").textContent = label;
   $("monitoringToggle").checked = state.session?.monitoring_enabled !== false;
   $("intervalInput").value = state.session?.refresh_interval_minutes || 5;
   $("labelInput").value = state.session?.optional_label || "";
@@ -74,18 +72,14 @@ function renderFlights() {
       const change = changeClass(f.state?.last_change);
       return `<tr>
         <td>${f.display_flight_number}<br><small>${f.normalized_acid}</small></td>
-        <td>${f.origin}</td>
-        <td>${f.destination}</td>
-        <td>${hhmmz(f.etd_utc)}</td>
+        <td>${f.origin}-${f.destination}</td>
         <td>${hhmmz(f.state?.current_edct_utc)}</td>
-        <td>${delayText(f)}</td>
-        <td>${hhmmz(f.state?.previous_edct_utc)}</td>
         <td><span class="state ${change}">${change.replace("EDCT_", "")}</span></td>
         <td>${timeText(f.state?.last_source_fetch_at)}</td>
         <td><button class="secondary" data-detail="${f.id}" type="button">Detail</button> <button class="secondary" data-delete="${f.id}" type="button">Delete</button></td>
       </tr>`;
     }).join("");
-  $("flightRows").innerHTML = rows || `<tr><td colspan="10">No active flights.</td></tr>`;
+  $("flightRows").innerHTML = rows || `<tr><td colspan="6">No active flights.</td></tr>`;
 }
 
 function renderHistory() {
@@ -110,6 +104,32 @@ async function loadAll() {
 
 async function addFlight(values) {
   await api("/api/flights", { method: "POST", body: JSON.stringify(values) });
+  await loadAll();
+}
+
+function setLookupMessage(message, isError = false) {
+  $("lookupMessage").textContent = message || "";
+  $("lookupMessage").className = `lookup-message${isError ? " error" : ""}`;
+}
+
+function renderCandidates(candidates) {
+  $("candidateList").innerHTML = candidates.map((candidate) => `
+    <div class="candidate">
+      <b>${candidate.flight_number}</b>
+      <span>${candidate.origin}</span>
+      <span>${candidate.destination}</span>
+      <span>${candidate.etd_utc ? hhmmz(candidate.etd_utc) : "ETD -"}</span>
+      <span>${candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "EDCT -"}</span>
+      <button type="button" data-candidate="${candidate.candidate_id}">Monitor</button>
+    </div>
+  `).join("");
+}
+
+async function monitorCandidate(candidateId) {
+  setLookupMessage("Adding flight...");
+  await api("/api/edct/lookup/add", { method: "POST", body: JSON.stringify({ candidate_id: candidateId }) });
+  $("candidateList").innerHTML = "";
+  setLookupMessage("Flight added. Verify EDCT information in the official operational source before use.");
   await loadAll();
 }
 
@@ -149,6 +169,34 @@ $("flightForm").addEventListener("submit", async (event) => {
     scheduled_arrival_utc: toUtcFromLocal(fd.get("scheduled_arrival_utc"))
   });
   form.reset();
+});
+
+$("lookupForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const fd = new FormData(form);
+  const flight = String(fd.get("flight") || "").trim();
+  const origin = String(fd.get("origin") || "").trim();
+  $("candidateList").innerHTML = "";
+  setLookupMessage("Searching...");
+  try {
+    const params = new URLSearchParams({ flight });
+    if (origin) params.set("origin", origin);
+    const data = await api(`/api/edct/lookup?${params.toString()}`);
+    if (data.candidates.length === 1) {
+      await monitorCandidate(data.candidates[0].candidate_id);
+      form.reset();
+      return;
+    }
+    if (data.candidates.length > 1) {
+      renderCandidates(data.candidates);
+      setLookupMessage("Multiple active matches found. Choose the flight to monitor.");
+      return;
+    }
+    setLookupMessage(data.message || "No active EDCT record found. Try adding origin to narrow the search.", true);
+  } catch (error) {
+    setLookupMessage(error.message || "Lookup failed.", true);
+  }
 });
 
 $("bulkAddBtn").addEventListener("click", async () => {
@@ -196,6 +244,8 @@ document.addEventListener("click", async (event) => {
     await loadAll();
   }
   const detailId = event.target.dataset.detail;
+  const candidateId = event.target.dataset.candidate;
+  if (candidateId) await monitorCandidate(candidateId);
   if (detailId) {
     const flight = state.flights.find((f) => f.id === detailId);
     const events = await api(`/api/edct/flights/${detailId}/events`);

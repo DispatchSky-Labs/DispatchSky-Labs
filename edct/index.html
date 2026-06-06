@@ -12,7 +12,6 @@
       <header class="topbar">
         <div>
           <h1>EDCT Tracker</h1>
-          <p id="workspaceLabel">Anonymous workspace</p>
         </div>
         <div class="actions">
           <button id="notifyBtn" type="button">Notifications</button>
@@ -20,18 +19,28 @@
         </div>
       </header>
 
+      <p class="disclaimer">EDCT Tracker is an awareness aid. Verify all EDCT information in the official operational source before use.</p>
+
       <section class="entry-band">
-        <form id="flightForm" class="flight-form">
-          <input name="flight_number" autocomplete="off" placeholder="Flight" required>
-          <input name="origin" autocomplete="off" placeholder="Origin" maxlength="4" required>
-          <input name="destination" autocomplete="off" placeholder="Dest" maxlength="4" required>
-          <input name="etd" type="datetime-local" required>
-          <input name="scheduled_departure_utc" type="datetime-local" title="Scheduled departure UTC">
-          <input name="scheduled_arrival_utc" type="datetime-local" title="Scheduled arrival UTC">
-          <button type="submit">Add</button>
+        <form id="lookupForm" class="lookup-form">
+          <input name="flight" autocomplete="off" placeholder="SKW5592 or 5592" required>
+          <input name="origin" autocomplete="off" placeholder="Origin optional" maxlength="4">
+          <button type="submit">Find flight</button>
         </form>
-        <textarea id="bulkInput" placeholder="Paste flights: flight origin destination ETD, one per line"></textarea>
-        <button id="bulkAddBtn" type="button">Import pasted flights</button>
+        <div id="lookupMessage" class="lookup-message"></div>
+        <div id="candidateList" class="candidate-list"></div>
+        <details class="advanced-import">
+          <summary>Paste/import flights</summary>
+          <form id="flightForm" class="flight-form">
+            <input name="flight_number" autocomplete="off" placeholder="Flight" required>
+            <input name="origin" autocomplete="off" placeholder="Origin" maxlength="4" required>
+            <input name="destination" autocomplete="off" placeholder="Dest" maxlength="4" required>
+            <input name="etd" type="datetime-local" required>
+            <button type="submit">Add</button>
+          </form>
+          <textarea id="bulkInput" placeholder="Paste flights: flight origin destination ETD, one per line"></textarea>
+          <button id="bulkAddBtn" type="button">Import pasted flights</button>
+        </details>
       </section>
 
       <section class="toolbar">
@@ -55,14 +64,10 @@
           <thead>
             <tr>
               <th>Flight</th>
-              <th>Origin</th>
-              <th>Destination</th>
-              <th>ETD</th>
+              <th>Route</th>
               <th>Current EDCT</th>
-              <th>Delay</th>
-              <th>Previous</th>
               <th>Change</th>
-              <th>Last update</th>
+              <th>Last checked</th>
               <th></th>
             </tr>
           </thead>
