@@ -177,11 +177,11 @@ $("lookupForm").addEventListener("submit", async (event) => {
   const fd = new FormData(form);
   const flight = String(fd.get("flight") || "").trim();
   const origin = String(fd.get("origin") || "").trim();
+  const destination = String(fd.get("destination") || "").trim();
   $("candidateList").innerHTML = "";
   setLookupMessage("Searching...");
   try {
-    const params = new URLSearchParams({ flight });
-    if (origin) params.set("origin", origin);
+    const params = new URLSearchParams({ flight, origin, destination });
     const data = await api(`/api/edct/lookup?${params.toString()}`);
     if (data.candidates.length === 1) {
       await monitorCandidate(data.candidates[0].candidate_id);
@@ -193,7 +193,7 @@ $("lookupForm").addEventListener("submit", async (event) => {
       setLookupMessage("Multiple active matches found. Choose the flight to monitor.");
       return;
     }
-    setLookupMessage(data.message || "No active EDCT record found. Try adding origin to narrow the search.", true);
+    setLookupMessage(data.message || "No active EDCT record found for this flight and destination. Verify flight number, origin, and destination.", true);
   } catch (error) {
     setLookupMessage(error.message || "Lookup failed.", true);
   }

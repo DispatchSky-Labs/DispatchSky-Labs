@@ -59,7 +59,7 @@ export function flightSignature(flight) {
 
 export function parseCompactEdct(raw, referenceIso) {
   const value = sanitizeText(raw, 20).toUpperCase();
-  const match = value.match(/^[A-Z](\d{2})(\d{2})(\d{2})$/);
+  const match = value.match(/^[A-Z](\d{2})\/?(\d{2})(\d{2})$/);
   if (!match) return null;
   const [, dd, hh, mm] = match;
   const ref = new Date(referenceIso || Date.now());

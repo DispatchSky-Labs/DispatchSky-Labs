@@ -17,7 +17,6 @@ import { refreshDueAirports, refreshWorkspace, statusForWorkspace } from "./edct
 import { RateLimiter } from "./rateLimit.js";
 import { fetchSourceForAirport } from "./sourceClient.js";
 import { Store } from "./store.js";
-import { monitoredDestinations } from "./config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const store = new Store(config.dbFile);
@@ -204,7 +203,7 @@ function publicEvent(event) {
 
 function lookupCandidate(record, fetchedAt) {
   const candidateId = id("cand");
-  const candidate = {
+  const cached = {
     candidate_id: candidateId,
     flight_number: record.acid,
     normalized_acid: record.acid,
@@ -214,8 +213,17 @@ function lookupCandidate(record, fetchedAt) {
     current_edct_utc: record.edct_utc,
     source_freshness_at: fetchedAt
   };
-  lookupCache.set(candidateId, { ...candidate, expires_at: Date.now() + 10 * 60_000 });
-  return candidate;
+  lookupCache.set(candidateId, { ...cached, expires_at: Date.now() + 10 * 60_000 });
+  return {
+    candidate_id: candidateId,
+    flight_number: cached.flight_number,
+    origin: cached.origin,
+    destination: cached.destination,
+    etd_utc: cached.etd_utc,
+    current_edct_utc: cached.current_edct_utc,
+    source_freshness_at: cached.source_freshness_at,
+    match: "matched"
+  };
 }
 
 function purgeLookupCache() {
@@ -306,23 +314,21 @@ async function api(req, res, pathname) {
       purgeLookupCache();
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const flight = normalizeFlightNumber(url.searchParams.get("flight") || "");
-      const originParam = sanitizeText(url.searchParams.get("origin") || "", 8);
-      const origin = originParam ? normalizeAirport(originParam) : "";
-      const activeAirports = new Set(store.data.flights.filter((f) => f.active).map((f) => f.destination));
-      const airports = [...new Set([...monitoredDestinations, ...activeAirports])];
+      const origin = normalizeAirport(url.searchParams.get("origin") || "");
+      const destination = normalizeAirport(url.searchParams.get("destination") || "");
       const matches = [];
-      for (const airport of airports) {
-        const snapshot = await fetchSourceForAirport(airport, nowIso());
-        if (!snapshot.success) continue;
+      const snapshot = await fetchSourceForAirport(destination, nowIso());
+      if (snapshot.success) {
         for (const record of snapshot.records) {
           if (record.acid !== flight.normalizedAcid) continue;
-          if (origin && record.origin !== origin) continue;
+          if (record.origin !== origin) continue;
+          if (record.destination !== destination) continue;
           matches.push(lookupCandidate(record, snapshot.fetched_at));
         }
       }
       return send(res, 200, {
         candidates: matches,
-        message: matches.length ? "" : "No active EDCT record found. Try adding origin to narrow the search."
+        message: matches.length ? "" : "No active EDCT record found for this flight and destination. Verify flight number, origin, and destination."
       });
     }
     if (req.method === "POST" && pathname === "/api/edct/lookup/add") {

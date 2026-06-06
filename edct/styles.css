@@ -67,7 +67,7 @@ h2 { font-size: 16px; }
 }
 .lookup-form {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(130px, 170px) 120px;
+  grid-template-columns: minmax(150px, 220px) minmax(100px, 130px) minmax(120px, 150px) 120px;
   gap: 8px;
   align-items: center;
 }

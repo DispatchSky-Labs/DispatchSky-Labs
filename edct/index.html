@@ -24,7 +24,8 @@
       <section class="entry-band">
         <form id="lookupForm" class="lookup-form">
           <input name="flight" autocomplete="off" placeholder="SKW5592 or 5592" required>
-          <input name="origin" autocomplete="off" placeholder="Origin optional" maxlength="4">
+          <input name="origin" autocomplete="off" placeholder="Origin e.g. RDD" maxlength="4" required>
+          <input name="destination" autocomplete="off" placeholder="Destination e.g. SFO" maxlength="4" required>
           <button type="submit">Find flight</button>
         </form>
         <div id="lookupMessage" class="lookup-message"></div>

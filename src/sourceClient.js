@@ -9,7 +9,27 @@ function recordsFromPayload(payload) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload.records)) return payload.records;
   if (Array.isArray(payload.edct)) return payload.edct;
+  if (Array.isArray(payload.flights)) return payload.flights;
+  if (Array.isArray(payload.timeBuckets)) return payload.timeBuckets.flatMap((bucket) => Array.isArray(bucket.flights) ? bucket.flights : []);
   return [];
+}
+
+function sourceUrlForAirport(airport) {
+  const configured = config.source.url;
+  if (!configured) return "";
+  const lowerAirport = airport.toLowerCase();
+  if (configured.includes("{airport}")) return configured.replaceAll("{airport}", lowerAirport);
+  if (configured.includes("{AIRPORT}")) return configured.replaceAll("{AIRPORT}", airport);
+  const url = new URL(configured);
+  const parts = url.pathname.split("/");
+  const last = parts[parts.length - 1] || "";
+  if (/^[a-z]{3}$/i.test(last)) {
+    parts[parts.length - 1] = lowerAirport;
+    url.pathname = parts.join("/");
+    return url.toString();
+  }
+  url.searchParams.set("airport", airport);
+  return url.toString();
 }
 
 export async function fetchSourceForAirport(airport, referenceIso) {
@@ -19,8 +39,7 @@ export async function fetchSourceForAirport(airport, referenceIso) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.source.timeoutMs);
   try {
-    const url = new URL(config.source.url);
-    url.searchParams.set("airport", airport);
+    const url = sourceUrlForAirport(airport);
     const headers = { accept: "application/json" };
     if (config.source.token) headers.authorization = `Bearer ${config.source.token}`;
     const response = await fetch(url, {
