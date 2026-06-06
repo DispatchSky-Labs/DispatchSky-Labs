@@ -8,6 +8,8 @@ import {
 } from "./edctCore.js";
 import { fetchSourceForAirport } from "./sourceClient.js";
 
+let backendSleeping = true;
+
 export function activeFlights(store, workspaceId = null) {
   return store.data.flights.filter((f) => f.active && (!workspaceId || f.workspace_id === workspaceId));
 }
@@ -86,7 +88,7 @@ export async function refreshWorkspace(store, workspaceId, manual = false, sessi
       if (!inserted) continue;
       summary.events += 1;
       store.usage("EDCT_EVENT_GENERATED", flight.workspace_id, sessionId, { event_type: eventType, airport });
-      const notification = notificationFor(event, flight);
+      const notification = notificationFor(event, flight, config.notificationSensitivity);
       if (notification) {
         store.insert("notification_events", {
           workspace_id: flight.workspace_id,
@@ -123,16 +125,75 @@ export function statusForWorkspace(store, workspaceId) {
   };
 }
 
+export function noteBackendActivity(store, message = "Backend woke after user activity") {
+  if (!backendSleeping) return false;
+  backendSleeping = false;
+  store.insert("admin_events", {
+    event_type: "backend_woke",
+    message,
+    created_at: nowIso()
+  });
+  return true;
+}
+
+function noteBackendSleep(store) {
+  if (backendSleeping) return;
+  backendSleeping = true;
+  store.insert("admin_events", {
+    event_type: "backend_slept",
+    message: "Backend slept after idle window",
+    created_at: nowIso()
+  });
+}
+
+export function backendRuntimeState(store) {
+  const idleCutoff = Date.now() - config.idleSleepMinutes * 60_000;
+  const activeCutoff = Date.now() - config.activeSessionThresholdSeconds * 1000;
+  const sessions = store.data.sessions || [];
+  const flights = activeFlights(store);
+  const lastActivityMs = Math.max(
+    0,
+    ...sessions.map(sessionActivityMs),
+    ...flights.map((f) => Date.parse(f.updated_at || f.created_at || "") || 0)
+  );
+  const hasActiveSession = sessions.some((s) => sessionActivityMs(s) >= activeCutoff);
+  const hasActiveFlights = flights.length > 0;
+  const idleForSleep = lastActivityMs > 0 && lastActivityMs < idleCutoff;
+  const shouldSleep = !hasActiveSession && !hasActiveFlights && idleForSleep;
+  return {
+    shouldSleep,
+    hasActiveSession,
+    hasActiveFlights,
+    backendSleeping,
+    lastActivityAt: lastActivityMs ? new Date(lastActivityMs).toISOString() : null,
+    nextSleepAt: !shouldSleep && !hasActiveFlights && lastActivityMs ? new Date(lastActivityMs + config.idleSleepMinutes * 60_000).toISOString() : null
+  };
+}
+
+function sessionActivityMs(session) {
+  return Math.max(
+    Date.parse(session.last_heartbeat_at || "") || 0,
+    Date.parse(session.last_activity_at || "") || 0,
+    Date.parse(session.last_seen_at || "") || 0
+  );
+}
+
 export async function refreshDueAirports(store) {
-  const activeSince = Date.now() - config.idleSleepMinutes * 60_000;
-  const hasRecentSession = store.data.sessions.some((s) => new Date(s.last_seen_at).getTime() >= activeSince);
-  const hasActiveFlights = store.data.flights.some((f) => f.active);
-  if (!hasRecentSession && !hasActiveFlights) return;
+  const runtime = backendRuntimeState(store);
+  if (runtime.shouldSleep) {
+    noteBackendSleep(store);
+    return { sleeping: true, airports: [] };
+  }
+  if (runtime.hasActiveSession || runtime.hasActiveFlights) noteBackendActivity(store, "Backend woke for active monitoring");
+  if (!runtime.hasActiveFlights) return { sleeping: backendSleeping, airports: [] };
   const workspaces = store.data.workspaces.filter((w) => w.monitoring_enabled !== false);
+  const airports = new Set();
   for (const workspace of workspaces) {
     if (!activeFlights(store, workspace.id).length) continue;
+    for (const airport of airportsForWorkspace(store, workspace.id)) airports.add(airport);
     await refreshWorkspace(store, workspace.id, false, null);
   }
+  return { sleeping: false, airports: [...airports] };
 }
 
 function warningFor(lastSuccess, lastError) {

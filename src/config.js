@@ -15,8 +15,11 @@ export const config = {
   port: Number.parseInt(process.env.PORT || "3000", 10),
   dbFile: process.env.EDCT_DB_FILE || "./data/edct-db.json",
   pollMinutes: clampPollMinutes(),
-  idleSleepMinutes: Math.max(1, Number.parseInt(process.env.EDCT_IDLE_SLEEP_MINUTES || "30", 10) || 30),
+  idleSleepMinutes: Math.max(1, Number.parseInt(process.env.EDCT_IDLE_SLEEP_MINUTES || "60", 10) || 60),
   activeSessionThresholdSeconds: Math.max(60, Number.parseInt(process.env.EDCT_ACTIVE_SESSION_THRESHOLD_SECONDS || "180", 10) || 180),
+  notificationSensitivity: ["quiet", "normal", "aggressive"].includes(String(process.env.EDCT_NOTIFICATION_SENSITIVITY || "").toLowerCase())
+    ? String(process.env.EDCT_NOTIFICATION_SENSITIVITY).toLowerCase()
+    : "normal",
   adminToken: process.env.ADMIN_TOKEN || process.env.SADIOM_ADMIN_TOKEN || "",
   allowedOrigins: (process.env.EDCT_ALLOWED_ORIGINS || "https://sadiom.com,http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002")
     .split(",")

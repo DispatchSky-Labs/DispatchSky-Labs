@@ -8,6 +8,7 @@ const tableNames = [
   "usage_events",
   "flights",
   "source_airport_snapshots",
+  "admin_events",
   "edct_flight_states",
   "edct_events",
   "notification_events",

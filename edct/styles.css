@@ -99,7 +99,7 @@ h1 {
   font-weight: 700;
 }
 .compact-label { display: none; }
-.add-panel, .watchlist, .recent-alerts {
+.add-panel, .watchlist, .recent-alerts, .quick-stats {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -146,7 +146,13 @@ textarea {
 }
 .candidate {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr 30px;
+  gap: 6px;
+  align-items: center;
+}
+.candidate-main {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
   gap: 8px;
   align-items: center;
   min-height: 40px;
@@ -154,7 +160,17 @@ textarea {
   color: var(--ink);
   text-align: left;
 }
-.candidate span { color: var(--muted); }
+.candidate-main:disabled {
+  opacity: .65;
+  cursor: default;
+}
+.candidate span, .candidate-main span { color: var(--muted); }
+.candidate-remove {
+  width: 30px;
+  min-width: 30px;
+  min-height: 40px;
+  padding: 0;
+}
 .advanced-import {
   margin-top: 10px;
   border-top: 1px solid var(--line);
@@ -163,6 +179,17 @@ textarea {
 .advanced-import summary {
   color: var(--muted);
   cursor: pointer;
+}
+.bulk-actions {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 8px;
+  margin-top: 8px;
+}
+.parser-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 8px;
 }
 .flight-rows {
   overflow: hidden;
@@ -236,6 +263,23 @@ textarea {
 .recent-alerts {
   padding: 8px 10px;
 }
+.quick-stats {
+  display: none;
+  padding: 10px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.quick-stats div {
+  display: grid;
+  gap: 2px;
+}
+.quick-stats strong {
+  font-size: 18px;
+}
+.quick-stats span {
+  color: var(--muted);
+  font-size: 12px;
+}
 .link-button {
   min-height: 30px;
   padding: 0;
@@ -294,7 +338,7 @@ dialog {
     gap: 12px;
     align-items: start;
   }
-  .topbar, .disclaimer, .warning, .add-card, .add-panel, .watchlist, footer {
+  .topbar, .disclaimer, .warning, .add-card, .add-panel, .watchlist, .quick-stats, footer {
     grid-column: 1;
   }
   .recent-alerts {
@@ -314,6 +358,9 @@ dialog {
   .flight-row {
     grid-template-columns: 120px 120px 80px 86px 34px;
   }
+  .quick-stats {
+    display: grid;
+  }
 }
 
 @media (min-width: 560px) and (max-width: 979px) {
@@ -327,9 +374,12 @@ dialog {
   .form-actions {
     grid-template-columns: 112px 86px;
   }
+  .flight-row {
+    grid-template-columns: minmax(110px, 1fr) minmax(120px, 1fr) 72px 86px 34px;
+  }
 }
 
-@media (max-width: 430px) {
+@media (max-width: 520px) {
   body { background: #fff; }
   .shell {
     width: 100%;
@@ -392,6 +442,12 @@ dialog {
   .recent-alerts {
     display: none;
   }
+  .quick-stats {
+    display: none;
+  }
+  .advanced-import {
+    display: none;
+  }
   .add-panel {
     position: fixed;
     left: 8px;
@@ -403,8 +459,12 @@ dialog {
   .candidate {
     grid-template-columns: 1fr auto;
   }
-  .candidate span:nth-of-type(2),
-  .candidate span:nth-of-type(3) {
+  .candidate-main {
+    grid-template-columns: 1fr auto;
+  }
+  .candidate-main span:nth-of-type(2),
+  .candidate-main span:nth-of-type(3),
+  .candidate-main span:nth-of-type(4) {
     font-size: 12px;
   }
 }

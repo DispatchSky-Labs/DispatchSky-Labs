@@ -114,22 +114,29 @@ export function compareEdct(previousIso, newIso, successfulFetch) {
   return null;
 }
 
-export function notificationFor(event, flight) {
+function notificationThresholds(sensitivity = "normal") {
+  if (sensitivity === "aggressive") return { assignment: 0, improvement: 0, worsening: 0 };
+  if (sensitivity === "quiet") return { assignment: 30, improvement: 30, worsening: 30 };
+  return { assignment: 20, improvement: 15, worsening: 15 };
+}
+
+export function notificationFor(event, flight, sensitivity = "normal") {
+  const thresholds = notificationThresholds(sensitivity);
   const prev = event.previous_edct_utc ? new Date(event.previous_edct_utc) : null;
   const next = event.new_edct_utc ? new Date(event.new_edct_utc) : null;
   const etd = new Date(flight.etd_utc);
   const flightText = `${flight.display_flight_number} ${flight.origin}-${flight.destination}`;
   if (event.event_type === EVENT_TYPES.ASSIGNED && next) {
     const delay = Math.round((next - etd) / 60000);
-    if (delay < 20) return null;
+    if (delay < thresholds.assignment) return null;
     return { title: "Change assigned", body: `${flightText} assigned ${formatHHMMZ(event.new_edct_utc)}.` };
   }
   if (event.event_type === EVENT_TYPES.WORSENED && prev && next) {
-    if (Math.round((next - prev) / 60000) < 15) return null;
+    if (Math.round((next - prev) / 60000) < thresholds.worsening) return null;
     return { title: "Change worsened", body: `${flightText} worsened ${formatHHMMZ(event.previous_edct_utc)} -> ${formatHHMMZ(event.new_edct_utc)}.` };
   }
   if (event.event_type === EVENT_TYPES.IMPROVED && prev && next) {
-    if (Math.round((prev - next) / 60000) < 15) return null;
+    if (Math.round((prev - next) / 60000) < thresholds.improvement) return null;
     return { title: "Change improved", body: `${flightText} improved ${formatHHMMZ(event.previous_edct_utc)} -> ${formatHHMMZ(event.new_edct_utc)}.` };
   }
   if (event.event_type === EVENT_TYPES.REMOVED && event.previous_edct_utc) {

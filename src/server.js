@@ -13,7 +13,8 @@ import {
   parseDateInput,
   sanitizeText
 } from "./edctCore.js";
-import { refreshDueAirports, refreshWorkspace, statusForWorkspace } from "./edctService.js";
+import { backendRuntimeState, noteBackendActivity, refreshDueAirports, refreshWorkspace, statusForWorkspace } from "./edctService.js";
+import { parseFlightEntries } from "./inputParsers.js";
 import { RateLimiter } from "./rateLimit.js";
 import { fetchSourceForAirport } from "./sourceClient.js";
 import { Store } from "./store.js";
@@ -226,7 +227,18 @@ function publicNotification(notification) {
   };
 }
 
-function lookupCandidate(record, fetchedAt) {
+function isWatchedCandidate(record, workspaceId) {
+  return store.data.flights.some((f) =>
+    f.workspace_id === workspaceId &&
+    f.active &&
+    f.normalized_acid === record.acid &&
+    f.origin === record.origin &&
+    f.destination === record.destination
+  );
+}
+
+function lookupCandidate(record, fetchedAt, workspaceId) {
+  const duplicate = isWatchedCandidate(record, workspaceId);
   const candidateId = id("cand");
   const cached = {
     candidate_id: candidateId,
@@ -246,7 +258,8 @@ function lookupCandidate(record, fetchedAt) {
     destination: cached.destination,
     etd_utc: cached.etd_utc,
     current_edct_utc: cached.current_edct_utc,
-    status: "matched"
+    status: duplicate ? "already_watched" : "matched",
+    already_watched: duplicate
   };
 }
 
@@ -295,6 +308,11 @@ async function api(req, res, pathname) {
       last_activity_at: ts,
       ...ipEnrichment(req)
     });
+    const woke = noteBackendActivity(store, "Backend woke after heartbeat");
+    const heartbeatWorkspaceId = session.workspace_id;
+    if (woke && store.data.flights.some((f) => f.workspace_id === heartbeatWorkspaceId && f.active)) {
+      await refreshWorkspace(store, heartbeatWorkspaceId, false, session.id);
+    }
     return send(res, 200, { ok: true, lastHeartbeatAt: ts });
   }
   if (req.method === "GET" && (pathname === "/api/admin/usage" || pathname === "/api/admin/summary")) {
@@ -307,8 +325,12 @@ async function api(req, res, pathname) {
   if (!rate(req, session.id, "api", 240, 60_000)) return send(res, 429, { error: "Too many requests." });
   try {
     if (req.method === "GET" && pathname === "/api/session") {
+      const woke = noteBackendActivity(store, "Backend woke after page load");
       store.update("sessions", session.id, { page_load_count: (session.page_load_count || 0) + 1 });
       store.usage("PAGE_OR_SESSION_LOAD", workspace.id, session.id, {});
+      if (woke && store.data.flights.some((f) => f.workspace_id === workspace.id && f.active)) {
+        await refreshWorkspace(store, workspace.id, false, session.id);
+      }
       return send(res, 200, { session: publicSession(workspace, session) });
     }
     if (req.method === "POST" && pathname === "/api/session/label") {
@@ -331,6 +353,7 @@ async function api(req, res, pathname) {
       const body = await readBody(req);
       const created = store.insert("flights", { ...flightPayload(body, workspace.id), created_at: nowIso() });
       store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination });
+      noteBackendActivity(store, "Backend woke after watched flight was added");
       await refreshWorkspace(store, workspace.id, false, session.id);
       return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.flight_key === created.id) });
     }
@@ -361,18 +384,53 @@ async function api(req, res, pathname) {
       const destination = normalizeAirport(url.searchParams.get("destination") || "");
       const matches = [];
       store.usage("LOOKUP_ATTEMPTED", workspace.id, session.id, { destination });
+      noteBackendActivity(store, "Backend woke after flight lookup");
       const snapshot = await fetchSourceForAirport(destination, nowIso());
       if (snapshot.success) {
         for (const record of snapshot.records) {
           if (record.acid !== flight.normalizedAcid) continue;
           if (record.destination !== destination) continue;
-          matches.push(lookupCandidate(record, snapshot.fetched_at));
+          matches.push(lookupCandidate(record, snapshot.fetched_at, workspace.id));
         }
       }
       store.usage(matches.length ? "LOOKUP_SUCCEEDED" : "LOOKUP_FAILED", workspace.id, session.id, { destination });
       return send(res, 200, {
         candidates: matches,
         message: matches.length ? (matches.some((candidate) => candidate.current_edct_utc) ? "" : `Flight found in ${destination} feed, no active time.`) : "No matching flight found in destination feed."
+      });
+    }
+    if (req.method === "POST" && pathname === "/api/edct/lookup/bulk") {
+      if (!rate(req, session.id, "lookup-bulk", 12, 60_000)) return send(res, 429, { error: "Too many bulk lookups." });
+      purgeLookupCache();
+      const body = await readBody(req);
+      const parsed = parseFlightEntries(body.text || body.input || "", sanitizeText(body.parser || "generic", 40));
+      noteBackendActivity(store, "Backend woke after bulk lookup");
+      const candidates = [];
+      const airportGroups = new Map();
+      for (const entry of parsed.entries.slice(0, 200)) {
+        if (!airportGroups.has(entry.destination)) airportGroups.set(entry.destination, []);
+        airportGroups.get(entry.destination).push(entry);
+      }
+      for (const [destination, entries] of airportGroups.entries()) {
+        store.usage("LOOKUP_ATTEMPTED", workspace.id, session.id, { destination, bulk: true, count: entries.length });
+        const snapshot = await fetchSourceForAirport(destination, nowIso());
+        let matchedForAirport = 0;
+        if (snapshot.success) {
+          for (const entry of entries) {
+            const matches = snapshot.records.filter((record) => record.acid === entry.normalized_acid && record.destination === destination);
+            matchedForAirport += matches.length;
+            for (const record of matches) {
+              candidates.push({ input_key: entry.input_key, ...lookupCandidate(record, snapshot.fetched_at, workspace.id) });
+            }
+          }
+        }
+        store.usage(matchedForAirport ? "LOOKUP_SUCCEEDED" : "LOOKUP_FAILED", workspace.id, session.id, { destination, bulk: true, count: entries.length });
+      }
+      return send(res, 200, {
+        parser: parsed.parser,
+        candidates,
+        errors: parsed.errors,
+        message: candidates.length ? "Review matches, remove any you do not want, then add selected." : "No matching flights found in destination feeds."
       });
     }
     if (req.method === "POST" && pathname === "/api/edct/lookup/add") {
@@ -405,6 +463,7 @@ async function api(req, res, pathname) {
         updated_at: nowIso()
       });
       store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination, lookup: true });
+      noteBackendActivity(store, "Backend woke after watched flight was added");
       await refreshWorkspace(store, workspace.id, false, session.id);
       return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.flight_key === created.id) });
     }
@@ -484,10 +543,9 @@ function adminSummary() {
   todayStart.setUTCHours(0, 0, 0, 0);
   const todayMs = todayStart.getTime();
   const activeSince = now - config.activeSessionThresholdSeconds * 1000;
-  const sleepCutoff = now - config.idleSleepMinutes * 60 * 1000;
   const activeFlights = store.data.flights.filter((f) => f.active);
   const activeSessionsNow = store.data.sessions.filter((s) => sessionActiveMs(s) >= activeSince).length;
-  const hasRecentSession = store.data.sessions.some((s) => sessionActiveMs(s) >= sleepCutoff);
+  const runtime = backendRuntimeState(store);
   const destinationCounts = countBy(activeFlights.map((f) => f.destination).filter(Boolean));
   const prefixCounts = countBy(activeFlights.map((f) => callsignPrefix(f.normalized_acid || f.display_flight_number)).filter(Boolean));
   const airports = Object.keys(destinationCounts).sort();
@@ -499,9 +557,10 @@ function adminSummary() {
   const latestSessionSeenAt = latestDate(store.data.sessions.map((s) => s.last_seen_at));
   const latestUserEventAt = latestDate(store.data.usage_events.map((event) => event.created_at));
   const latestFetchAt = latestDate(store.data.source_airport_snapshots.map((snapshot) => snapshot.fetched_at));
-  const sleeping = !hasRecentSession && activeFlights.length === 0;
   const degraded = sourceHealthByAirport.some((item) => item.state === "degraded" || item.state === "failed");
   const profiles = adminProfiles(activeSince);
+  const lastWakeEvent = latestAdminEvent("backend_woke");
+  const lastSleepEvent = latestAdminEvent("backend_slept");
   const lastActivityAt = latestDate([
     latestSessionSeenAt,
     latestUserEventAt,
@@ -509,7 +568,7 @@ function adminSummary() {
   ]);
 
   return {
-    backendState: degraded ? "degraded" : sleeping ? "sleeping" : "awake",
+    backendState: degraded ? "degraded" : runtime.shouldSleep || runtime.backendSleeping ? "sleeping" : "awake",
     activeSessionsNow,
     sessionsToday: store.data.sessions.filter((s) => dateMs(s.created_at) >= todayMs || dateMs(s.last_seen_at) >= todayMs).length,
     uniqueProfilesToday: store.data.sessions.filter((s) => dateMs(s.created_at) >= todayMs || dateMs(s.last_seen_at) >= todayMs || dateMs(s.last_heartbeat_at) >= todayMs).length,
@@ -533,9 +592,9 @@ function adminSummary() {
     lastUserQueryAt: latestUserEventAt,
     lastHeartbeatAt: latestSessionSeenAt,
     lastFaaFetchAt: latestFetchAt,
-    nextSleepAt: !sleeping && activeFlights.length === 0 && lastActivityAt ? new Date(dateMs(lastActivityAt) + config.idleSleepMinutes * 60 * 1000).toISOString() : null,
-    lastSleepAt: sleeping && lastActivityAt ? new Date(dateMs(lastActivityAt) + config.idleSleepMinutes * 60 * 1000).toISOString() : null,
-    lastWakeAt: sleeping ? null : lastActivityAt,
+    nextSleepAt: runtime.nextSleepAt,
+    lastSleepAt: lastSleepEvent?.created_at || null,
+    lastWakeAt: lastWakeEvent?.created_at || null,
     recentAdminEvents: recentAdminEvents(),
     activeProfiles: profiles.filter((profile) => profile.activeNow).slice(0, 25),
     recentProfiles: profiles.slice(0, 50),
@@ -561,6 +620,12 @@ function latestDate(values) {
     .filter((item) => item.ms > 0)
     .sort((a, b) => b.ms - a.ms)[0];
   return latest?.value || null;
+}
+
+function latestAdminEvent(eventType) {
+  return [...(store.data.admin_events || [])]
+    .filter((event) => event.event_type === eventType)
+    .sort((a, b) => dateMs(b.created_at) - dateMs(a.created_at))[0] || null;
 }
 
 function sessionActiveMs(session) {
@@ -631,6 +696,10 @@ function sanitizeAirportForAdmin(value) {
 }
 
 function recentAdminEvents() {
+  const adminEvents = (store.data.admin_events || []).map((event) => ({
+    createdAt: event.created_at,
+    message: sanitizeText(event.message || event.event_type || "Admin event", 120)
+  }));
   const usageEvents = store.data.usage_events.map((event) => ({
     createdAt: event.created_at,
     message: adminUsageMessage(event)
@@ -639,7 +708,7 @@ function recentAdminEvents() {
     createdAt: event.created_at,
     message: sanitizeText(event.message || event.event_type || "EDCT event", 120)
   }));
-  return [...usageEvents, ...edctEvents]
+  return [...adminEvents, ...usageEvents, ...edctEvents]
     .filter((event) => event.createdAt && event.message)
     .sort((a, b) => dateMs(b.createdAt) - dateMs(a.createdAt))
     .slice(0, 20);

@@ -8,10 +8,12 @@ process.env.NODE_ENV = "test";
 process.env.EDCT_SOURCE_URL = "https://secret-source.example/edct";
 process.env.EDCT_SOURCE_TOKEN = "";
 process.env.ADMIN_TOKEN = "admin-test";
+process.env.EDCT_IDLE_SLEEP_MINUTES = "60";
 process.env.EDCT_DB_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "edct-api-")), "db.json");
 
 const mod = await import(`../src/server.js?test=${Date.now()}`);
 const { server, store } = mod;
+const service = await import(`../src/edctService.js?test=${Date.now()}`);
 const originalFetch = global.fetch;
 
 function listen() {
@@ -243,22 +245,125 @@ test("flight lookup returns sanitized candidates and can add one to monitoring",
   }
 });
 
+test("bulk lookup parses rows, groups airport fetches, and marks duplicate watched flights", async () => {
+  const base = await listen();
+  const cookieRes = await fetch(`${base}/api/session`);
+  const cookie = cookieRes.headers.get("set-cookie").split(";")[0];
+  const sourceUrls = [];
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    sourceUrls.push(String(url));
+    return new Response(JSON.stringify({
+      records: [
+        { acid: "SKW5592", origin: "RDD", destination: "SEA", etd: "E05/1500" },
+        { acid: "UAL1597", origin: "CMH", destination: "SEA", etd: "E05/1600" },
+        { acid: "SKW4115", origin: "ABQ", destination: "PDX", etd: "E05/1700" }
+      ]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const first = await fetch(`${base}/api/edct/lookup/bulk`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ text: "SKW5592   SEA\nUAL1597,SEA\nSKW4115\tPDX" })
+    });
+    assert.equal(first.status, 200, await first.clone().text());
+    const body = await first.json();
+    assert.equal(body.candidates.length, 3);
+    assert.equal(sourceUrls.length, 2);
+    assert.equal(JSON.stringify(body).includes("source_record"), false);
+    assert.equal(JSON.stringify(body).includes("normalized_acid"), false);
+    const added = await fetch(`${base}/api/edct/lookup/add`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ candidate_key: body.candidates[0].candidate_key })
+    });
+    assert.equal(added.status, 201, await added.text());
+    const duplicate = await fetch(`${base}/api/edct/lookup/bulk`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ text: "SKW5592 SEA" })
+    });
+    const duplicateBody = await duplicate.json();
+    assert.equal(duplicateBody.candidates[0].already_watched, true);
+    assert.equal(duplicateBody.candidates[0].status, "already_watched");
+  } finally {
+    global.fetch = originalFetch;
+    await close();
+  }
+});
+
+test("scheduled polling sleeps when idle and wakes for active monitoring", async () => {
+  const oldTs = new Date(Date.now() - 61 * 60 * 1000).toISOString();
+  for (const flight of store.data.flights) store.update("flights", flight.id, { active: false, updated_at: oldTs });
+  for (const existingSession of store.data.sessions) {
+    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+  }
+  const workspace = store.insert("workspaces", { created_at: oldTs, updated_at: oldTs, optional_label: "", monitoring_enabled: true, refresh_interval_minutes: 5 });
+  const session = store.insert("sessions", {
+    id: "sess_idle_polling",
+    workspace_id: workspace.id,
+    created_at: oldTs,
+    last_seen_at: oldTs,
+    last_activity_at: oldTs,
+    last_heartbeat_at: oldTs,
+    user_agent_approx: "test",
+    ip_hash: "hash",
+    notification_permission: "default",
+    api_activity_count: 0,
+    page_load_count: 0
+  });
+  service.noteBackendActivity(store, "Backend woke for test");
+  const slept = await service.refreshDueAirports(store);
+  assert.equal(slept.sleeping, true);
+  assert.ok(store.data.admin_events.some((event) => event.event_type === "backend_slept"));
+
+  const now = new Date().toISOString();
+  store.update("sessions", session.id, { last_seen_at: now, last_activity_at: now, last_heartbeat_at: now });
+  store.insert("flights", {
+    workspace_id: workspace.id,
+    display_flight_number: "UAL1597",
+    normalized_acid: "UAL1597",
+    origin: "CMH",
+    destination: "PHX",
+    etd_utc: now,
+    operational_day_key: now.slice(0, 10),
+    active: true,
+    created_at: now,
+    updated_at: now
+  });
+  let sourceFetches = 0;
+  global.fetch = async (url, init) => {
+    sourceFetches += 1;
+    return new Response(JSON.stringify({ records: [{ acid: "UAL1597", origin: "CMH", destination: "PHX", etd: "E05/1600" }] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const woke = await service.refreshDueAirports(store);
+    assert.equal(woke.sleeping, false);
+    assert.ok(woke.airports.includes("PHX"));
+    assert.equal(sourceFetches, 1);
+    assert.ok(store.data.admin_events.some((event) => event.event_type === "backend_woke"));
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("failed source fetch keeps previous EDCT and successful omission removes it", async () => {
   const base = await listen();
   const cookieRes = await fetch(`${base}/api/session`);
   const cookie = cookieRes.headers.get("set-cookie").split(";")[0];
   global.fetch = async (url, init) => {
     if (String(url).startsWith(base)) return originalFetch(url, init);
-    return new Response(JSON.stringify({ records: [{ acid: "SKW5338", origin: "FAT", destination: "LAX", etd: "E051500" }] }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ records: [{ acid: "SKW5338", origin: "FAT", destination: "SAN", etd: "E051500" }] }), { status: 200, headers: { "content-type": "application/json" } });
   };
   try {
     const created = await fetch(`${base}/api/flights`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ flight_number: "5338", origin: "FAT", destination: "LAX", etd: "2026-06-05T14:00:00.000Z", scheduled_departure_utc: "2026-06-05T14:00:00.000Z" })
+      body: JSON.stringify({ flight_number: "5338", origin: "FAT", destination: "SAN", etd: "2026-06-05T14:00:00.000Z", scheduled_departure_utc: "2026-06-05T14:00:00.000Z" })
     });
     assert.equal(created.status, 201, await created.text());
-    let state = store.data.edct_flight_states.find((s) => s.normalized_acid === "SKW5338" && s.origin === "FAT" && s.destination === "LAX");
+    let state = store.data.edct_flight_states.find((s) => s.normalized_acid === "SKW5338" && s.origin === "FAT" && s.destination === "SAN");
     assert.ok(state);
     assert.equal(state.current_edct_utc, "2026-06-05T15:00:00.000Z");
     const publicFlights = await fetch(`${base}/api/flights`, { headers: { cookie } });
@@ -275,14 +380,14 @@ test("failed source fetch keeps previous EDCT and successful omission removes it
       return new Response("nope", { status: 500 });
     };
     await fetch(`${base}/api/edct/refresh`, { method: "POST", headers: { cookie } });
-    state = store.data.edct_flight_states.find((s) => s.normalized_acid === "SKW5338" && s.origin === "FAT" && s.destination === "LAX");
+    state = store.data.edct_flight_states.find((s) => s.normalized_acid === "SKW5338" && s.origin === "FAT" && s.destination === "SAN");
     assert.equal(state.current_edct_utc, "2026-06-05T15:00:00.000Z");
     global.fetch = async (url, init) => {
       if (String(url).startsWith(base)) return originalFetch(url, init);
       return new Response(JSON.stringify({ records: [] }), { status: 200, headers: { "content-type": "application/json" } });
     };
     await fetch(`${base}/api/edct/refresh`, { method: "POST", headers: { cookie } });
-    state = store.data.edct_flight_states.find((s) => s.normalized_acid === "SKW5338" && s.origin === "FAT" && s.destination === "LAX");
+    state = store.data.edct_flight_states.find((s) => s.normalized_acid === "SKW5338" && s.origin === "FAT" && s.destination === "SAN");
     assert.equal(state.current_edct_utc, null);
     assert.ok(store.data.edct_events.some((e) => e.event_type === "EDCT_REMOVED"));
   } finally {

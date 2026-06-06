@@ -1,4 +1,4 @@
-const state = { flights: [], events: [], session: null, status: null, pending: [] };
+const state = { flights: [], events: [], session: null, status: null, pending: [], candidates: [] };
 const $ = (id) => document.getElementById(id);
 const API_BASE_URL = String(window.EDCT_API_BASE_URL || "").replace(/\/+$/, "");
 
@@ -64,6 +64,7 @@ function render() {
   renderWarning();
   renderFlights();
   renderAlerts();
+  renderStats();
   renderBadge();
 }
 
@@ -123,6 +124,15 @@ function renderAlerts() {
   $("alertsModalList").innerHTML = state.events.map((event) => `<div class="alert-line">${escapeHtml(alertText(event))}</div>`).join("") || `<div class="empty">No alerts yet.</div>`;
 }
 
+function renderStats() {
+  const airports = new Set(state.flights.map((flight) => flight.destination)).size;
+  $("quickStats").innerHTML = `
+    <div><strong>${state.flights.length}</strong><span>watched</span></div>
+    <div><strong>${airports}</strong><span>airports</span></div>
+    <div><strong>${state.events.length}</strong><span>alerts</span></div>
+  `;
+}
+
 function renderBadge() {
   const count = state.pending.length;
   $("alertBadge").hidden = count === 0;
@@ -157,23 +167,35 @@ function setLookupMessage(message, isError = false) {
 }
 
 function renderCandidates(candidates) {
-  $("candidateList").innerHTML = candidates.map((candidate) => `
-      <button class="candidate" type="button" data-candidate="${escapeHtml(candidate.candidate_key)}">
-      <strong>${escapeHtml(candidate.flight_number)}</strong>
-      <span>${escapeHtml(candidate.origin)}-${escapeHtml(candidate.destination)}</span>
-      <span>${escapeHtml(candidate.etd_utc ? `ETD ${hhmmz(candidate.etd_utc)}` : "ETD --")}</span>
-      <span>${escapeHtml(candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "No time")}</span>
-    </button>
+  state.candidates = candidates || [];
+  $("bulkAddSelectedBtn").hidden = !state.candidates.some((candidate) => !candidate.already_watched);
+  $("candidateList").innerHTML = state.candidates.map((candidate) => `
+    <div class="candidate" data-candidate-row="${escapeHtml(candidate.candidate_key)}">
+      <button class="candidate-main" type="button" data-candidate="${escapeHtml(candidate.candidate_key)}" ${candidate.already_watched ? "disabled" : ""}>
+        <strong>${escapeHtml(candidate.flight_number)}</strong>
+        <span>${escapeHtml(candidate.origin)}-${escapeHtml(candidate.destination)}</span>
+        <span>${escapeHtml(candidate.etd_utc ? `ETD ${hhmmz(candidate.etd_utc)}` : "ETD --")}</span>
+        <span>${escapeHtml(candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "No time")}</span>
+        <span>${escapeHtml(candidate.already_watched ? "Watched" : "Add")}</span>
+      </button>
+      <button class="candidate-remove secondary" type="button" data-remove-candidate="${escapeHtml(candidate.candidate_key)}" aria-label="Remove candidate">x</button>
+    </div>
   `).join("");
 }
 
-async function monitorCandidate(candidateId) {
+async function monitorCandidate(candidateId, options = {}) {
   setLookupMessage("Adding flight...");
   await api("/api/edct/lookup/add", { method: "POST", body: JSON.stringify({ candidate_key: candidateId }) });
-  $("candidateList").innerHTML = "";
+  state.candidates = state.candidates.filter((candidate) => candidate.candidate_key !== candidateId);
+  renderCandidates(state.candidates);
   setLookupMessage("");
-  closeAddPanel();
+  if (!options.keepOpen) closeAddPanel();
   await loadAll();
+  if (options.keepOpen) {
+    const form = $("lookupForm");
+    form.elements.flight.value = "";
+    form.elements.flight.focus();
+  }
 }
 
 async function pollNotifications() {
@@ -220,6 +242,8 @@ function closeAddPanel() {
   $("addPanel").hidden = true;
   $("showAddBtn").hidden = false;
   $("lookupForm").reset();
+  $("bulkAddSelectedBtn").hidden = true;
+  state.candidates = [];
   $("candidateList").innerHTML = "";
   setLookupMessage("");
 }
@@ -250,19 +274,6 @@ $("closeSummaryBtn").addEventListener("click", () => $("summaryModal").close());
 $("closeAlertsBtn").addEventListener("click", () => $("alertsModal").close());
 $("alertsToggle").addEventListener("click", () => $("alertsModal").showModal());
 
-$("flightForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const fd = new FormData(form);
-  await addFlight({
-    flight_number: fd.get("flight_number"),
-    origin: fd.get("origin"),
-    destination: fd.get("destination"),
-    etd: toUtcFromLocal(fd.get("etd"))
-  });
-  form.reset();
-});
-
 $("lookupForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -274,8 +285,8 @@ $("lookupForm").addEventListener("submit", async (event) => {
   try {
     const params = new URLSearchParams({ flight, destination });
     const data = await api(`/api/edct/lookup?${params.toString()}`);
-    if (data.candidates.length === 1 && data.candidates[0].current_edct_utc) {
-      await monitorCandidate(data.candidates[0].candidate_key);
+    if (data.candidates.length === 1 && !data.candidates[0].already_watched) {
+      await monitorCandidate(data.candidates[0].candidate_key, { keepOpen: true });
       return;
     }
     if (data.candidates.length > 0) {
@@ -289,13 +300,28 @@ $("lookupForm").addEventListener("submit", async (event) => {
   }
 });
 
-$("bulkAddBtn").addEventListener("click", async () => {
-  const lines = $("bulkInput").value.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  for (const line of lines) {
-    const [flight_number, origin, destination, etd] = line.split(/[,\s]+/);
-    if (flight_number && origin && destination && etd) await addFlight({ flight_number, origin, destination, etd: new Date(etd).toISOString() });
+$("bulkFindBtn").addEventListener("click", async () => {
+  const text = $("bulkInput").value;
+  if (!text.trim()) return;
+  setLookupMessage("Searching rows...");
+  $("candidateList").innerHTML = "";
+  try {
+    const data = await api("/api/edct/lookup/bulk", { method: "POST", body: JSON.stringify({ text, parser: "generic" }) });
+    renderCandidates(data.candidates || []);
+    const parseErrors = (data.errors || []).map((item) => `Line ${item.line || "-"}: ${item.message}`).join(" ");
+    setLookupMessage([data.message, parseErrors].filter(Boolean).join(" "));
+  } catch (error) {
+    setLookupMessage(error.message || "Bulk lookup failed.", true);
+  }
+});
+
+$("bulkAddSelectedBtn").addEventListener("click", async () => {
+  const selected = state.candidates.filter((candidate) => !candidate.already_watched);
+  for (const candidate of selected) {
+    await monitorCandidate(candidate.candidate_key, { keepOpen: true });
   }
   $("bulkInput").value = "";
+  setLookupMessage("Selected flights added.");
 });
 
 $("notifyBtn").addEventListener("click", async () => {
@@ -315,9 +341,15 @@ document.addEventListener("click", async (event) => {
     await loadAll();
     return;
   }
-  const candidateId = event.target.dataset.candidate;
-  if (candidateId) {
-    await monitorCandidate(candidateId);
+  const candidateButton = event.target.closest("[data-candidate]");
+  if (candidateButton) {
+    await monitorCandidate(candidateButton.dataset.candidate, { keepOpen: true });
+    return;
+  }
+  const removeCandidateId = event.target.dataset.removeCandidate;
+  if (removeCandidateId) {
+    state.candidates = state.candidates.filter((candidate) => candidate.candidate_key !== removeCandidateId);
+    renderCandidates(state.candidates);
     return;
   }
   const row = event.target.closest("[data-flight]");

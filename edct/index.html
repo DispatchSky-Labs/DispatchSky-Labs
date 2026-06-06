@@ -40,22 +40,21 @@
         <div id="lookupMessage" class="lookup-message"></div>
         <div id="candidateList" class="candidate-list"></div>
         <details class="advanced-import">
-          <summary>Paste/import flights</summary>
-          <form id="flightForm" class="flight-form">
-            <input name="flight_number" autocomplete="off" placeholder="Flight" required>
-            <input name="origin" autocomplete="off" placeholder="Origin" maxlength="4" required>
-            <input name="destination" autocomplete="off" placeholder="Dest" maxlength="4" required>
-            <input name="etd" type="datetime-local" required>
-            <button type="submit">Add</button>
-          </form>
-          <textarea id="bulkInput" placeholder="Paste flights: flight origin destination ETD, one per line"></textarea>
-          <button id="bulkAddBtn" type="button">Import pasted flights</button>
+          <summary>Dispatcher bulk entry</summary>
+          <textarea id="bulkInput" spellcheck="false" placeholder="SKW5592   SFO&#10;SKW4115   LAX&#10;UAL1597   SFO"></textarea>
+          <div class="bulk-actions">
+            <button id="bulkFindBtn" type="button">Find rows</button>
+            <button id="bulkAddSelectedBtn" class="secondary" type="button" hidden>Add selected</button>
+          </div>
+          <p class="parser-note">Accepts spaces, tabs, or comma-separated callsign/destination rows. Sabre dump support will plug into this parser layer later.</p>
         </details>
       </section>
 
       <section class="watchlist" aria-label="Watched flights">
         <div id="flightRows" class="flight-rows"></div>
       </section>
+
+      <section id="quickStats" class="quick-stats" aria-label="Statistics"></section>
 
       <section id="recentAlerts" class="recent-alerts" hidden>
         <button id="alertsToggle" class="link-button" type="button">Recent alerts</button>

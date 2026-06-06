@@ -12,6 +12,7 @@ import {
   notificationFor,
   parseCompactEdct
 } from "../src/edctCore.js";
+import { parseFlightEntries } from "../src/inputParsers.js";
 import { Store } from "../src/store.js";
 
 test("flight and airport normalization", () => {
@@ -49,6 +50,23 @@ test("notification thresholds are enforced", () => {
   assert.equal(notificationFor({ event_type: EVENT_TYPES.WORSENED, previous_edct_utc: "2026-06-05T14:20:00.000Z", new_edct_utc: "2026-06-05T14:30:00.000Z" }, flight), null);
   assert.ok(notificationFor({ event_type: EVENT_TYPES.WORSENED, previous_edct_utc: "2026-06-05T14:20:00.000Z", new_edct_utc: "2026-06-05T14:35:00.000Z" }, flight));
   assert.ok(notificationFor({ event_type: EVENT_TYPES.REMOVED, previous_edct_utc: "2026-06-05T14:20:00.000Z" }, flight));
+  assert.equal(notificationFor({ event_type: EVENT_TYPES.WORSENED, previous_edct_utc: "2026-06-05T14:20:00.000Z", new_edct_utc: "2026-06-05T14:25:00.000Z" }, flight, "aggressive")?.title, "Change worsened");
+  assert.equal(notificationFor({ event_type: EVENT_TYPES.WORSENED, previous_edct_utc: "2026-06-05T14:20:00.000Z", new_edct_utc: "2026-06-05T14:45:00.000Z" }, flight, "quiet"), null);
+  assert.ok(notificationFor({ event_type: EVENT_TYPES.WORSENED, previous_edct_utc: "2026-06-05T14:20:00.000Z", new_edct_utc: "2026-06-05T14:50:00.000Z" }, flight, "quiet"));
+});
+
+test("bulk table parser accepts mixed delimiters and keeps Sabre parser as future hook", () => {
+  const parsed = parseFlightEntries("SKW5592   SFO\nUAL1597,SFO\nAAL3288\tPHX", "generic");
+  assert.equal(parsed.parser, "simple_table");
+  assert.equal(parsed.errors.length, 0);
+  assert.deepEqual(parsed.entries.map((entry) => [entry.normalized_acid, entry.destination]), [
+    ["SKW5592", "SFO"],
+    ["UAL1597", "SFO"],
+    ["AAL3288", "PHX"]
+  ]);
+  const sabre = parseFlightEntries("SABRE DUMP", "sabre_future");
+  assert.equal(sabre.entries.length, 0);
+  assert.match(sabre.errors[0].message, /future/);
 });
 
 test("database-level EDCT event dedupe key prevents repeated inserts", () => {
