@@ -33,6 +33,7 @@ export async function refreshWorkspace(store, workspaceId, manual = false, sessi
       normalized_records: snapshot.success ? snapshot.records : [],
       error_message: snapshot.error_message || ""
     });
+    store.usage(snapshot.success && !snapshot.stale ? "SOURCE_FETCH_SUCCESS" : "SOURCE_FETCH_FAILED", workspaceId, sessionId, { airport });
     if (snapshot.success && !snapshot.stale) summary.fetched += snapshot.record_count;
     for (const flight of flights.filter((f) => f.destination === airport)) {
       const match = snapshot.success

@@ -69,12 +69,15 @@ Required Railway variables:
 - `EDCT_AIRPORT_CACHE_TTL_SECONDS`: optional server-side airport feed cache TTL, default `60`.
 - `EDCT_POLL_INTERVAL_MINUTES`: optional, clamped to 1-30.
 - `EDCT_IDLE_SLEEP_MINUTES`: optional inactivity threshold for stopping scheduled polling, default `30`.
+- `EDCT_ACTIVE_SESSION_THRESHOLD_SECONDS`: optional admin active-session threshold based on recent heartbeat/API activity, default `180`.
 - `EDCT_MONITORED_DESTINATIONS`: optional comma-separated default destinations.
 - `EDCT_ALLOWED_ORIGINS`: exact browser origins allowed to call the Railway API. Production should include `https://sadiom.com`; local dev can include `http://localhost:3000` or another local origin.
 - `ADMIN_TOKEN`: required for `GET /api/admin/summary` and `GET /api/admin/usage`.
 - `EDCT_DB_FILE`: required for the standalone file-backed store. On Railway, point this at a mounted volume path for persistence. Without a volume, file storage is ephemeral.
 
 No `SESSION_SECRET` is currently used because anonymous session IDs are random opaque identifiers stored server-side and in an httpOnly cookie.
+
+Admin analytics enrich anonymous sessions only from server-observed request data. The browser does not call any IP, geo, ASN, analytics, or tracking provider. If the hosting edge provides coarse headers such as country, region, city, timezone, ASN, or organization, the backend stores those sanitized values for the protected owner dashboard. Exact IP addresses are not stored by this implementation; only a short hash is retained.
 
 ## Static Frontend API Base
 

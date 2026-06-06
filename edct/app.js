@@ -203,6 +203,13 @@ async function pollNotifications() {
   }
 }
 
+async function heartbeat() {
+  try {
+    await api("/api/session/heartbeat", { method: "POST", body: "{}" });
+  } catch {
+  }
+}
+
 function openAddPanel() {
   $("addPanel").hidden = false;
   $("showAddBtn").hidden = true;
@@ -325,9 +332,13 @@ document.addEventListener("keydown", (event) => {
   showSummary(row.dataset.flight);
 });
 
-loadAll().then(pollNotifications).catch((error) => {
+loadAll().then(() => {
+  heartbeat();
+  pollNotifications();
+}).catch((error) => {
   $("warningBanner").textContent = "Backend unavailable. Verify official source.";
   $("warningBanner").hidden = false;
 });
 setInterval(loadAll, 60_000);
+setInterval(heartbeat, 45_000);
 setInterval(pollNotifications, 30_000);

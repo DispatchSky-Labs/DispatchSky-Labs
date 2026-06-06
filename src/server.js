@@ -45,6 +45,26 @@ function userAgentApprox(req) {
   return sanitizeText(String(req.headers["user-agent"] || "").split(" ").slice(0, 4).join(" "), 120);
 }
 
+function ipEnrichment(req) {
+  const country = sanitizeGeoValue(req.headers["cf-ipcountry"] || req.headers["x-vercel-ip-country"] || req.headers["x-railway-ip-country"], 2);
+  const region = sanitizeGeoValue(req.headers["x-vercel-ip-country-region"] || req.headers["x-railway-ip-region"], 80);
+  const city = sanitizeGeoValue(req.headers["x-vercel-ip-city"] || req.headers["x-railway-ip-city"], 80);
+  const timezone = sanitizeGeoValue(req.headers["x-vercel-ip-timezone"] || req.headers["x-railway-ip-timezone"], 80);
+  const asn = sanitizeAsn(req.headers["cf-asn"] || req.headers["x-vercel-ip-as-number"] || req.headers["x-railway-ip-asn"]);
+  const organization = sanitizeText(req.headers["x-vercel-ip-as-organization"] || req.headers["x-railway-ip-organization"] || "", 120);
+  return { country, region, city, timezone, asn, organization };
+}
+
+function sanitizeGeoValue(value, maxLength) {
+  const cleaned = sanitizeText(String(value || ""), maxLength);
+  return /^[A-Za-z0-9 ._/-]+$/.test(cleaned) ? cleaned : "";
+}
+
+function sanitizeAsn(value) {
+  const cleaned = String(value || "").trim().toUpperCase().replace(/^AS/, "");
+  return /^\d{1,10}$/.test(cleaned) ? `AS${cleaned}` : "";
+}
+
 function parseCookies(req) {
   return Object.fromEntries(String(req.headers.cookie || "").split(";").map((part) => {
     const [k, ...v] = part.trim().split("=");
@@ -97,10 +117,17 @@ function send(res, status, body) {
 function sessionFor(req, res) {
   const cookies = parseCookies(req);
   const sessionId = /^sess_[a-f0-9]{32}$/.test(cookies.device_session_id || "") ? cookies.device_session_id : id("sess");
-  const result = store.ensureSession(sessionId, userAgentApprox(req), ipHash(req));
+  const result = store.ensureSession(sessionId, userAgentApprox(req), ipHash(req), ipEnrichment(req));
   const sameSite = isCrossOriginRequest(req) ? "None" : "Lax";
   res.setHeader("Set-Cookie", `device_session_id=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=${sameSite}; Max-Age=31536000`);
   return result;
+}
+
+function existingSessionFromCookie(req) {
+  const cookies = parseCookies(req);
+  const sessionId = /^sess_[a-f0-9]{32}$/.test(cookies.device_session_id || "") ? cookies.device_session_id : "";
+  if (!sessionId) return null;
+  return store.data.sessions.find((s) => s.id === sessionId) || null;
 }
 
 function readBody(req) {
@@ -121,7 +148,12 @@ function readBody(req) {
 }
 
 function rate(req, sessionId, name, limit, windowMs) {
-  return limiter.check(`${name}:${sessionId}:${ipHash(req)}`, limit, windowMs);
+  const ok = limiter.check(`${name}:${sessionId}:${ipHash(req)}`, limit, windowMs);
+  if (!ok) {
+    const session = store.data.sessions.find((s) => s.id === sessionId);
+    store.usage("RATE_LIMITED", session?.workspace_id || null, session?.id || null, { route: sanitizeText(name, 40) });
+  }
+  return ok;
 }
 
 function publicSession(workspace, session) {
@@ -252,10 +284,30 @@ async function api(req, res, pathname) {
       time: nowIso()
     });
   }
+  if (req.method === "POST" && pathname === "/api/session/heartbeat") {
+    const session = existingSessionFromCookie(req);
+    if (!session) return send(res, 401, { error: "Session required." });
+    if (!rate(req, session.id, "heartbeat", 90, 60_000)) return send(res, 429, { error: "Too many heartbeats." });
+    const ts = nowIso();
+    store.update("sessions", session.id, {
+      last_seen_at: ts,
+      last_heartbeat_at: ts,
+      last_activity_at: ts,
+      ...ipEnrichment(req)
+    });
+    return send(res, 200, { ok: true, lastHeartbeatAt: ts });
+  }
+  if (req.method === "GET" && (pathname === "/api/admin/usage" || pathname === "/api/admin/summary")) {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    if (!config.adminToken || token !== config.adminToken) return send(res, 403, { error: "Forbidden." });
+    return send(res, 200, pathname === "/api/admin/summary" ? adminSummary() : adminUsage());
+  }
   const { session, workspace } = sessionFor(req, res);
   if (!rate(req, session.id, "api", 240, 60_000)) return send(res, 429, { error: "Too many requests." });
   try {
     if (req.method === "GET" && pathname === "/api/session") {
+      store.update("sessions", session.id, { page_load_count: (session.page_load_count || 0) + 1 });
       store.usage("PAGE_OR_SESSION_LOAD", workspace.id, session.id, {});
       return send(res, 200, { session: publicSession(workspace, session) });
     }
@@ -308,6 +360,7 @@ async function api(req, res, pathname) {
       const flight = normalizeFlightNumber(url.searchParams.get("flight") || "");
       const destination = normalizeAirport(url.searchParams.get("destination") || "");
       const matches = [];
+      store.usage("LOOKUP_ATTEMPTED", workspace.id, session.id, { destination });
       const snapshot = await fetchSourceForAirport(destination, nowIso());
       if (snapshot.success) {
         for (const record of snapshot.records) {
@@ -316,6 +369,7 @@ async function api(req, res, pathname) {
           matches.push(lookupCandidate(record, snapshot.fetched_at));
         }
       }
+      store.usage(matches.length ? "LOOKUP_SUCCEEDED" : "LOOKUP_FAILED", workspace.id, session.id, { destination });
       return send(res, 200, {
         candidates: matches,
         message: matches.length ? (matches.some((candidate) => candidate.current_edct_utc) ? "" : `Flight found in ${destination} feed, no active time.`) : "No matching flight found in destination feed."
@@ -372,6 +426,7 @@ async function api(req, res, pathname) {
     if (req.method === "POST" && pathname === "/api/notifications/mark-delivered") {
       const body = await readBody(req);
       const notificationIds = Array.isArray(body.notification_keys) ? body.notification_keys : Array.isArray(body.notification_ids) ? body.notification_ids : Array.isArray(body.notification_event_ids) ? body.notification_event_ids : [];
+      let deliveredCount = 0;
       for (const notificationId of notificationIds) {
         if (store.data.notification_events.some((n) => n.id === notificationId && n.workspace_id === workspace.id)) {
           store.insert("notification_deliveries", {
@@ -381,15 +436,11 @@ async function api(req, res, pathname) {
             attempted_at: nowIso(),
             delivered_at: body.delivery_state === "failed" ? null : nowIso()
           });
+          deliveredCount += body.delivery_state === "failed" ? 0 : 1;
         }
       }
+      if (deliveredCount) store.usage("NOTIFICATION_DELIVERED", workspace.id, session.id, { count: deliveredCount });
       return send(res, 200, { ok: true });
-    }
-    if (req.method === "GET" && (pathname === "/api/admin/usage" || pathname === "/api/admin/summary")) {
-      res.setHeader("X-Robots-Tag", "noindex, nofollow");
-      const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-      if (!config.adminToken || token !== config.adminToken) return send(res, 403, { error: "Forbidden." });
-      return send(res, 200, pathname === "/api/admin/summary" ? adminSummary() : adminUsage());
     }
     return send(res, 404, { error: "Not found." });
   } catch (error) {
@@ -432,12 +483,13 @@ function adminSummary() {
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
   const todayMs = todayStart.getTime();
-  const activeSince = now - 15 * 60 * 1000;
+  const activeSince = now - config.activeSessionThresholdSeconds * 1000;
   const sleepCutoff = now - config.idleSleepMinutes * 60 * 1000;
   const activeFlights = store.data.flights.filter((f) => f.active);
-  const activeSessionsNow = store.data.sessions.filter((s) => dateMs(s.last_seen_at) >= activeSince).length;
-  const hasRecentSession = store.data.sessions.some((s) => dateMs(s.last_seen_at) >= sleepCutoff);
+  const activeSessionsNow = store.data.sessions.filter((s) => sessionActiveMs(s) >= activeSince).length;
+  const hasRecentSession = store.data.sessions.some((s) => sessionActiveMs(s) >= sleepCutoff);
   const destinationCounts = countBy(activeFlights.map((f) => f.destination).filter(Boolean));
+  const prefixCounts = countBy(activeFlights.map((f) => callsignPrefix(f.normalized_acid || f.display_flight_number)).filter(Boolean));
   const airports = Object.keys(destinationCounts).sort();
   const snapshotByAirport = latestSnapshotsByAirport(store.data.source_airport_snapshots);
   const sourceHealthByAirport = airports.map((airport) => adminAirportHealth(airport, snapshotByAirport.get(airport)));
@@ -449,6 +501,7 @@ function adminSummary() {
   const latestFetchAt = latestDate(store.data.source_airport_snapshots.map((snapshot) => snapshot.fetched_at));
   const sleeping = !hasRecentSession && activeFlights.length === 0;
   const degraded = sourceHealthByAirport.some((item) => item.state === "degraded" || item.state === "failed");
+  const profiles = adminProfiles(activeSince);
   const lastActivityAt = latestDate([
     latestSessionSeenAt,
     latestUserEventAt,
@@ -459,6 +512,7 @@ function adminSummary() {
     backendState: degraded ? "degraded" : sleeping ? "sleeping" : "awake",
     activeSessionsNow,
     sessionsToday: store.data.sessions.filter((s) => dateMs(s.created_at) >= todayMs || dateMs(s.last_seen_at) >= todayMs).length,
+    uniqueProfilesToday: store.data.sessions.filter((s) => dateMs(s.created_at) >= todayMs || dateMs(s.last_seen_at) >= todayMs || dateMs(s.last_heartbeat_at) >= todayMs).length,
     flightsWatchedNow: activeFlights.length,
     flightsWatchedToday: store.data.flights.filter((f) => dateMs(f.created_at) >= todayMs || dateMs(f.updated_at) >= todayMs).length,
     airportsWatched: airports.length,
@@ -466,7 +520,10 @@ function adminSummary() {
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 10)
       .map(([airport, count]) => ({ airport, count })),
+    topCallsignPrefixes: countedList(prefixCounts, "prefix", 10),
+    likelyOperatorSignals: likelyOperatorSignals(prefixCounts, destinationCounts),
     alertsGeneratedToday: store.data.edct_events.filter((event) => dateMs(event.created_at) >= todayMs).length,
+    notificationsDeliveredToday: store.data.notification_deliveries.filter((delivery) => delivery.delivery_state === "delivered" && dateMs(delivery.delivered_at || delivery.attempted_at) >= todayMs).length,
     lookupFailuresToday: store.data.usage_events.filter((event) =>
       dateMs(event.created_at) >= todayMs &&
       (event.event_type === "LOOKUP_FAILED" || event.event_type === "FLIGHT_LOOKUP_FAILED")
@@ -479,7 +536,10 @@ function adminSummary() {
     nextSleepAt: !sleeping && activeFlights.length === 0 && lastActivityAt ? new Date(dateMs(lastActivityAt) + config.idleSleepMinutes * 60 * 1000).toISOString() : null,
     lastSleepAt: sleeping && lastActivityAt ? new Date(dateMs(lastActivityAt) + config.idleSleepMinutes * 60 * 1000).toISOString() : null,
     lastWakeAt: sleeping ? null : lastActivityAt,
-    recentAdminEvents: recentAdminEvents()
+    recentAdminEvents: recentAdminEvents(),
+    activeProfiles: profiles.filter((profile) => profile.activeNow).slice(0, 25),
+    recentProfiles: profiles.slice(0, 50),
+    securitySummary: securitySummary(todayMs)
   };
 }
 
@@ -501,6 +561,28 @@ function latestDate(values) {
     .filter((item) => item.ms > 0)
     .sort((a, b) => b.ms - a.ms)[0];
   return latest?.value || null;
+}
+
+function sessionActiveMs(session) {
+  return Math.max(dateMs(session.last_heartbeat_at), dateMs(session.last_activity_at), dateMs(session.last_seen_at));
+}
+
+function countedList(counts, key = "name", limit = 10) {
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([value, count]) => ({ [key]: value, count }));
+}
+
+function callsignPrefix(value) {
+  const prefix = String(value || "").toUpperCase().match(/^[A-Z]{2,4}/)?.[0] || "";
+  return prefix;
+}
+
+function likelyOperatorSignals(prefixCounts, destinationCounts) {
+  const signals = countedList(prefixCounts, "signal", 5).map((item) => ({ signal: `${item.signal}-heavy`, count: item.count }));
+  if (!signals.length && Object.keys(destinationCounts).length) return [{ signal: "destination-pattern-only", count: Object.keys(destinationCounts).length }];
+  return signals.length ? signals : [{ signal: "unknown", count: 0 }];
 }
 
 function latestSnapshotsByAirport(snapshots) {
@@ -561,6 +643,116 @@ function recentAdminEvents() {
     .filter((event) => event.createdAt && event.message)
     .sort((a, b) => dateMs(b.createdAt) - dateMs(a.createdAt))
     .slice(0, 20);
+}
+
+function adminProfiles(activeSince) {
+  return store.data.sessions
+    .map((session) => adminProfile(session, activeSince))
+    .sort((a, b) => dateMs(b.lastSeenAt) - dateMs(a.lastSeenAt));
+}
+
+function adminProfile(session, activeSince) {
+  const workspaceFlights = store.data.flights.filter((f) => f.workspace_id === session.workspace_id && f.active);
+  const usage = store.data.usage_events.filter((event) => event.session_id === session.id);
+  const destinationCounts = countBy(workspaceFlights.map((f) => f.destination).filter(Boolean));
+  const prefixCounts = countBy(workspaceFlights.map((f) => callsignPrefix(f.normalized_acid || f.display_flight_number)).filter(Boolean));
+  const profileActiveMs = sessionActiveMs(session);
+  const device = parseDevice(session.user_agent_approx);
+  return {
+    shortSessionId: shortOpaqueId(session.id),
+    firstSeenAt: session.created_at || null,
+    lastSeenAt: latestDate([session.last_seen_at, session.last_activity_at, session.last_heartbeat_at]),
+    lastHeartbeatAt: session.last_heartbeat_at || null,
+    activeNow: profileActiveMs >= activeSince,
+    sessionAge: sessionAgeLabel(session.created_at),
+    approximateDevice: device.device,
+    browser: device.browser,
+    platform: device.platform,
+    timezone: session.timezone || "",
+    country: session.country || "",
+    region: session.region || "",
+    city: session.city || "",
+    asn: session.asn || "",
+    organization: session.organization || "",
+    totalPageLoads: session.page_load_count || usage.filter((event) => event.event_type === "PAGE_OR_SESSION_LOAD").length,
+    totalLookups: usage.filter((event) => event.event_type === "LOOKUP_ATTEMPTED").length,
+    failedLookups: usage.filter((event) => event.event_type === "LOOKUP_FAILED" || event.event_type === "FLIGHT_LOOKUP_FAILED").length,
+    flightsAdded: usage.filter((event) => event.event_type === "FLIGHT_ADDED").length,
+    flightsDeleted: usage.filter((event) => event.event_type === "FLIGHT_DELETED").length,
+    currentWatchedFlightsCount: workspaceFlights.length,
+    currentWatchedFlights: workspaceFlights.slice(0, 25).map(adminWatchedFlight),
+    topDestinations: countedList(destinationCounts, "airport", 8),
+    topCallsignPrefixes: countedList(prefixCounts, "prefix", 8),
+    alertsGenerated: usage.filter((event) => event.event_type === "EDCT_EVENT_GENERATED").length,
+    notificationsDelivered: notificationDeliveriesForSession(session.id),
+    typicalActiveHoursLocal: typicalActiveHours(usage),
+    inferredUserType: inferredUserType(workspaceFlights.length),
+    likelyOperatorSignals: likelyOperatorSignals(prefixCounts, destinationCounts)
+  };
+}
+
+function shortOpaqueId(sessionId) {
+  return crypto.createHash("sha256").update(String(sessionId || "")).digest("hex").slice(0, 6).toUpperCase();
+}
+
+function parseDevice(userAgent) {
+  const ua = String(userAgent || "");
+  const platform = /iPhone|iPad|iPod/.test(ua) ? "iOS" : /Android/i.test(ua) ? "Android" : /Mac/i.test(ua) ? "macOS" : /Windows/i.test(ua) ? "Windows" : "unknown";
+  const device = /iPhone/i.test(ua) ? "iPhone" : /iPad/i.test(ua) ? "iPad" : /Android/i.test(ua) ? "Android" : /Mac/i.test(ua) ? "Mac" : /Windows/i.test(ua) ? "Windows" : "unknown";
+  const browser = /Edg/i.test(ua) ? "Edge" : /Firefox/i.test(ua) ? "Firefox" : /CriOS|Chrome/i.test(ua) ? "Chrome" : /Safari/i.test(ua) ? "Safari" : "unknown";
+  return { device, browser, platform };
+}
+
+function sessionAgeLabel(createdAt) {
+  const ageMs = Date.now() - dateMs(createdAt);
+  if (!Number.isFinite(ageMs) || ageMs < 0) return "";
+  const minutes = Math.floor(ageMs / 60000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+function adminWatchedFlight(flight) {
+  const state = store.data.edct_flight_states.find((s) => s.flight_id === flight.id);
+  return {
+    flightNumber: flight.display_flight_number,
+    route: `${flight.origin}-${flight.destination}`,
+    currentEdctUtc: state?.current_edct_utc || null,
+    change: state?.last_change || "UNCHANGED"
+  };
+}
+
+function notificationDeliveriesForSession(sessionId) {
+  return store.data.notification_deliveries.filter((delivery) => delivery.session_id === sessionId && delivery.delivery_state === "delivered").length;
+}
+
+function typicalActiveHours(usage) {
+  const counts = countBy(usage.map((event) => {
+    const date = new Date(event.created_at || "");
+    return Number.isFinite(date.getTime()) ? `${String(date.getUTCHours()).padStart(2, "0")}Z` : "";
+  }).filter(Boolean));
+  return countedList(counts, "hour", 3);
+}
+
+function inferredUserType(flightCount) {
+  if (flightCount >= 100) return "likely controller/router";
+  if (flightCount >= 10 && flightCount <= 80) return "likely dispatcher";
+  if (flightCount >= 1 && flightCount <= 2) return "likely pilot/casual";
+  return "unknown";
+}
+
+function securitySummary(todayMs) {
+  const regions = countBy(store.data.sessions.map((s) => [s.country, s.region].filter(Boolean).join("-")).filter(Boolean));
+  const organizations = countBy(store.data.sessions.map((s) => s.organization).filter(Boolean));
+  const asns = countBy(store.data.sessions.map((s) => s.asn).filter(Boolean));
+  return {
+    topRegions: countedList(regions, "region", 10),
+    topOrganizations: countedList(organizations, "organization", 10),
+    topASNs: countedList(asns, "asn", 10),
+    suspiciousActivityCount: 0,
+    rateLimitedCount: store.data.usage_events.filter((event) => event.event_type === "RATE_LIMITED" && dateMs(event.created_at) >= todayMs).length
+  };
 }
 
 function adminUsageMessage(event) {

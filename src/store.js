@@ -50,11 +50,15 @@ export class Store {
     return row;
   }
 
-  ensureSession(sessionId, userAgent, ipHash) {
+  ensureSession(sessionId, userAgent, ipHash, enrichment = {}) {
     const ts = nowIso();
     let session = this.data.sessions.find((s) => s.id === sessionId);
     if (session) {
       session.last_seen_at = ts;
+      session.last_activity_at = ts;
+      session.user_agent_approx = userAgent || session.user_agent_approx || "";
+      session.ip_hash = ipHash || session.ip_hash || "";
+      Object.assign(session, safeEnrichment(enrichment));
       session.api_activity_count = (session.api_activity_count || 0) + 1;
       this.save();
       return { session, workspace: this.data.workspaces.find((w) => w.id === session.workspace_id), created: false };
@@ -71,8 +75,11 @@ export class Store {
       workspace_id: workspace.id,
       created_at: ts,
       last_seen_at: ts,
+      last_activity_at: ts,
+      last_heartbeat_at: null,
       user_agent_approx: userAgent,
       ip_hash: ipHash,
+      ...safeEnrichment(enrichment),
       notification_permission: "default",
       api_activity_count: 1,
       page_load_count: 0
@@ -117,4 +124,15 @@ export class Store {
     }
     return this.insert("edct_flight_states", row);
   }
+}
+
+function safeEnrichment(enrichment) {
+  return {
+    country: enrichment.country || "",
+    region: enrichment.region || "",
+    city: enrichment.city || "",
+    timezone: enrichment.timezone || "",
+    asn: enrichment.asn || "",
+    organization: enrichment.organization || ""
+  };
 }
