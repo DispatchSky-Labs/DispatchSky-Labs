@@ -35,7 +35,7 @@ The app quietly tracks operational usage: anonymous session creation/last seen, 
 Protected usage summary:
 
 ```sh
-curl -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:3000/api/admin/usage
+curl -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:3000/api/admin/summary
 ```
 
 The admin response summarizes sessions and usage patterns without source secrets.
@@ -71,7 +71,7 @@ Required Railway variables:
 - `EDCT_IDLE_SLEEP_MINUTES`: optional inactivity threshold for stopping scheduled polling, default `30`.
 - `EDCT_MONITORED_DESTINATIONS`: optional comma-separated default destinations.
 - `EDCT_ALLOWED_ORIGINS`: exact browser origins allowed to call the Railway API. Production should include `https://sadiom.com`; local dev can include `http://localhost:3000` or another local origin.
-- `ADMIN_TOKEN`: required for `GET /api/admin/usage`.
+- `ADMIN_TOKEN`: required for `GET /api/admin/summary` and `GET /api/admin/usage`.
 - `EDCT_DB_FILE`: required for the standalone file-backed store. On Railway, point this at a mounted volume path for persistence. Without a volume, file storage is ephemeral.
 
 No `SESSION_SECRET` is currently used because anonymous session IDs are random opaque identifiers stored server-side and in an httpOnly cookie.

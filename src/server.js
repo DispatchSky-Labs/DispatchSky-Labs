@@ -385,7 +385,7 @@ async function api(req, res, pathname) {
       }
       return send(res, 200, { ok: true });
     }
-    if (req.method === "GET" && pathname === "/api/admin/usage") {
+    if (req.method === "GET" && (pathname === "/api/admin/usage" || pathname === "/api/admin/summary")) {
       res.setHeader("X-Robots-Tag", "noindex, nofollow");
       const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
       if (!config.adminToken || token !== config.adminToken) return send(res, 403, { error: "Forbidden." });
