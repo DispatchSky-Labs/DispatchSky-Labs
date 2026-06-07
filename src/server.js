@@ -23,6 +23,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const store = new Store(config.dbFile);
 const limiter = new RateLimiter();
 const lookupCache = new Map();
+const ipEnrichmentCache = new Map();
 
 const csp = [
   "default-src 'self'",
@@ -38,22 +39,133 @@ const csp = [
 ].join("; ");
 
 function ipHash(req) {
-  const raw = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  const raw = requestIp(req);
   return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 24);
 }
 
 function userAgentApprox(req) {
-  return sanitizeText(String(req.headers["user-agent"] || "").split(" ").slice(0, 4).join(" "), 120);
+  return sanitizeText(String(req.headers["user-agent"] || ""), 300) || "Unknown";
 }
 
-function ipEnrichment(req) {
-  const country = sanitizeGeoValue(req.headers["cf-ipcountry"] || req.headers["x-vercel-ip-country"] || req.headers["x-railway-ip-country"], 2);
-  const region = sanitizeGeoValue(req.headers["x-vercel-ip-country-region"] || req.headers["x-railway-ip-region"], 80);
-  const city = sanitizeGeoValue(req.headers["x-vercel-ip-city"] || req.headers["x-railway-ip-city"], 80);
-  const timezone = sanitizeGeoValue(req.headers["x-vercel-ip-timezone"] || req.headers["x-railway-ip-timezone"], 80);
-  const asn = sanitizeAsn(req.headers["cf-asn"] || req.headers["x-vercel-ip-as-number"] || req.headers["x-railway-ip-asn"]);
-  const organization = sanitizeText(req.headers["x-vercel-ip-as-organization"] || req.headers["x-railway-ip-organization"] || "", 120);
-  return { country, region, city, timezone, asn, organization };
+function requestIp(req) {
+  return String(req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "").split(",")[0].trim();
+}
+
+function headerIpEnrichment(req) {
+  return normalizeEnrichment({
+    country: req.headers["cf-ipcountry"] || req.headers["x-vercel-ip-country"] || req.headers["x-railway-ip-country"],
+    region: req.headers["x-vercel-ip-country-region"] || req.headers["x-railway-ip-region"] || req.headers["x-region"],
+    city: req.headers["x-vercel-ip-city"] || req.headers["x-railway-ip-city"] || req.headers["x-city"],
+    timezone: req.headers["x-vercel-ip-timezone"] || req.headers["x-railway-ip-timezone"] || req.headers["x-timezone"],
+    asn: req.headers["cf-asn"] || req.headers["x-vercel-ip-as-number"] || req.headers["x-railway-ip-asn"] || req.headers["x-asn"],
+    organization: req.headers["x-vercel-ip-as-organization"] || req.headers["x-railway-ip-organization"] || req.headers["x-organization"] || req.headers["x-isp"]
+  });
+}
+
+async function ipEnrichment(req) {
+  const fromHeaders = headerIpEnrichment(req);
+  if (enrichmentUseful(fromHeaders) || config.ipEnrichment.provider === "headers" || config.ipEnrichment.provider === "none") return withGeoLabels(fromHeaders);
+
+  const rawIp = requestIp(req);
+  if (!isPublicIp(rawIp)) return withGeoLabels(fromHeaders);
+  const cacheKey = ipHash(req);
+  const cached = ipEnrichmentCache.get(cacheKey);
+  if (cached && Date.now() - cached.cached_at < 24 * 60 * 60 * 1000) return cached.value;
+
+  const enriched = withGeoLabels({ ...fromHeaders, ...(await providerIpEnrichment(rawIp)) });
+  ipEnrichmentCache.set(cacheKey, { cached_at: Date.now(), value: enriched });
+  return enriched;
+}
+
+function enrichmentUseful(value) {
+  return Boolean(value.country || value.region || value.timezone || value.asn || value.organization);
+}
+
+async function providerIpEnrichment(ip) {
+  const provider = config.ipEnrichment.provider;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.ipEnrichment.timeoutMs);
+  try {
+    if (provider === "ipinfo") {
+      const token = config.ipEnrichment.ipinfoToken ? `?token=${encodeURIComponent(config.ipEnrichment.ipinfoToken)}` : "";
+      const response = await fetch(`https://ipinfo.io/${encodeURIComponent(ip)}/json${token}`, { signal: controller.signal, headers: { accept: "application/json" } });
+      if (!response.ok) return {};
+      const payload = await response.json();
+      return normalizeEnrichment({
+        country: payload.country,
+        region: payload.region,
+        city: payload.city,
+        timezone: payload.timezone,
+        asn: payload.org,
+        organization: payload.org
+      });
+    }
+    if (provider === "ipapi") {
+      const response = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, { signal: controller.signal, headers: { accept: "application/json" } });
+      if (!response.ok) return {};
+      const payload = await response.json();
+      return normalizeEnrichment({
+        country: payload.country_code,
+        region: payload.region,
+        city: payload.city,
+        timezone: payload.timezone,
+        asn: payload.asn,
+        organization: payload.org || payload.network
+      });
+    }
+  } catch {
+    return {};
+  } finally {
+    clearTimeout(timeout);
+  }
+  return {};
+}
+
+function normalizeEnrichment(value) {
+  const organization = normalizeOrganization(value.organization);
+  return {
+    country: sanitizeGeoValue(value.country, 2),
+    region: sanitizeGeoValue(value.region, 80),
+    city: sanitizeGeoValue(value.city, 80),
+    timezone: sanitizeGeoValue(value.timezone, 80),
+    asn: sanitizeAsn(value.asn),
+    organization
+  };
+}
+
+function normalizeOrganization(value) {
+  const raw = sanitizeText(String(value || "").replace(/^AS\d+\s+/i, ""), 120);
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower.includes("comcast")) return "Comcast";
+  if (lower.includes("cox")) return "Cox";
+  if (lower.includes("verizon")) return "Verizon";
+  if (lower.includes("t-mobile") || lower.includes("tmobile")) return "T-Mobile";
+  if (lower.includes("at&t") || lower.includes("att services") || lower.includes("sbc internet")) return "AT&T";
+  if (lower.includes("skywest")) return "SkyWest Airlines";
+  if (lower.includes("united airlines")) return "United Airlines";
+  if (lower.includes("american airlines")) return "American Airlines";
+  return raw;
+}
+
+function isPublicIp(ip) {
+  const value = String(ip || "").replace(/^::ffff:/, "");
+  if (!value || value === "::1" || value === "127.0.0.1") return false;
+  const parts = value.split(".").map((part) => Number.parseInt(part, 10));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return !value.includes(":");
+  if (parts[0] === 10 || parts[0] === 127 || parts[0] === 0) return false;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
+  if (parts[0] === 192 && parts[1] === 168) return false;
+  if (parts[0] === 169 && parts[1] === 254) return false;
+  return true;
+}
+
+function withGeoLabels(value) {
+  return {
+    ...value,
+    region_label: regionLabel(value.region, value.country),
+    timezone_label: timezoneLabel(value.timezone)
+  };
 }
 
 function sanitizeGeoValue(value, maxLength) {
@@ -63,7 +175,41 @@ function sanitizeGeoValue(value, maxLength) {
 
 function sanitizeAsn(value) {
   const cleaned = String(value || "").trim().toUpperCase().replace(/^AS/, "");
+  const match = cleaned.match(/\d{1,10}/);
+  if (match) return `AS${match[0]}`;
   return /^\d{1,10}$/.test(cleaned) ? `AS${cleaned}` : "";
+}
+
+function regionLabel(region, country) {
+  const value = sanitizeGeoValue(region, 80);
+  if (!value) return "Unknown";
+  const usStates = {
+    AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware",
+    FL: "Florida", GA: "Georgia", HI: "Hawaii", IA: "Iowa", ID: "Idaho", IL: "Illinois", IN: "Indiana", KS: "Kansas", KY: "Kentucky",
+    LA: "Louisiana", MA: "Massachusetts", MD: "Maryland", ME: "Maine", MI: "Michigan", MN: "Minnesota", MO: "Missouri", MS: "Mississippi",
+    MT: "Montana", NC: "North Carolina", ND: "North Dakota", NE: "Nebraska", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico",
+    NV: "Nevada", NY: "New York", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+    SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VA: "Virginia", VT: "Vermont", WA: "Washington", WI: "Wisconsin",
+    WV: "West Virginia", WY: "Wyoming", DC: "District of Columbia"
+  };
+  if (String(country || "").toUpperCase() === "US" && usStates[value.toUpperCase()]) return usStates[value.toUpperCase()];
+  return value;
+}
+
+function timezoneLabel(timezone) {
+  const value = sanitizeGeoValue(timezone, 80);
+  if (!value) return "Unknown";
+  const labels = {
+    "America/Denver": "Mountain Time",
+    "America/Boise": "Mountain Time",
+    "America/Phoenix": "Mountain Time",
+    "America/Chicago": "Central Time",
+    "America/Los_Angeles": "Pacific Time",
+    "America/New_York": "Eastern Time",
+    "America/Anchorage": "Alaska Time",
+    "Pacific/Honolulu": "Hawaii Time"
+  };
+  return labels[value] || value.replaceAll("_", " ");
 }
 
 function parseCookies(req) {
@@ -115,10 +261,10 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-function sessionFor(req, res) {
+async function sessionFor(req, res) {
   const cookies = parseCookies(req);
   const sessionId = /^sess_[a-f0-9]{32}$/.test(cookies.device_session_id || "") ? cookies.device_session_id : id("sess");
-  const result = store.ensureSession(sessionId, userAgentApprox(req), ipHash(req), ipEnrichment(req));
+  const result = store.ensureSession(sessionId, userAgentApprox(req), ipHash(req), await ipEnrichment(req));
   const sameSite = isCrossOriginRequest(req) ? "None" : "Lax";
   res.setHeader("Set-Cookie", `device_session_id=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=${sameSite}; Max-Age=31536000`);
   return result;
@@ -306,7 +452,7 @@ async function api(req, res, pathname) {
       last_seen_at: ts,
       last_heartbeat_at: ts,
       last_activity_at: ts,
-      ...ipEnrichment(req)
+      ...(await ipEnrichment(req))
     });
     const woke = noteBackendActivity(store, "Backend woke after heartbeat");
     const heartbeatWorkspaceId = session.workspace_id;
@@ -321,7 +467,7 @@ async function api(req, res, pathname) {
     if (!config.adminToken || token !== config.adminToken) return send(res, 403, { error: "Forbidden." });
     return send(res, 200, pathname === "/api/admin/summary" ? adminSummary() : adminUsage());
   }
-  const { session, workspace } = sessionFor(req, res);
+  const { session, workspace } = await sessionFor(req, res);
   if (!rate(req, session.id, "api", 240, 60_000)) return send(res, 429, { error: "Too many requests." });
   try {
     if (req.method === "GET" && pathname === "/api/session") {
@@ -721,8 +867,9 @@ function adminProfiles(activeSince) {
 }
 
 function adminProfile(session, activeSince) {
-  const workspaceFlights = store.data.flights.filter((f) => f.workspace_id === session.workspace_id && f.active);
   const usage = store.data.usage_events.filter((event) => event.session_id === session.id);
+  const workspaceIds = new Set([session.workspace_id, ...usage.map((event) => event.workspace_id)].filter(Boolean));
+  const workspaceFlights = store.data.flights.filter((f) => workspaceIds.has(f.workspace_id) && f.active);
   const destinationCounts = countBy(workspaceFlights.map((f) => f.destination).filter(Boolean));
   const prefixCounts = countBy(workspaceFlights.map((f) => callsignPrefix(f.normalized_acid || f.display_flight_number)).filter(Boolean));
   const profileActiveMs = sessionActiveMs(session);
@@ -737,12 +884,13 @@ function adminProfile(session, activeSince) {
     approximateDevice: device.device,
     browser: device.browser,
     platform: device.platform,
-    timezone: session.timezone || "",
-    country: session.country || "",
-    region: session.region || "",
-    city: session.city || "",
-    asn: session.asn || "",
-    organization: session.organization || "",
+    timezone: session.timezone_label || timezoneLabel(session.timezone),
+    timezoneId: session.timezone || "",
+    country: session.country || "Unknown",
+    region: session.region_label || regionLabel(session.region, session.country),
+    city: session.city || "Unknown",
+    asn: session.asn || "Unknown",
+    organization: session.organization || "Unknown",
     totalPageLoads: session.page_load_count || usage.filter((event) => event.event_type === "PAGE_OR_SESSION_LOAD").length,
     totalLookups: usage.filter((event) => event.event_type === "LOOKUP_ATTEMPTED").length,
     failedLookups: usage.filter((event) => event.event_type === "LOOKUP_FAILED" || event.event_type === "FLIGHT_LOOKUP_FAILED").length,
@@ -766,9 +914,24 @@ function shortOpaqueId(sessionId) {
 
 function parseDevice(userAgent) {
   const ua = String(userAgent || "");
-  const platform = /iPhone|iPad|iPod/.test(ua) ? "iOS" : /Android/i.test(ua) ? "Android" : /Mac/i.test(ua) ? "macOS" : /Windows/i.test(ua) ? "Windows" : "unknown";
-  const device = /iPhone/i.test(ua) ? "iPhone" : /iPad/i.test(ua) ? "iPad" : /Android/i.test(ua) ? "Android" : /Mac/i.test(ua) ? "Mac" : /Windows/i.test(ua) ? "Windows" : "unknown";
-  const browser = /Edg/i.test(ua) ? "Edge" : /Firefox/i.test(ua) ? "Firefox" : /CriOS|Chrome/i.test(ua) ? "Chrome" : /Safari/i.test(ua) ? "Safari" : "unknown";
+  const isIpadOsDesktop = /Macintosh/i.test(ua) && /Mobile\/\w+ Safari/i.test(ua);
+  const platform = /iPad/i.test(ua) || isIpadOsDesktop ? "iPadOS" :
+    /iPhone|iPod/i.test(ua) ? "iOS" :
+    /Android/i.test(ua) ? "Android" :
+    /Windows/i.test(ua) ? "Windows" :
+    /Macintosh|Mac OS X|Macintosh/i.test(ua) ? "macOS" :
+    /Linux/i.test(ua) ? "Linux" : "Unknown";
+  const androidTablet = /Android/i.test(ua) && !/Mobile/i.test(ua);
+  const device = /iPhone|iPod/i.test(ua) ? "iPhone" :
+    /iPad/i.test(ua) || isIpadOsDesktop ? "iPad" :
+    androidTablet ? "Android Tablet" :
+    /Android/i.test(ua) ? "Android Phone" :
+    /Windows/i.test(ua) ? "Windows PC" :
+    /Macintosh|Mac OS X/i.test(ua) ? "Mac" : "Unknown";
+  const browser = /Edg|EdgiOS|EdgA/i.test(ua) ? "Edge" :
+    /FxiOS|Firefox/i.test(ua) ? "Firefox" :
+    /CriOS|Chrome|Chromium/i.test(ua) && !/Edg/i.test(ua) ? "Chrome" :
+    /Safari/i.test(ua) ? "Safari" : "Other";
   return { device, browser, platform };
 }
 
@@ -805,16 +968,16 @@ function typicalActiveHours(usage) {
 }
 
 function inferredUserType(flightCount) {
-  if (flightCount >= 100) return "likely controller/router";
-  if (flightCount >= 10 && flightCount <= 80) return "likely dispatcher";
-  if (flightCount >= 1 && flightCount <= 2) return "likely pilot/casual";
-  return "unknown";
+  if (flightCount >= 100) return "Likely Router";
+  if (flightCount >= 10 && flightCount <= 80) return "Likely Dispatcher";
+  if (flightCount >= 1 && flightCount <= 3) return "Likely Pilot";
+  return "Unknown";
 }
 
 function securitySummary(todayMs) {
-  const regions = countBy(store.data.sessions.map((s) => [s.country, s.region].filter(Boolean).join("-")).filter(Boolean));
-  const organizations = countBy(store.data.sessions.map((s) => s.organization).filter(Boolean));
-  const asns = countBy(store.data.sessions.map((s) => s.asn).filter(Boolean));
+  const regions = countBy(store.data.sessions.map((s) => s.region_label || regionLabel(s.region, s.country)).filter((value) => value && value !== "Unknown"));
+  const organizations = countBy(store.data.sessions.map((s) => s.organization).filter((value) => value && value !== "Unknown"));
+  const asns = countBy(store.data.sessions.map((s) => s.asn).filter((value) => value && value !== "Unknown"));
   return {
     topRegions: countedList(regions, "region", 10),
     topOrganizations: countedList(organizations, "organization", 10),

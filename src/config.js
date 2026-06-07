@@ -20,6 +20,13 @@ export const config = {
   notificationSensitivity: ["quiet", "normal", "aggressive"].includes(String(process.env.EDCT_NOTIFICATION_SENSITIVITY || "").toLowerCase())
     ? String(process.env.EDCT_NOTIFICATION_SENSITIVITY).toLowerCase()
     : "normal",
+  ipEnrichment: {
+    provider: ["headers", "ipapi", "ipinfo", "none"].includes(String(process.env.EDCT_IP_ENRICHMENT_PROVIDER || "").toLowerCase())
+      ? String(process.env.EDCT_IP_ENRICHMENT_PROVIDER).toLowerCase()
+      : "headers",
+    ipinfoToken: process.env.EDCT_IPINFO_TOKEN || "",
+    timeoutMs: Number.parseInt(process.env.EDCT_IP_ENRICHMENT_TIMEOUT_MS || "1200", 10)
+  },
   adminToken: process.env.ADMIN_TOKEN || process.env.SADIOM_ADMIN_TOKEN || "",
   allowedOrigins: (process.env.EDCT_ALLOWED_ORIGINS || "https://sadiom.com,http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002")
     .split(",")

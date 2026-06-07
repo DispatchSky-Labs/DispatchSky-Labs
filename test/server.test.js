@@ -149,6 +149,175 @@ test("heartbeat updates active session state without noisy heartbeat events", as
   }
 });
 
+test("admin profiles expose enriched device geo network and watched flight activity", async () => {
+  const base = await listen();
+  const now = new Date().toISOString();
+  try {
+    const sessionWorkspace = store.insert("workspaces", {
+      id: "ws_profile_home",
+      created_at: now,
+      updated_at: now,
+      optional_label: "",
+      monitoring_enabled: true,
+      refresh_interval_minutes: 5
+    });
+    const flightWorkspace = store.insert("workspaces", {
+      id: "ws_profile_flights",
+      created_at: now,
+      updated_at: now,
+      optional_label: "",
+      monitoring_enabled: true,
+      refresh_interval_minutes: 5
+    });
+    store.insert("sessions", {
+      id: "sess_profile_enriched",
+      workspace_id: sessionWorkspace.id,
+      created_at: now,
+      last_seen_at: now,
+      last_activity_at: now,
+      last_heartbeat_at: now,
+      user_agent_approx: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+      ip_hash: "redacted",
+      country: "US",
+      region: "UT",
+      region_label: "Utah",
+      city: "Salt Lake City",
+      timezone: "America/Denver",
+      timezone_label: "Mountain Time",
+      asn: "AS7922",
+      organization: "Comcast",
+      notification_permission: "granted",
+      api_activity_count: 3,
+      page_load_count: 2
+    });
+    store.usage("LOOKUP_ATTEMPTED", flightWorkspace.id, "sess_profile_enriched", { destination: "SFO" });
+    for (const [flightNumber, origin, destination] of [
+      ["SKW5592", "RDD", "SFO"],
+      ["UAL1597", "CMH", "SFO"],
+      ["AAL3288", "ORD", "PHX"]
+    ]) {
+      store.insert("flights", {
+        workspace_id: flightWorkspace.id,
+        display_flight_number: flightNumber,
+        normalized_acid: flightNumber,
+        origin,
+        destination,
+        etd_utc: now,
+        operational_day_key: now.slice(0, 10),
+        active: true,
+        created_at: now,
+        updated_at: now
+      });
+    }
+    const response = await fetch(`${base}/api/admin/summary`, { headers: { authorization: "Bearer admin-test" } });
+    assert.equal(response.status, 200);
+    const text = await response.text();
+    const body = JSON.parse(text);
+    const profile = body.recentProfiles.find((item) => item.organization === "Comcast");
+    assert.ok(profile);
+    assert.equal(profile.browser, "Safari");
+    assert.equal(profile.platform, "macOS");
+    assert.equal(profile.approximateDevice, "Mac");
+    assert.equal(profile.region, "Utah");
+    assert.equal(profile.timezone, "Mountain Time");
+    assert.equal(profile.asn, "AS7922");
+    assert.equal(profile.currentWatchedFlightsCount, 3);
+    assert.deepEqual(profile.topDestinations.map((item) => item.airport).sort(), ["PHX", "SFO"]);
+    assert.deepEqual(profile.topCallsignPrefixes.map((item) => item.prefix).sort(), ["AAL", "SKW", "UAL"]);
+    assert.equal(profile.inferredUserType, "Likely Pilot");
+    assert.equal(text.includes("workspace_id"), false);
+    assert.equal(text.includes("session_id"), false);
+    assert.equal(text.includes("ip_hash"), false);
+    assert.equal(text.includes("source_record"), false);
+  } finally {
+    await close();
+  }
+});
+
+test("admin profile device browser detection handles common dispatcher browsers", async () => {
+  const base = await listen();
+  const now = new Date().toISOString();
+  const cases = [
+    {
+      id: "sess_ua_safari_iphone",
+      organization: "UA Safari iPhone",
+      ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      browser: "Safari",
+      platform: "iOS",
+      device: "iPhone"
+    },
+    {
+      id: "sess_ua_chrome_windows",
+      organization: "UA Chrome Windows",
+      ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      browser: "Chrome",
+      platform: "Windows",
+      device: "Windows PC"
+    },
+    {
+      id: "sess_ua_edge_windows",
+      organization: "UA Edge Windows",
+      ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
+      browser: "Edge",
+      platform: "Windows",
+      device: "Windows PC"
+    },
+    {
+      id: "sess_ua_android_tablet",
+      organization: "UA Android Tablet",
+      ua: "Mozilla/5.0 (Linux; Android 14; Pixel Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      browser: "Chrome",
+      platform: "Android",
+      device: "Android Tablet"
+    }
+  ];
+  try {
+    for (const item of cases) {
+      const workspace = store.insert("workspaces", {
+        id: `ws_${item.id}`,
+        created_at: now,
+        updated_at: now,
+        optional_label: "",
+        monitoring_enabled: true,
+        refresh_interval_minutes: 5
+      });
+      store.insert("sessions", {
+        id: item.id,
+        workspace_id: workspace.id,
+        created_at: now,
+        last_seen_at: now,
+        last_activity_at: now,
+        last_heartbeat_at: now,
+        user_agent_approx: item.ua,
+        ip_hash: "redacted",
+        country: "US",
+        region: "CA",
+        region_label: "California",
+        city: "Los Angeles",
+        timezone: "America/Los_Angeles",
+        timezone_label: "Pacific Time",
+        asn: "AS000",
+        organization: item.organization,
+        notification_permission: "default",
+        api_activity_count: 1,
+        page_load_count: 1
+      });
+    }
+    const response = await fetch(`${base}/api/admin/summary`, { headers: { authorization: "Bearer admin-test" } });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    for (const item of cases) {
+      const profile = body.recentProfiles.find((candidate) => candidate.organization === item.organization);
+      assert.ok(profile, item.organization);
+      assert.equal(profile.browser, item.browser);
+      assert.equal(profile.platform, item.platform);
+      assert.equal(profile.approximateDevice, item.device);
+    }
+  } finally {
+    await close();
+  }
+});
+
 test("CORS allows only approved origins and supports credentialed preflight", async () => {
   const base = await listen();
   try {

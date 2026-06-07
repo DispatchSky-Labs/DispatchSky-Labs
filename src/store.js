@@ -131,8 +131,10 @@ function safeEnrichment(enrichment) {
   return {
     country: enrichment.country || "",
     region: enrichment.region || "",
+    region_label: enrichment.region_label || "",
     city: enrichment.city || "",
     timezone: enrichment.timezone || "",
+    timezone_label: enrichment.timezone_label || "",
     asn: enrichment.asn || "",
     organization: enrichment.organization || ""
   };
