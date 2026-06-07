@@ -341,7 +341,7 @@ test("IP enrichment accepts public IPv6 and stores sanitized network fields", as
   try {
     const response = await fetch(`${base}/api/session`, {
       headers: {
-        "x-forwarded-for": publicIpv6,
+        "x-forwarded-for": `10.0.0.10, ${publicIpv6}`,
         "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.0.0 Mobile/15E148 Safari/604.1"
       }
     });
@@ -359,6 +359,24 @@ test("IP enrichment accepts public IPv6 and stores sanitized network fields", as
     assert.equal(profile.browser, "Chrome");
     assert.equal(profile.platform, "iOS");
     assert.equal(profile.approximateDevice, "iPhone");
+    global.fetch = async (url, init) => {
+      if (String(url).startsWith(base)) return originalFetch(url, init);
+      return new Response("provider unavailable", { status: 503 });
+    };
+    await fetch(`${base}/api/session`, {
+      headers: {
+        cookie,
+        "x-forwarded-for": "198.51.100.20",
+        "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.0.0 Mobile/15E148 Safari/604.1"
+      }
+    });
+    const preserved = await fetch(`${base}/api/admin/summary`, {
+      headers: { authorization: "Bearer admin-test", cookie }
+    });
+    const preservedBody = await preserved.json();
+    const preservedProfile = preservedBody.recentProfiles.find((item) => item.shortSessionId === profile.shortSessionId);
+    assert.equal(preservedProfile.organization, "Comcast");
+    assert.equal(preservedProfile.asn, "AS7922");
   } finally {
     global.fetch = originalFetch;
     await close();

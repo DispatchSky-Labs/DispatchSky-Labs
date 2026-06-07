@@ -59,7 +59,7 @@ export class Store {
       session.last_activity_at = ts;
       session.user_agent_approx = userAgent || session.user_agent_approx || "";
       session.ip_hash = ipHash || session.ip_hash || "";
-      Object.assign(session, safeEnrichment(enrichment));
+      Object.assign(session, safeEnrichment(enrichment, session));
       session.api_activity_count = (session.api_activity_count || 0) + 1;
       this.save();
       return { session, workspace: this.data.workspaces.find((w) => w.id === session.workspace_id), created: false };
@@ -127,15 +127,15 @@ export class Store {
   }
 }
 
-function safeEnrichment(enrichment) {
+function safeEnrichment(enrichment, existing = {}) {
   return {
-    country: enrichment.country || "",
-    region: enrichment.region || "",
-    region_label: enrichment.region_label || "",
-    city: enrichment.city || "",
-    timezone: enrichment.timezone || "",
-    timezone_label: enrichment.timezone_label || "",
-    asn: enrichment.asn || "",
-    organization: enrichment.organization || ""
+    country: enrichment.country || existing.country || "",
+    region: enrichment.region || existing.region || "",
+    region_label: enrichment.region_label || existing.region_label || "",
+    city: enrichment.city || existing.city || "",
+    timezone: enrichment.timezone || existing.timezone || "",
+    timezone_label: enrichment.timezone_label || existing.timezone_label || "",
+    asn: enrichment.asn || existing.asn || "",
+    organization: enrichment.organization || existing.organization || ""
   };
 }

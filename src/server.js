@@ -48,7 +48,29 @@ function userAgentApprox(req) {
 }
 
 function requestIp(req) {
-  return String(req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  const candidates = [
+    ...splitForwardedHeader(req.headers["x-forwarded-for"]),
+    req.headers["cf-connecting-ip"],
+    req.headers["true-client-ip"],
+    req.headers["x-client-ip"],
+    req.headers["x-real-ip"],
+    req.headers["x-envoy-external-address"],
+    req.socket.remoteAddress
+  ].map(normalizeIpCandidate).filter(Boolean);
+  return candidates.find(isPublicIp) || candidates[0] || "";
+}
+
+function splitForwardedHeader(value) {
+  return String(value || "").split(",").map((part) => part.trim()).filter(Boolean);
+}
+
+function normalizeIpCandidate(value) {
+  const raw = String(value || "").trim().replace(/^for=/i, "").replace(/^"|"$/g, "");
+  const bracketed = raw.match(/^\[([^\]]+)\](?::\d+)?$/);
+  if (bracketed) return bracketed[1].replace(/^::ffff:/, "");
+  const ipv4WithPort = raw.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/);
+  if (ipv4WithPort) return ipv4WithPort[1];
+  return raw.replace(/^::ffff:/, "");
 }
 
 function headerIpEnrichment(req) {
