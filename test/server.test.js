@@ -383,6 +383,48 @@ test("IP enrichment accepts public IPv6 and stores sanitized network fields", as
   }
 });
 
+test("IP enrichment falls back when the configured provider returns empty", async () => {
+  const base = await listen();
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    if (String(url).startsWith("https://ipapi.co/")) {
+      return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (String(url).startsWith("https://ipinfo.io/")) {
+      return new Response(JSON.stringify({
+        country: "US",
+        region: "California",
+        city: "San Francisco",
+        timezone: "America/Los_Angeles",
+        org: "AS714 Apple Inc."
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return originalFetch(url, init);
+  };
+  try {
+    const response = await fetch(`${base}/api/session`, {
+      headers: {
+        "x-forwarded-for": "17.58.1.1",
+        "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.0.0 Mobile/15E148 Safari/604.1"
+      }
+    });
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get("set-cookie").split(";")[0];
+    const summary = await fetch(`${base}/api/admin/summary`, {
+      headers: { authorization: "Bearer admin-test", cookie }
+    });
+    const body = await summary.json();
+    const profile = body.recentProfiles.find((item) => item.organization === "Apple Inc.");
+    assert.ok(profile);
+    assert.equal(profile.region, "California");
+    assert.equal(profile.timezone, "Pacific Time");
+    assert.equal(profile.asn, "AS714");
+  } finally {
+    global.fetch = originalFetch;
+    await close();
+  }
+});
+
 test("CORS allows only approved origins and supports credentialed preflight", async () => {
   const base = await listen();
   try {

@@ -107,42 +107,56 @@ function enrichmentUseful(value) {
 
 async function providerIpEnrichment(ip) {
   const provider = config.ipEnrichment.provider;
+  if (provider === "ipinfo") {
+    const ipinfo = await ipinfoEnrichment(ip);
+    if (enrichmentUseful(ipinfo)) return ipinfo;
+    return ipapiEnrichment(ip);
+  }
+  if (provider === "ipapi") {
+    const ipapi = await ipapiEnrichment(ip);
+    if (enrichmentUseful(ipapi)) return ipapi;
+    return ipinfoEnrichment(ip);
+  }
+  return {};
+}
+
+async function ipinfoEnrichment(ip) {
+  const token = config.ipEnrichment.ipinfoToken ? `?token=${encodeURIComponent(config.ipEnrichment.ipinfoToken)}` : "";
+  const payload = await providerJson(`https://ipinfo.io/${encodeURIComponent(ip)}/json${token}`);
+  return normalizeEnrichment({
+    country: payload.country,
+    region: payload.region,
+    city: payload.city,
+    timezone: payload.timezone,
+    asn: payload.org,
+    organization: payload.org
+  });
+}
+
+async function ipapiEnrichment(ip) {
+  const payload = await providerJson(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
+  return normalizeEnrichment({
+    country: payload.country_code,
+    region: payload.region,
+    city: payload.city,
+    timezone: payload.timezone,
+    asn: payload.asn,
+    organization: payload.org || payload.network
+  });
+}
+
+async function providerJson(url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.ipEnrichment.timeoutMs);
   try {
-    if (provider === "ipinfo") {
-      const token = config.ipEnrichment.ipinfoToken ? `?token=${encodeURIComponent(config.ipEnrichment.ipinfoToken)}` : "";
-      const response = await fetch(`https://ipinfo.io/${encodeURIComponent(ip)}/json${token}`, { signal: controller.signal, headers: { accept: "application/json" } });
-      if (!response.ok) return {};
-      const payload = await response.json();
-      return normalizeEnrichment({
-        country: payload.country,
-        region: payload.region,
-        city: payload.city,
-        timezone: payload.timezone,
-        asn: payload.org,
-        organization: payload.org
-      });
-    }
-    if (provider === "ipapi") {
-      const response = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, { signal: controller.signal, headers: { accept: "application/json" } });
-      if (!response.ok) return {};
-      const payload = await response.json();
-      return normalizeEnrichment({
-        country: payload.country_code,
-        region: payload.region,
-        city: payload.city,
-        timezone: payload.timezone,
-        asn: payload.asn,
-        organization: payload.org || payload.network
-      });
-    }
+    const response = await fetch(url, { signal: controller.signal, headers: { accept: "application/json" } });
+    if (!response.ok) return {};
+    return await response.json();
   } catch {
     return {};
   } finally {
     clearTimeout(timeout);
   }
-  return {};
 }
 
 function normalizeEnrichment(value) {
