@@ -248,6 +248,10 @@ function closeAddPanel() {
   setLookupMessage("");
 }
 
+function keepEntryOpenAfterAdd() {
+  return window.matchMedia("(min-width: 521px)").matches;
+}
+
 function showSummary(flightKey) {
   const flight = state.flights.find((item) => item.flight_key === flightKey);
   if (!flight) return;
@@ -286,7 +290,7 @@ $("lookupForm").addEventListener("submit", async (event) => {
     const params = new URLSearchParams({ flight, destination });
     const data = await api(`/api/edct/lookup?${params.toString()}`);
     if (data.candidates.length === 1 && !data.candidates[0].already_watched) {
-      await monitorCandidate(data.candidates[0].candidate_key, { keepOpen: true });
+      await monitorCandidate(data.candidates[0].candidate_key, { keepOpen: keepEntryOpenAfterAdd() });
       return;
     }
     if (data.candidates.length > 0) {
@@ -343,7 +347,7 @@ document.addEventListener("click", async (event) => {
   }
   const candidateButton = event.target.closest("[data-candidate]");
   if (candidateButton) {
-    await monitorCandidate(candidateButton.dataset.candidate, { keepOpen: true });
+    await monitorCandidate(candidateButton.dataset.candidate, { keepOpen: keepEntryOpenAfterAdd() });
     return;
   }
   const removeCandidateId = event.target.dataset.removeCandidate;
