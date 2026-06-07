@@ -9,10 +9,11 @@ process.env.EDCT_SOURCE_URL = "https://secret-source.example/edct";
 process.env.EDCT_SOURCE_TOKEN = "";
 process.env.ADMIN_TOKEN = "admin-test";
 process.env.EDCT_IDLE_SLEEP_MINUTES = "60";
+process.env.EDCT_IP_ENRICHMENT_PROVIDER = "ipapi";
 process.env.EDCT_DB_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "edct-api-")), "db.json");
 
 const mod = await import(`../src/server.js?test=${Date.now()}`);
-const { server, store } = mod;
+const { isPublicIp, server, store } = mod;
 const service = await import(`../src/edctService.js?test=${Date.now()}`);
 const originalFetch = global.fetch;
 
@@ -314,6 +315,52 @@ test("admin profile device browser detection handles common dispatcher browsers"
       assert.equal(profile.approximateDevice, item.device);
     }
   } finally {
+    await close();
+  }
+});
+
+test("IP enrichment accepts public IPv6 and stores sanitized network fields", async () => {
+  const base = await listen();
+  const publicIpv6 = "2601:681:4300:1234::abcd";
+  assert.equal(isPublicIp(publicIpv6), true);
+  assert.equal(isPublicIp("fd12:3456:789a::1"), false);
+  assert.equal(isPublicIp("fe80::1"), false);
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    assert.match(String(url), /^https:\/\/ipapi\.co\//);
+    assert.equal(init.headers.accept, "application/json");
+    return new Response(JSON.stringify({
+      country_code: "US",
+      region: "Utah",
+      city: "Salt Lake City",
+      timezone: "America/Denver",
+      asn: "AS7922",
+      org: "Comcast Cable Communications LLC"
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await fetch(`${base}/api/session`, {
+      headers: {
+        "x-forwarded-for": publicIpv6,
+        "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.0.0 Mobile/15E148 Safari/604.1"
+      }
+    });
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get("set-cookie").split(";")[0];
+    const summary = await fetch(`${base}/api/admin/summary`, {
+      headers: { authorization: "Bearer admin-test", cookie }
+    });
+    const body = await summary.json();
+    const profile = body.recentProfiles.find((item) => item.organization === "Comcast");
+    assert.ok(profile);
+    assert.equal(profile.region, "Utah");
+    assert.equal(profile.timezone, "Mountain Time");
+    assert.equal(profile.asn, "AS7922");
+    assert.equal(profile.browser, "Chrome");
+    assert.equal(profile.platform, "iOS");
+    assert.equal(profile.approximateDevice, "iPhone");
+  } finally {
+    global.fetch = originalFetch;
     await close();
   }
 });

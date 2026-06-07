@@ -73,7 +73,9 @@ async function ipEnrichment(req) {
   if (cached && Date.now() - cached.cached_at < 24 * 60 * 60 * 1000) return cached.value;
 
   const enriched = withGeoLabels({ ...fromHeaders, ...(await providerIpEnrichment(rawIp)) });
-  ipEnrichmentCache.set(cacheKey, { cached_at: Date.now(), value: enriched });
+  if (enrichmentUseful(enriched)) {
+    ipEnrichmentCache.set(cacheKey, { cached_at: Date.now(), value: enriched });
+  }
   return enriched;
 }
 
@@ -148,11 +150,18 @@ function normalizeOrganization(value) {
   return raw;
 }
 
-function isPublicIp(ip) {
-  const value = String(ip || "").replace(/^::ffff:/, "");
-  if (!value || value === "::1" || value === "127.0.0.1") return false;
+export function isPublicIp(ip) {
+  const value = String(ip || "").trim().replace(/^\[|\]$/g, "").replace(/^::ffff:/, "");
+  const lower = value.toLowerCase();
+  if (!lower || lower === "::" || lower === "::1" || lower === "127.0.0.1") return false;
+  if (lower.includes(":")) {
+    if (lower.startsWith("fc") || lower.startsWith("fd")) return false;
+    if (lower.startsWith("fe8") || lower.startsWith("fe9") || lower.startsWith("fea") || lower.startsWith("feb")) return false;
+    if (lower.startsWith("ff")) return false;
+    return true;
+  }
   const parts = value.split(".").map((part) => Number.parseInt(part, 10));
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return !value.includes(":");
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return false;
   if (parts[0] === 10 || parts[0] === 127 || parts[0] === 0) return false;
   if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
   if (parts[0] === 192 && parts[1] === 168) return false;
