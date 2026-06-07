@@ -142,8 +142,8 @@ function renderBadge() {
 }
 
 async function loadAll() {
-  const [session, flights, status, events] = await Promise.all([
-    api("/api/session"),
+  const session = await api("/api/session");
+  const [flights, status, events] = await Promise.all([
     api("/api/flights"),
     api("/api/edct/status"),
     api("/api/edct/events")
