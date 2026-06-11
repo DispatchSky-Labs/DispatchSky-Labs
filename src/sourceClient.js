@@ -2,6 +2,7 @@ import { config } from "./config.js";
 import { normalizeSourceRecord, sanitizeText } from "./edctCore.js";
 
 const airportCache = new Map();
+const sourceMetrics = new Map();
 
 function noSecretError() {
   return new Error("EDCT source fetch failed.");
@@ -77,6 +78,29 @@ function cacheEntry(airport) {
   return airportCache.get(airport);
 }
 
+function metricEntry(airport) {
+  if (!sourceMetrics.has(airport)) {
+    sourceMetrics.set(airport, {
+      airport,
+      fetchCount: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      failures: 0,
+      inFlightDedupeCount: 0,
+      lastFetchAt: null,
+      lastFetchReason: null,
+      fetchEvents: []
+    });
+  }
+  return sourceMetrics.get(airport);
+}
+
+function metricEvent(entry, reason, success) {
+  const at = new Date().toISOString();
+  entry.fetchEvents.push({ at, reason, success });
+  if (entry.fetchEvents.length > 1000) entry.fetchEvents.splice(0, entry.fetchEvents.length - 1000);
+}
+
 async function retrieveAirport(airport, referenceIso, entry) {
   const attemptedAt = new Date().toISOString();
   entry.last_attempted_fetch_at = attemptedAt;
@@ -149,11 +173,15 @@ async function retrieveAirport(airport, referenceIso, entry) {
 
 export async function fetchSourceForAirport(airport, referenceIso, options = {}) {
   const entry = cacheEntry(airport);
+  const metrics = metricEntry(airport);
+  const reason = sanitizeText(options.reason || (options.force ? "manual_refresh" : "unknown"), 40);
   const now = Date.now();
   const ttlMs = config.source.cacheTtlSeconds * 1000;
   if (!options.force && entry.records && entry.last_successful_fetch_at && now - new Date(entry.last_successful_fetch_at).getTime() <= ttlMs) {
+    metrics.cacheHits += 1;
     return publicSnapshotFromEntry(airport, entry, false);
   }
+  metrics.cacheMisses += 1;
   if (!options.force && entry.next_retry_at && now < entry.next_retry_at) {
     return entry.records ? publicSnapshotFromEntry(airport, entry, true) : {
       success: false,
@@ -170,9 +198,18 @@ export async function fetchSourceForAirport(airport, referenceIso, options = {})
     };
   }
   if (!entry.inflight) {
-    entry.inflight = retrieveAirport(airport, referenceIso, entry).finally(() => {
+    metrics.fetchCount += 1;
+    metrics.lastFetchAt = new Date().toISOString();
+    metrics.lastFetchReason = reason;
+    entry.inflight = retrieveAirport(airport, referenceIso, entry).then((snapshot) => {
+      if (!snapshot.success || snapshot.stale) metrics.failures += 1;
+      metricEvent(metrics, reason, snapshot.success && !snapshot.stale);
+      return snapshot;
+    }).finally(() => {
       entry.inflight = null;
     });
+  } else {
+    metrics.inFlightDedupeCount += 1;
   }
   return entry.inflight;
 }
@@ -180,4 +217,37 @@ export async function fetchSourceForAirport(airport, referenceIso, options = {})
 export function airportCacheHealth(airport) {
   const entry = airportCache.get(airport);
   return publicSnapshotFromEntry(airport, entry, Boolean(entry?.last_error_message));
+}
+
+export function sourceEfficiencySnapshot(airports = []) {
+  const names = new Set([...airports, ...sourceMetrics.keys(), ...airportCache.keys()].filter(Boolean));
+  const now = Date.now();
+  const hourAgo = now - 60 * 60_000;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const todayMs = today.getTime();
+  const byAirport = [...names].sort().map((airport) => {
+    const metrics = metricEntry(airport);
+    const cache = airportCache.get(airport);
+    const lastSuccessMs = Date.parse(cache?.last_successful_fetch_at || "");
+    const events = metrics.fetchEvents || [];
+    return {
+      airport,
+      fetchCount: metrics.fetchCount,
+      cacheHits: metrics.cacheHits,
+      cacheMisses: metrics.cacheMisses,
+      failures: metrics.failures,
+      inFlightDedupeCount: metrics.inFlightDedupeCount,
+      lastFetchAt: metrics.lastFetchAt,
+      lastFetchReason: metrics.lastFetchReason,
+      cacheAgeSeconds: Number.isFinite(lastSuccessMs) ? Math.max(0, Math.round((now - lastSuccessMs) / 1000)) : null,
+      fetchesLastHour: events.filter((event) => Date.parse(event.at) >= hourAgo).length,
+      fetchesToday: events.filter((event) => Date.parse(event.at) >= todayMs).length
+    };
+  });
+  return {
+    byAirport,
+    estimatedSourceRequestsLastHour: byAirport.reduce((sum, item) => sum + item.fetchesLastHour, 0),
+    estimatedSourceRequestsToday: byAirport.reduce((sum, item) => sum + item.fetchesToday, 0)
+  };
 }

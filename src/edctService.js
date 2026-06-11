@@ -18,15 +18,18 @@ export function airportsForWorkspace(store, workspaceId) {
   return [...new Set(activeFlights(store, workspaceId).map((f) => f.destination))];
 }
 
-export async function refreshWorkspace(store, workspaceId, manual = false, sessionId = null) {
+export async function refreshWorkspace(store, workspaceId, manual = false, sessionId = null, reason = manual ? "manual_refresh" : "scheduled") {
   const workspace = store.data.workspaces.find((w) => w.id === workspaceId);
   if (!workspace || workspace.monitoring_enabled === false) return statusForWorkspace(store, workspaceId);
+  if (reason === "wake_refresh" || reason === "manual_refresh") {
+    noteWorkspaceState(store, workspace, "active", "workspace_woke", "Workspace polling resumed after user activity");
+  }
   const flights = activeFlights(store, workspaceId);
   const airports = [...new Set(flights.map((f) => f.destination))];
   const summary = { fetched: 0, matched: 0, events: 0 };
   for (const airport of airports) {
     const reference = flights.find((f) => f.destination === airport)?.scheduled_departure_utc || nowIso();
-    const snapshot = await fetchSourceForAirport(airport, reference, { force: manual });
+    const snapshot = await fetchSourceForAirport(airport, reference, { force: manual, reason });
     store.insert("source_airport_snapshots", {
       airport,
       fetched_at: snapshot.fetched_at,
@@ -136,6 +139,19 @@ export function noteBackendActivity(store, message = "Backend woke after user ac
   return true;
 }
 
+function noteWorkspaceState(store, workspace, nextState, eventType, message) {
+  if (!workspace || workspace.polling_state === nextState) return false;
+  workspace.polling_state = nextState;
+  workspace.polling_state_updated_at = nowIso();
+  store.insert("admin_events", {
+    event_type: eventType,
+    message,
+    created_at: nowIso()
+  });
+  store.save();
+  return true;
+}
+
 function noteBackendSleep(store) {
   if (backendSleeping) return;
   backendSleeping = true;
@@ -151,19 +167,23 @@ export function backendRuntimeState(store) {
   const activeCutoff = Date.now() - config.activeSessionThresholdSeconds * 1000;
   const sessions = store.data.sessions || [];
   const flights = activeFlights(store);
+  const activePollingWorkspaces = recentlyActiveWorkspacesWithFlights(store);
+  const idleWorkspaces = idleWorkspacesWithFlights(store);
   const lastActivityMs = Math.max(
     0,
     ...sessions.map(sessionActivityMs),
     ...flights.map((f) => Date.parse(f.updated_at || f.created_at || "") || 0)
   );
   const hasActiveSession = sessions.some((s) => sessionActivityMs(s) >= activeCutoff);
-  const hasActiveFlights = flights.length > 0;
+  const hasActiveFlights = activePollingWorkspaces.length > 0;
   const idleForSleep = lastActivityMs > 0 && lastActivityMs < idleCutoff;
-  const shouldSleep = !hasActiveSession && !hasActiveFlights && idleForSleep;
+  const shouldSleep = !hasActiveSession && !hasActiveFlights && (idleForSleep || idleWorkspaces.length > 0);
   return {
     shouldSleep,
     hasActiveSession,
     hasActiveFlights,
+    activePollingWorkspaceIds: activePollingWorkspaces.map((workspace) => workspace.id),
+    idleWorkspaceIds: idleWorkspaces.map((workspace) => workspace.id),
     backendSleeping,
     lastActivityAt: lastActivityMs ? new Date(lastActivityMs).toISOString() : null,
     nextSleepAt: !shouldSleep && !hasActiveFlights && lastActivityMs ? new Date(lastActivityMs + config.idleSleepMinutes * 60_000).toISOString() : null
@@ -178,20 +198,53 @@ function sessionActivityMs(session) {
   );
 }
 
+export function workspaceActivityMs(store, workspaceId) {
+  return Math.max(
+    Date.parse(store.data.workspaces.find((w) => w.id === workspaceId)?.updated_at || "") || 0,
+    ...store.data.sessions
+      .filter((session) => session.workspace_id === workspaceId)
+      .map(sessionActivityMs)
+  );
+}
+
+export function isWorkspaceRecentlyActive(store, workspaceId) {
+  const cutoff = Date.now() - config.idleSleepMinutes * 60_000;
+  return workspaceActivityMs(store, workspaceId) >= cutoff;
+}
+
+export function recentlyActiveWorkspacesWithFlights(store) {
+  return store.data.workspaces.filter((workspace) =>
+    workspace.monitoring_enabled !== false &&
+    activeFlights(store, workspace.id).length > 0 &&
+    isWorkspaceRecentlyActive(store, workspace.id)
+  );
+}
+
+export function idleWorkspacesWithFlights(store) {
+  return store.data.workspaces.filter((workspace) =>
+    workspace.monitoring_enabled !== false &&
+    activeFlights(store, workspace.id).length > 0 &&
+    !isWorkspaceRecentlyActive(store, workspace.id)
+  );
+}
+
 export async function refreshDueAirports(store) {
   const runtime = backendRuntimeState(store);
+  for (const workspace of idleWorkspacesWithFlights(store)) {
+    noteWorkspaceState(store, workspace, "idle", "workspace_idle", "Workspace polling paused after idle window");
+  }
   if (runtime.shouldSleep) {
     noteBackendSleep(store);
     return { sleeping: true, airports: [] };
   }
   if (runtime.hasActiveSession || runtime.hasActiveFlights) noteBackendActivity(store, "Backend woke for active monitoring");
   if (!runtime.hasActiveFlights) return { sleeping: backendSleeping, airports: [] };
-  const workspaces = store.data.workspaces.filter((w) => w.monitoring_enabled !== false);
+  const workspaces = recentlyActiveWorkspacesWithFlights(store);
   const airports = new Set();
   for (const workspace of workspaces) {
-    if (!activeFlights(store, workspace.id).length) continue;
+    noteWorkspaceState(store, workspace, "active", "workspace_woke", "Workspace polling resumed after user activity");
     for (const airport of airportsForWorkspace(store, workspace.id)) airports.add(airport);
-    await refreshWorkspace(store, workspace.id, false, null);
+    await refreshWorkspace(store, workspace.id, false, null, "scheduled");
   }
   return { sleeping: false, airports: [...airports] };
 }

@@ -13,10 +13,18 @@ import {
   parseDateInput,
   sanitizeText
 } from "./edctCore.js";
-import { backendRuntimeState, noteBackendActivity, refreshDueAirports, refreshWorkspace, statusForWorkspace } from "./edctService.js";
+import {
+  backendRuntimeState,
+  idleWorkspacesWithFlights,
+  noteBackendActivity,
+  recentlyActiveWorkspacesWithFlights,
+  refreshDueAirports,
+  refreshWorkspace,
+  statusForWorkspace
+} from "./edctService.js";
 import { parseFlightEntries } from "./inputParsers.js";
 import { RateLimiter } from "./rateLimit.js";
-import { fetchSourceForAirport } from "./sourceClient.js";
+import { fetchSourceForAirport, sourceEfficiencySnapshot } from "./sourceClient.js";
 import { Store } from "./store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -502,7 +510,7 @@ async function api(req, res, pathname) {
     const woke = noteBackendActivity(store, "Backend woke after heartbeat");
     const heartbeatWorkspaceId = session.workspace_id;
     if (woke && store.data.flights.some((f) => f.workspace_id === heartbeatWorkspaceId && f.active)) {
-      await refreshWorkspace(store, heartbeatWorkspaceId, false, session.id);
+      await refreshWorkspace(store, heartbeatWorkspaceId, false, session.id, "wake_refresh");
     }
     return send(res, 200, { ok: true, lastHeartbeatAt: ts });
   }
@@ -520,7 +528,7 @@ async function api(req, res, pathname) {
       store.update("sessions", session.id, { page_load_count: (session.page_load_count || 0) + 1 });
       store.usage("PAGE_OR_SESSION_LOAD", workspace.id, session.id, {});
       if (woke && store.data.flights.some((f) => f.workspace_id === workspace.id && f.active)) {
-        await refreshWorkspace(store, workspace.id, false, session.id);
+        await refreshWorkspace(store, workspace.id, false, session.id, "wake_refresh");
       }
       return send(res, 200, { session: publicSession(workspace, session) });
     }
@@ -545,7 +553,7 @@ async function api(req, res, pathname) {
       const created = store.insert("flights", { ...flightPayload(body, workspace.id), created_at: nowIso() });
       store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination });
       noteBackendActivity(store, "Backend woke after watched flight was added");
-      await refreshWorkspace(store, workspace.id, false, session.id);
+      await refreshWorkspace(store, workspace.id, false, session.id, "wake_refresh");
       return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.flight_key === created.id) });
     }
     const flightMatch = pathname.match(/^\/api\/flights\/([^/]+)$/);
@@ -556,7 +564,7 @@ async function api(req, res, pathname) {
       const body = await readBody(req);
       const updated = store.update("flights", existing.id, flightPayload(body, workspace.id, existing));
       store.usage("FLIGHT_EDITED", workspace.id, session.id, { destination: updated.destination });
-      await refreshWorkspace(store, workspace.id, false, session.id);
+      await refreshWorkspace(store, workspace.id, false, session.id, "wake_refresh");
       return send(res, 200, { flight: flightsFor(workspace.id).find((f) => f.flight_key === updated.id) });
     }
     if (flightMatch && req.method === "DELETE") {
@@ -576,7 +584,7 @@ async function api(req, res, pathname) {
       const matches = [];
       store.usage("LOOKUP_ATTEMPTED", workspace.id, session.id, { destination });
       noteBackendActivity(store, "Backend woke after flight lookup");
-      const snapshot = await fetchSourceForAirport(destination, nowIso());
+      const snapshot = await fetchSourceForAirport(destination, nowIso(), { reason: "lookup" });
       if (snapshot.success) {
         for (const record of snapshot.records) {
           if (record.acid !== flight.normalizedAcid) continue;
@@ -604,7 +612,7 @@ async function api(req, res, pathname) {
       }
       for (const [destination, entries] of airportGroups.entries()) {
         store.usage("LOOKUP_ATTEMPTED", workspace.id, session.id, { destination, bulk: true, count: entries.length });
-        const snapshot = await fetchSourceForAirport(destination, nowIso());
+        const snapshot = await fetchSourceForAirport(destination, nowIso(), { reason: "bulk_lookup" });
         let matchedForAirport = 0;
         if (snapshot.success) {
           for (const entry of entries) {
@@ -655,12 +663,13 @@ async function api(req, res, pathname) {
       });
       store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination, lookup: true });
       noteBackendActivity(store, "Backend woke after watched flight was added");
-      await refreshWorkspace(store, workspace.id, false, session.id);
+      await refreshWorkspace(store, workspace.id, false, session.id, "wake_refresh");
       return send(res, 201, { flight: flightsFor(workspace.id).find((f) => f.flight_key === created.id) });
     }
     if (req.method === "POST" && pathname === "/api/edct/refresh") {
       if (!rate(req, session.id, "refresh", 12, 60_000)) return send(res, 429, { error: "Too many refreshes." });
-      return send(res, 200, await refreshWorkspace(store, workspace.id, true, session.id));
+      noteBackendActivity(store, "Backend woke after manual refresh");
+      return send(res, 200, await refreshWorkspace(store, workspace.id, true, session.id, "manual_refresh"));
     }
     if (req.method === "GET" && pathname === "/api/edct/events") {
       return send(res, 200, { events: store.data.edct_events.filter((e) => e.workspace_id === workspace.id).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 10).map(publicEvent) });
@@ -752,6 +761,12 @@ function adminSummary() {
   const profiles = adminProfiles(activeSince);
   const lastWakeEvent = latestAdminEvent("backend_woke");
   const lastSleepEvent = latestAdminEvent("backend_slept");
+  const activePollingWorkspaces = recentlyActiveWorkspacesWithFlights(store);
+  const idlePollingWorkspaces = idleWorkspacesWithFlights(store);
+  const activePollingAirports = [...new Set(activePollingWorkspaces.flatMap((workspace) =>
+    store.data.flights.filter((flight) => flight.active && flight.workspace_id === workspace.id).map((flight) => flight.destination)
+  ))].sort();
+  const efficiency = sourceEfficiencySnapshot(airports);
   const lastActivityAt = latestDate([
     latestSessionSeenAt,
     latestUserEventAt,
@@ -780,6 +795,14 @@ function adminSummary() {
     ).length,
     sourceHealthByAirport,
     staleAirports,
+    sourceEfficiency: {
+      activePollingAirports,
+      sleepingWorkspaces: runtime.backendSleeping ? idlePollingWorkspaces.length : 0,
+      idleWorkspaces: idlePollingWorkspaces.length,
+      sourceEfficiencyByAirport: efficiency.byAirport.map(publicSourceEfficiency),
+      estimatedSourceRequestsLastHour: efficiency.estimatedSourceRequestsLastHour,
+      estimatedSourceRequestsToday: efficiency.estimatedSourceRequestsToday
+    },
     lastUserQueryAt: latestUserEventAt,
     lastHeartbeatAt: latestSessionSeenAt,
     lastFaaFetchAt: latestFetchAt,
@@ -790,6 +813,20 @@ function adminSummary() {
     activeProfiles: profiles.filter((profile) => profile.activeNow).slice(0, 25),
     recentProfiles: profiles.slice(0, 50),
     securitySummary: securitySummary(todayMs)
+  };
+}
+
+function publicSourceEfficiency(item) {
+  return {
+    airport: sanitizeAirportForAdmin(item.airport),
+    fetchCount: item.fetchCount || 0,
+    cacheHits: item.cacheHits || 0,
+    cacheMisses: item.cacheMisses || 0,
+    failures: item.failures || 0,
+    inFlightDedupeCount: item.inFlightDedupeCount || 0,
+    lastFetchAt: item.lastFetchAt || null,
+    lastFetchReason: sanitizeText(item.lastFetchReason || "", 40),
+    cacheAgeSeconds: item.cacheAgeSeconds
   };
 }
 

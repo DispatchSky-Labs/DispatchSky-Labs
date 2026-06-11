@@ -624,6 +624,192 @@ test("scheduled polling sleeps when idle and wakes for active monitoring", async
   }
 });
 
+test("idle watched flights do not keep scheduled airport polling alive", async () => {
+  const oldTs = new Date(Date.now() - 61 * 60 * 1000).toISOString();
+  for (const flight of store.data.flights) store.update("flights", flight.id, { active: false, updated_at: oldTs });
+  for (const existingSession of store.data.sessions) {
+    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+  }
+  const workspace = store.insert("workspaces", { created_at: oldTs, updated_at: oldTs, optional_label: "", monitoring_enabled: true, refresh_interval_minutes: 5 });
+  store.insert("sessions", {
+    id: "sess_idle_watched_flights",
+    workspace_id: workspace.id,
+    created_at: oldTs,
+    last_seen_at: oldTs,
+    last_activity_at: oldTs,
+    last_heartbeat_at: oldTs,
+    user_agent_approx: "test",
+    ip_hash: "hash",
+    notification_permission: "default",
+    api_activity_count: 0,
+    page_load_count: 0
+  });
+  const flight = store.insert("flights", {
+    workspace_id: workspace.id,
+    display_flight_number: "UAL2222",
+    normalized_acid: "UAL2222",
+    origin: "ORD",
+    destination: "BIL",
+    etd_utc: oldTs,
+    operational_day_key: oldTs.slice(0, 10),
+    active: true,
+    created_at: oldTs,
+    updated_at: oldTs
+  });
+  store.upsertState({
+    workspace_id: workspace.id,
+    normalized_acid: "UAL2222",
+    origin: "ORD",
+    destination: "BIL",
+    operational_day_key: oldTs.slice(0, 10),
+    flight_id: flight.id,
+    current_edct_utc: "2026-06-05T15:00:00.000Z",
+    previous_edct_utc: null,
+    last_change: "EDCT_ASSIGNED",
+    last_seen_at: oldTs,
+    last_source_fetch_at: oldTs,
+    source_record: null
+  });
+  let sourceFetches = 0;
+  global.fetch = async () => {
+    sourceFetches += 1;
+    return new Response(JSON.stringify({ records: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const beforeEvents = store.data.edct_events.length;
+    const result = await service.refreshDueAirports(store);
+    assert.equal(result.sleeping, true);
+    assert.equal(sourceFetches, 0);
+    assert.equal(store.data.flights.find((item) => item.id === flight.id).active, true);
+    assert.equal(store.data.edct_events.length, beforeEvents);
+    assert.ok(store.data.admin_events.some((event) => event.event_type === "workspace_idle"));
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("recent active workspaces share one airport fetch and expose safe source counters", async () => {
+  const oldTs = new Date(Date.now() - 61 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  for (const flight of store.data.flights) store.update("flights", flight.id, { active: false, updated_at: oldTs });
+  for (const existingSession of store.data.sessions) {
+    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+  }
+  const workspaces = ["A", "B"].map((suffix) => store.insert("workspaces", {
+    id: `ws_shared_${suffix}`,
+    created_at: oldTs,
+    updated_at: oldTs,
+    optional_label: "",
+    monitoring_enabled: true,
+    refresh_interval_minutes: 5
+  }));
+  for (const [index, workspace] of workspaces.entries()) {
+    store.insert("sessions", {
+      id: `sess_shared_${index}`,
+      workspace_id: workspace.id,
+      created_at: oldTs,
+      last_seen_at: now,
+      last_activity_at: now,
+      last_heartbeat_at: now,
+      user_agent_approx: "test",
+      ip_hash: "hash",
+      notification_permission: "default",
+      api_activity_count: 1,
+      page_load_count: 1
+    });
+    store.insert("flights", {
+      workspace_id: workspace.id,
+      display_flight_number: `UAL33${index}`,
+      normalized_acid: `UAL33${index}`,
+      origin: "ORD",
+      destination: "TUL",
+      etd_utc: now,
+      operational_day_key: now.slice(0, 10),
+      active: true,
+      created_at: now,
+      updated_at: now
+    });
+  }
+  const base = await listen();
+  let sourceFetches = 0;
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    sourceFetches += 1;
+    return new Response(JSON.stringify({ records: [{ acid: "UAL330", origin: "ORD", destination: "TUL", etd: "E05/1600" }] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const result = await service.refreshDueAirports(store);
+    assert.equal(result.sleeping, false);
+    assert.deepEqual(result.airports, ["TUL"]);
+    assert.equal(sourceFetches, 1);
+    assert.ok(store.data.admin_events.some((event) => event.event_type === "workspace_woke"));
+    const summaryResponse = await fetch(`${base}/api/admin/summary`, { headers: { authorization: "Bearer admin-test" } });
+    const summaryText = await summaryResponse.text();
+    const summary = JSON.parse(summaryText);
+    assert.ok(summary.sourceEfficiency.activePollingAirports.includes("TUL"));
+    assert.equal(summary.sourceEfficiency.idleWorkspaces, 0);
+    const tul = summary.sourceEfficiency.sourceEfficiencyByAirport.find((item) => item.airport === "TUL");
+    assert.ok(tul);
+    assert.equal(tul.fetchCount, 1);
+    assert.ok(tul.cacheHits >= 1);
+    assert.ok(tul.cacheMisses >= 1);
+    assert.equal(tul.failures, 0);
+    assert.equal(tul.lastFetchReason, "scheduled");
+    assert.equal(typeof tul.cacheAgeSeconds, "number");
+    assert.equal(summaryText.includes("source_record"), false);
+    assert.equal(summaryText.includes("EDCT_SOURCE"), false);
+  } finally {
+    global.fetch = originalFetch;
+    await close();
+  }
+});
+
+test("admin polling does not wake idle public monitoring", async () => {
+  const base = await listen();
+  const oldTs = new Date(Date.now() - 61 * 60 * 1000).toISOString();
+  for (const flight of store.data.flights) store.update("flights", flight.id, { active: false, updated_at: oldTs });
+  for (const existingSession of store.data.sessions) {
+    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+  }
+  const workspace = store.insert("workspaces", { created_at: oldTs, updated_at: oldTs, optional_label: "", monitoring_enabled: true, refresh_interval_minutes: 5 });
+  store.insert("sessions", {
+    id: "sess_admin_no_wake",
+    workspace_id: workspace.id,
+    created_at: oldTs,
+    last_seen_at: oldTs,
+    last_activity_at: oldTs,
+    last_heartbeat_at: oldTs,
+    user_agent_approx: "test",
+    ip_hash: "hash",
+    notification_permission: "default",
+    api_activity_count: 0,
+    page_load_count: 0
+  });
+  store.insert("flights", {
+    workspace_id: workspace.id,
+    display_flight_number: "UAL4444",
+    normalized_acid: "UAL4444",
+    origin: "ORD",
+    destination: "OMA",
+    etd_utc: oldTs,
+    operational_day_key: oldTs.slice(0, 10),
+    active: true,
+    created_at: oldTs,
+    updated_at: oldTs
+  });
+  const wakeCountBefore = store.data.admin_events.filter((event) => event.event_type === "backend_woke").length;
+  try {
+    const response = await fetch(`${base}/api/admin/summary`, { headers: { authorization: "Bearer admin-test" } });
+    assert.equal(response.status, 200);
+    const summary = await response.json();
+    assert.equal(summary.sourceEfficiency.activePollingAirports.includes("OMA"), false);
+    assert.ok(summary.sourceEfficiency.idleWorkspaces >= 1);
+    assert.equal(store.data.admin_events.filter((event) => event.event_type === "backend_woke").length, wakeCountBefore);
+  } finally {
+    await close();
+  }
+});
+
 test("failed source fetch keeps previous EDCT and successful omission removes it", async () => {
   const base = await listen();
   const cookieRes = await fetch(`${base}/api/session`);
