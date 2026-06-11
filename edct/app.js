@@ -166,6 +166,11 @@ function setLookupMessage(message, isError = false) {
   $("lookupMessage").className = `lookup-message${isError ? " error" : ""}`;
 }
 
+function setLookupBusy(isBusy) {
+  const form = $("lookupForm");
+  for (const control of form.elements) control.disabled = isBusy;
+}
+
 function renderCandidates(candidates) {
   state.candidates = candidates || [];
   $("bulkAddSelectedBtn").hidden = !state.candidates.some((candidate) => !candidate.already_watched);
@@ -286,21 +291,25 @@ $("lookupForm").addEventListener("submit", async (event) => {
   const destination = String(fd.get("destination") || "").trim();
   $("candidateList").innerHTML = "";
   setLookupMessage("Searching...");
+  setLookupBusy(true);
   try {
     const params = new URLSearchParams({ flight, destination });
     const data = await api(`/api/edct/lookup?${params.toString()}`);
-    if (data.candidates.length === 1 && !data.candidates[0].already_watched) {
-      await monitorCandidate(data.candidates[0].candidate_key, { keepOpen: keepEntryOpenAfterAdd() });
+    const candidates = data.candidates || [];
+    if (candidates.length === 1 && !candidates[0].already_watched) {
+      await monitorCandidate(candidates[0].candidate_key, { keepOpen: keepEntryOpenAfterAdd() });
       return;
     }
-    if (data.candidates.length > 0) {
-      renderCandidates(data.candidates);
+    if (candidates.length > 0) {
+      renderCandidates(candidates);
       setLookupMessage(data.message || "Choose the flight to monitor.");
       return;
     }
-    setLookupMessage(data.message || "No matching flight found in destination feed.", true);
+    setLookupMessage("Flight Not Found", true);
   } catch (error) {
     setLookupMessage(error.message || "Lookup failed.", true);
+  } finally {
+    setLookupBusy(false);
   }
 });
 
