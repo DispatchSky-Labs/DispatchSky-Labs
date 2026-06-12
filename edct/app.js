@@ -6,14 +6,26 @@ const API_BASE_URL = String(window.EDCT_API_BASE_URL || "").replace(/\/+$/, "");
 const pendingAdds = new Map();
 
 async function api(path, options = {}) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { "content-type": "application/json" },
-    credentials: API_BASE_URL ? "include" : "same-origin",
-    ...options
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed.");
-  return data;
+  const method = String(options.method || "GET").toUpperCase();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), method === "GET" ? 12_000 : 20_000);
+  const headers = method === "GET" ? {} : { "content-type": "application/json" };
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      headers,
+      signal: controller.signal,
+      credentials: API_BASE_URL ? "include" : "same-origin",
+      ...options
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Request failed.");
+    return data;
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error("Unable to search. Try again.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function escapeHtml(value) {
