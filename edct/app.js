@@ -558,6 +558,7 @@ $("lookupForm").addEventListener("submit", async (event) => {
     const params = new URLSearchParams({ flight, destination });
     const data = await api(`/api/edct/lookup?${params.toString()}`);
     const candidates = data.candidates || [];
+    state.candidates = candidates;
     if (candidates.length === 1 && !candidates[0].already_watched) {
       await monitorCandidate(candidates[0].candidate_key, { keepOpen: keepEntryOpenAfterAdd() });
       return;
