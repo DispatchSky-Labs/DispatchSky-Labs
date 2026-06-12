@@ -228,6 +228,24 @@
             top: 24px;
         }
 
+        .preview.has-image {
+            align-items: center;
+            display: flex;
+            padding: 14px;
+        }
+
+        .preview.has-image::before {
+            content: none;
+        }
+
+        .preview-image {
+            border-radius: 8px;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.14);
+            display: block;
+            height: auto;
+            width: 100%;
+        }
+
         .screen {
             background: #ffffff;
             border: 1px solid rgba(0, 0, 0, 0.08);
@@ -380,19 +398,8 @@
                         <a class="button" href="https://apps.apple.com/us/app/flight-dispatch-question-bank/id6762245143" target="_blank" rel="noopener">Download on the App Store</a>
                     </div>
                 </div>
-                <div class="preview" aria-label="Flight Dispatch Study screenshot placeholder">
-                    <div class="screen">
-                        <p class="screen-title">Study Session</p>
-                        <div class="screen-line"></div>
-                        <div class="screen-line"></div>
-                        <div class="screen-line short"></div>
-                        <div class="screen-grid">
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                        </div>
-                    </div>
+                <div class="preview has-image" aria-label="Flight Dispatch Study device availability preview">
+                    <img class="preview-image" src="/assets/flight-dispatch-study-devices.png" alt="Flight Dispatch Study shown across iPhone, CarPlay, and Apple TV">
                 </div>
             </div>
         </section>
@@ -408,18 +415,8 @@
                         <a class="button secondary" href="/flow/">Open Flow</a>
                     </div>
                 </div>
-                <div class="preview" aria-label="Sadiom Flow screenshot placeholder">
-                    <div class="screen">
-                        <p class="screen-title">Flow Board</p>
-                        <div class="screen-line"></div>
-                        <div class="screen-line short"></div>
-                        <div class="screen-grid">
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                        </div>
-                    </div>
+                <div class="preview has-image" aria-label="Sadiom Flow screenshot">
+                    <img class="preview-image" src="/assets/sadiom-flow-home.png" alt="Sadiom Flow flight tracking list with EDCT status pills">
                 </div>
             </div>
         </section>
