@@ -1,6 +1,9 @@
-const state = { flights: [], events: [], session: null, status: null, pending: [], candidates: [] };
+const STORAGE_KEY = "sadiom.flow.trackedFlights.v1";
+const STORAGE_BACKUP_PREFIX = `${STORAGE_KEY}.backup`;
+const state = { flights: [], events: [], session: null, status: null, pending: [], candidates: [], serverFlightKeys: [], deletedFlightKeys: new Set() };
 const $ = (id) => document.getElementById(id);
 const API_BASE_URL = String(window.EDCT_API_BASE_URL || "").replace(/\/+$/, "");
+const pendingAdds = new Map();
 
 async function api(path, options = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -21,6 +24,155 @@ function escapeHtml(value) {
     "\"": "&quot;",
     "'": "&#39;"
   }[ch]));
+}
+
+function storageAvailable() {
+  try {
+    const key = `${STORAGE_KEY}.probe`;
+    localStorage.setItem(key, "1");
+    localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function backupInvalidStorage(raw) {
+  if (!storageAvailable()) return;
+  try {
+    localStorage.setItem(`${STORAGE_BACKUP_PREFIX}.${Date.now()}`, raw);
+  } catch {
+  }
+}
+
+function normalizeStoredFlight(flight) {
+  const flightKey = String(flight?.flight_key || flight?.id || "").trim();
+  const display = String(flight?.display_flight_number || flight?.flight_number || "").trim().toUpperCase();
+  const origin = String(flight?.origin || "").trim().toUpperCase();
+  const destination = String(flight?.destination || "").trim().toUpperCase();
+  if (!flightKey || !display || !origin || !destination) return null;
+  return {
+    flight_key: flightKey,
+    display_flight_number: display,
+    origin,
+    destination,
+    etd_utc: flight?.etd_utc || null,
+    state: flight?.state && typeof flight.state === "object" ? {
+      current_edct_utc: flight.state.current_edct_utc || null,
+      previous_edct_utc: flight.state.previous_edct_utc || null,
+      last_change: flight.state.last_change || "UNCHANGED",
+      last_checked_utc: flight.state.last_checked_utc || null
+    } : null
+  };
+}
+
+function migrateStoredState(payload) {
+  if (Array.isArray(payload)) return { flights: payload.map(normalizeStoredFlight).filter(Boolean), deletedFlightKeys: [] };
+  if (!payload || typeof payload !== "object") return { flights: [], deletedFlightKeys: [] };
+  if (payload.version === 1 && Array.isArray(payload.flights)) {
+    return {
+      flights: payload.flights.map(normalizeStoredFlight).filter(Boolean),
+      deletedFlightKeys: Array.isArray(payload.deleted_flight_keys) ? payload.deleted_flight_keys.map(String).slice(-100) : []
+    };
+  }
+  if (Array.isArray(payload.trackedFlights)) {
+    return { flights: payload.trackedFlights.map(normalizeStoredFlight).filter(Boolean), deletedFlightKeys: [] };
+  }
+  return { flights: [], deletedFlightKeys: [] };
+}
+
+function loadSavedState() {
+  if (!storageAvailable()) return { flights: [], deletedFlightKeys: [] };
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return { flights: [], deletedFlightKeys: [] };
+  try {
+    return migrateStoredState(JSON.parse(raw));
+  } catch {
+    backupInvalidStorage(raw);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+    }
+    return { flights: [], deletedFlightKeys: [] };
+  }
+}
+
+function persistFlights() {
+  if (!storageAvailable()) return;
+  const flights = state.flights.map(normalizeStoredFlight).filter(Boolean);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 1,
+      saved_at: new Date().toISOString(),
+      flights,
+      deleted_flight_keys: Array.from(state.deletedFlightKeys).slice(-100)
+    }));
+  } catch {
+  }
+}
+
+function mergeServerFlights(serverFlights) {
+  const savedOrder = new Map(state.flights.map((flight, index) => [flight.flight_key, index]));
+  const savedByKey = new Map(state.flights.map((flight) => [flight.flight_key, flight]));
+  const merged = (serverFlights || []).filter((flight) => !state.deletedFlightKeys.has(flight.flight_key)).map((flight) => {
+    const saved = savedByKey.get(flight.flight_key);
+    return saved ? { ...saved, ...flight, state: flight.state || saved.state || null } : flight;
+  });
+  merged.sort((a, b) => {
+    const aOrder = savedOrder.has(a.flight_key) ? savedOrder.get(a.flight_key) : Number.MAX_SAFE_INTEGER;
+    const bOrder = savedOrder.has(b.flight_key) ? savedOrder.get(b.flight_key) : Number.MAX_SAFE_INTEGER;
+    return aOrder - bOrder;
+  });
+  return merged;
+}
+
+function localFlightFromCandidate(candidate) {
+  return {
+    flight_key: `local_${candidate.candidate_key}`,
+    display_flight_number: candidate.flight_number,
+    origin: candidate.origin,
+    destination: candidate.destination,
+    etd_utc: candidate.etd_utc || candidate.current_edct_utc || new Date().toISOString(),
+    state: {
+      current_edct_utc: candidate.current_edct_utc || null,
+      previous_edct_utc: null,
+      last_change: candidate.current_edct_utc ? "EDCT_ASSIGNED" : "UNCHANGED",
+      last_checked_utc: null
+    }
+  };
+}
+
+function moveFlight(flightKey, direction) {
+  const index = state.flights.findIndex((flight) => flight.flight_key === flightKey);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= state.flights.length) return;
+  const [flight] = state.flights.splice(index, 1);
+  state.flights.splice(target, 0, flight);
+  persistFlights();
+  renderFlights();
+  renderStats();
+}
+
+function removeFlightLocally(flightKey) {
+  const previousLength = state.flights.length;
+  state.flights = state.flights.filter((flight) => flight.flight_key !== flightKey);
+  if (state.flights.length === previousLength) return false;
+  if (!flightKey.startsWith("local_")) state.deletedFlightKeys.add(flightKey);
+  persistFlights();
+  renderFlights();
+  renderStats();
+  return true;
+}
+
+function replaceLocalFlight(localKey, serverFlight) {
+  const index = state.flights.findIndex((flight) => flight.flight_key === localKey);
+  if (index < 0) return false;
+  state.deletedFlightKeys.delete(serverFlight.flight_key);
+  state.flights[index] = { ...state.flights[index], ...serverFlight, state: serverFlight.state || state.flights[index].state || null };
+  persistFlights();
+  renderFlights();
+  renderStats();
+  return true;
 }
 
 function toUtcFromLocal(value) {
@@ -103,10 +255,14 @@ function notificationStatus() {
 }
 
 function renderFlights() {
-  const rows = state.flights.map((flight) => {
+  const rows = state.flights.map((flight, index) => {
     const change = compactChange(flight);
     const route = `${flight.origin}-${flight.destination}`;
     return `<div class="flight-row" data-flight="${escapeHtml(flight.flight_key)}" role="button" tabindex="0">
+      <div class="reorder-controls" aria-label="Reorder ${escapeHtml(flight.display_flight_number)}">
+        <button class="move-btn" data-move="${escapeHtml(flight.flight_key)}" data-direction="-1" type="button" aria-label="Move ${escapeHtml(flight.display_flight_number)} up" ${index === 0 ? "disabled" : ""}>Up</button>
+        <button class="move-btn" data-move="${escapeHtml(flight.flight_key)}" data-direction="1" type="button" aria-label="Move ${escapeHtml(flight.display_flight_number)} down" ${index === state.flights.length - 1 ? "disabled" : ""}>Down</button>
+      </div>
       <strong>${escapeHtml(flight.display_flight_number)}</strong>
       <span>${escapeHtml(route)}</span>
       <span class="edct">${escapeHtml(hhmmz(flight.state?.current_edct_utc))}</span>
@@ -142,6 +298,7 @@ function renderBadge() {
 }
 
 async function loadAll() {
+  const previousFlights = state.flights;
   const session = await api("/api/session");
   const [flights, status, events] = await Promise.all([
     api("/api/flights"),
@@ -149,16 +306,38 @@ async function loadAll() {
     api("/api/edct/events")
   ]);
   state.session = session.session;
-  state.flights = flights.flights;
+  const serverFlights = flights.flights || [];
+  state.serverFlightKeys = serverFlights.map((flight) => flight.flight_key);
+  state.flights = serverFlights.length ? mergeServerFlights(serverFlights) : previousFlights;
   state.status = status;
   state.events = events.events;
+  persistFlights();
   render();
+  reconcileSavedFlightsInBackground();
 }
 
 async function addFlight(values) {
-  await api("/api/flights", { method: "POST", body: JSON.stringify(values) });
+  const localKey = `local_manual_${Date.now()}`;
+  state.flights.push({
+    flight_key: localKey,
+    display_flight_number: String(values.flight_number || values.display_flight_number || "").toUpperCase(),
+    origin: String(values.origin || "").toUpperCase(),
+    destination: String(values.destination || "").toUpperCase(),
+    etd_utc: values.etd || values.etd_utc || new Date().toISOString(),
+    state: null
+  });
+  persistFlights();
+  renderFlights();
+  renderStats();
   closeAddPanel();
-  await loadAll();
+  try {
+    const data = await api("/api/flights", { method: "POST", body: JSON.stringify(values) });
+    if (data.flight) replaceLocalFlight(localKey, data.flight);
+    scheduleLoadAll(1500);
+  } catch (error) {
+    removeFlightLocally(localKey);
+    setLookupMessage(error.message || "Add failed.", true);
+  }
 }
 
 function setLookupMessage(message, isError = false) {
@@ -173,7 +352,6 @@ function setLookupBusy(isBusy) {
 
 function renderCandidates(candidates) {
   state.candidates = candidates || [];
-  $("bulkAddSelectedBtn").hidden = !state.candidates.some((candidate) => !candidate.already_watched);
   $("candidateList").innerHTML = state.candidates.map((candidate) => `
     <div class="candidate" data-candidate-row="${escapeHtml(candidate.candidate_key)}">
       <button class="candidate-main" type="button" data-candidate="${escapeHtml(candidate.candidate_key)}" ${candidate.already_watched ? "disabled" : ""}>
@@ -189,18 +367,64 @@ function renderCandidates(candidates) {
 }
 
 async function monitorCandidate(candidateId, options = {}) {
-  setLookupMessage("Adding flight...");
-  await api("/api/edct/lookup/add", { method: "POST", body: JSON.stringify({ candidate_key: candidateId }) });
-  state.candidates = state.candidates.filter((candidate) => candidate.candidate_key !== candidateId);
+  const candidate = state.candidates.find((item) => item.candidate_key === candidateId);
+  if (!candidate) return;
+  const localFlight = localFlightFromCandidate(candidate);
+  state.flights.push(localFlight);
+  pendingAdds.set(localFlight.flight_key, candidateId);
+  persistFlights();
+  renderFlights();
+  renderStats();
+  setLookupMessage("Flight added.");
+  state.candidates = state.candidates.filter((item) => item.candidate_key !== candidateId);
   renderCandidates(state.candidates);
-  setLookupMessage("");
   if (!options.keepOpen) closeAddPanel();
-  await loadAll();
   if (options.keepOpen) {
     const form = $("lookupForm");
     form.elements.flight.value = "";
     form.elements.flight.focus();
   }
+  addCandidateInBackground(candidateId, localFlight.flight_key);
+}
+
+async function addCandidateInBackground(candidateId, localKey) {
+  try {
+    const data = await api("/api/edct/lookup/add", { method: "POST", body: JSON.stringify({ candidate_key: candidateId }) });
+    pendingAdds.delete(localKey);
+    const serverFlight = data.flight;
+    if (!serverFlight) return;
+    if (!replaceLocalFlight(localKey, serverFlight)) {
+      await api(`/api/flights/${serverFlight.flight_key}`, { method: "DELETE" });
+      return;
+    }
+    scheduleLoadAll(1500);
+  } catch (error) {
+    pendingAdds.delete(localKey);
+    removeFlightLocally(localKey);
+    setLookupMessage(error.message || "Add failed.", true);
+  }
+}
+
+async function persistServerDelete(flightKey) {
+  if (flightKey.startsWith("local_")) {
+    pendingAdds.delete(flightKey);
+    return;
+  }
+  try {
+    await api(`/api/flights/${flightKey}`, { method: "DELETE" });
+  } catch (error) {
+    setLookupMessage(error.message || "Delete failed on server.", true);
+  }
+}
+
+let loadAllTimer = null;
+function scheduleLoadAll(delay = 0) {
+  clearTimeout(loadAllTimer);
+  loadAllTimer = setTimeout(() => {
+    loadAll().catch(() => {
+      renderWarning();
+    });
+  }, delay);
 }
 
 async function pollNotifications() {
@@ -247,10 +471,36 @@ function closeAddPanel() {
   $("addPanel").hidden = true;
   $("showAddBtn").hidden = false;
   $("lookupForm").reset();
-  $("bulkAddSelectedBtn").hidden = true;
   state.candidates = [];
   $("candidateList").innerHTML = "";
   setLookupMessage("");
+}
+
+function serverPayloadFromFlight(flight) {
+  return {
+    flight_number: flight.display_flight_number,
+    origin: flight.origin,
+    destination: flight.destination,
+    etd_utc: flight.etd_utc || flight.state?.current_edct_utc || new Date().toISOString()
+  };
+}
+
+function shouldReconcileFlight(flight) {
+  return flight && !String(flight.flight_key || "").startsWith("local_");
+}
+
+async function reconcileSavedFlightsInBackground() {
+  const serverKeys = new Set((state.serverFlightKeys || []).filter(Boolean));
+  const saved = state.flights.filter(shouldReconcileFlight);
+  if (!saved.length) return;
+  for (const flight of saved) {
+    if (serverKeys.has(flight.flight_key)) continue;
+    try {
+      const data = await api("/api/flights", { method: "POST", body: JSON.stringify(serverPayloadFromFlight(flight)) });
+      if (data.flight) replaceLocalFlight(flight.flight_key, data.flight);
+    } catch {
+    }
+  }
 }
 
 function keepEntryOpenAfterAdd() {
@@ -313,30 +563,6 @@ $("lookupForm").addEventListener("submit", async (event) => {
   }
 });
 
-$("bulkFindBtn").addEventListener("click", async () => {
-  const text = $("bulkInput").value;
-  if (!text.trim()) return;
-  setLookupMessage("Searching rows...");
-  $("candidateList").innerHTML = "";
-  try {
-    const data = await api("/api/edct/lookup/bulk", { method: "POST", body: JSON.stringify({ text, parser: "generic" }) });
-    renderCandidates(data.candidates || []);
-    const parseErrors = (data.errors || []).map((item) => `Line ${item.line || "-"}: ${item.message}`).join(" ");
-    setLookupMessage([data.message, parseErrors].filter(Boolean).join(" "));
-  } catch (error) {
-    setLookupMessage(error.message || "Bulk lookup failed.", true);
-  }
-});
-
-$("bulkAddSelectedBtn").addEventListener("click", async () => {
-  const selected = state.candidates.filter((candidate) => !candidate.already_watched);
-  for (const candidate of selected) {
-    await monitorCandidate(candidate.candidate_key, { keepOpen: true });
-  }
-  $("bulkInput").value = "";
-  setLookupMessage("Selected flights added.");
-});
-
 $("notifyBtn").addEventListener("click", async () => {
   const status = notificationStatus();
   if (typeof window.Notification === "function" && Notification.permission === "default" && status.level !== "warning") await Notification.requestPermission();
@@ -350,8 +576,16 @@ document.addEventListener("click", async (event) => {
   const deleteId = event.target.dataset.delete;
   if (deleteId) {
     event.stopPropagation();
-    await api(`/api/flights/${deleteId}`, { method: "DELETE" });
-    await loadAll();
+    const startedAt = performance.now();
+    removeFlightLocally(deleteId);
+    console.info(`Sadiom Flow delete UI update: ${Math.round(performance.now() - startedAt)}ms`);
+    persistServerDelete(deleteId).then(() => scheduleLoadAll(1500));
+    return;
+  }
+  const moveId = event.target.dataset.move;
+  if (moveId) {
+    event.stopPropagation();
+    moveFlight(moveId, Number(event.target.dataset.direction || 0));
     return;
   }
   const candidateButton = event.target.closest("[data-candidate]");
@@ -377,13 +611,21 @@ document.addEventListener("keydown", (event) => {
   showSummary(row.dataset.flight);
 });
 
-loadAll().then(() => {
-  heartbeat();
-  pollNotifications();
-}).catch((error) => {
-  $("warningBanner").textContent = "Backend unavailable. Verify official source.";
-  $("warningBanner").hidden = false;
-});
-setInterval(loadAll, 60_000);
+function initialize() {
+  const savedState = loadSavedState();
+  state.deletedFlightKeys = new Set(savedState.deletedFlightKeys);
+  if (savedState.flights.length) state.flights = savedState.flights;
+  render();
+  loadAll().then(() => {
+    heartbeat();
+    pollNotifications();
+  }).catch(() => {
+    $("warningBanner").textContent = "Backend unavailable. Verify official source.";
+    $("warningBanner").hidden = false;
+  });
+}
+
+initialize();
+setInterval(() => scheduleLoadAll(), 60_000);
 setInterval(heartbeat, 45_000);
 setInterval(pollNotifications, 30_000);
