@@ -450,6 +450,7 @@ async function pollNotifications() {
     }
     const data = await api("/api/notifications/pending");
     state.pending = data.notifications || [];
+    if (state.pending.length) scheduleLoadAll();
     renderBadge();
     if (permission !== "granted") return;
     const delivered = [];
