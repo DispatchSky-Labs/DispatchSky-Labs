@@ -3,175 +3,459 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CieloTracker - Aviation METAR/TAF Alerts</title>
-    <meta name="description" content="CieloTracker - Professional aviation weather monitoring with METAR/TAF alerts for pilots. Get instant notifications when ceiling or visibility drops below your limits.">
+    <title>Sadiom - Aviation Tools</title>
+    <meta name="description" content="Sadiom builds concise aviation tools for dispatch study, flow tracking, and weather awareness.">
 
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <style>
         :root {
-            --primary: #0066FF;
-            --dark: #0f172a;
-            --light: #f8fafc;
+            --page: #f5f5f7;
+            --surface: #ffffff;
+            --ink: #1d1d1f;
+            --muted: #6e6e73;
+            --line: #d2d2d7;
+            --blue: #0066cc;
+            --blue-dark: #004f9f;
+            --max: 1120px;
         }
-        
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--light);
-            color: var(--dark);
-            line-height: 1.6;
+            background: var(--page);
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.45;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
         }
 
-        header {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: white;
-            padding: 1rem 0;
+        a {
+            color: inherit;
         }
 
-        .container {
-            max-width: 1200px;
+        .site-header {
+            background: rgba(245, 245, 247, 0.86);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            backdrop-filter: saturate(180%) blur(18px);
+        }
+
+        .nav {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
             margin: 0 auto;
-            padding: 0 20px;
+            max-width: var(--max);
+            min-height: 48px;
+            padding: 0 24px;
+        }
+
+        .brand {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            align-items: center;
+            display: flex;
+            gap: 24px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--muted);
+            font-size: 13px;
+            text-decoration: none;
+        }
+
+        .nav-links a:hover {
+            color: var(--ink);
         }
 
         .hero {
-            background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%);
-            color: white;
+            align-items: center;
+            display: flex;
+            min-height: 72vh;
+            padding: 112px 24px 96px;
             text-align: center;
-            padding: 100px 20px 120px;
         }
 
-        .hero h1 {
-            font-size: 3.8rem;
-            font-weight: 800;
-            margin-bottom: 16px;
+        .hero-inner {
+            margin: 0 auto;
+            max-width: 900px;
         }
 
-        .hero .tagline {
-            font-size: 1.8rem;
-            font-weight: 500;
-            opacity: 0.95;
+        h1 {
+            font-size: clamp(56px, 9vw, 104px);
+            font-weight: 700;
+            letter-spacing: 0;
+            line-height: 1;
             margin-bottom: 24px;
         }
 
         .hero p {
-            font-size: 1.25rem;
-            max-width: 700px;
-            margin: 0 auto 40px;
-            opacity: 0.9;
+            color: var(--muted);
+            font-size: clamp(24px, 4vw, 40px);
+            font-weight: 500;
+            letter-spacing: 0;
+            line-height: 1.12;
+            margin: 0 auto;
+            max-width: 820px;
         }
 
-        .cta-button {
-            display: inline-block;
-            background: #000;
-            color: white;
-            padding: 16px 32px;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            text-decoration: none;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            transition: all 0.3s;
+        .product-section {
+            background: var(--surface);
+            border-top: 1px solid var(--line);
+            padding: 96px 24px;
         }
 
-        .cta-button:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        .product-section.alt {
+            background: var(--page);
         }
 
-        .features {
-            padding: 100px 20px;
-            background: white;
-        }
-
-        .section-title {
-            text-align: center;
-            font-size: 2.5rem;
-            margin-bottom: 60px;
-            font-weight: 700;
-        }
-
-        .features-grid {
+        .product {
+            align-items: center;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 40px;
+            gap: 64px;
+            grid-template-columns: minmax(0, 0.92fr) minmax(300px, 1fr);
+            margin: 0 auto;
+            max-width: var(--max);
         }
 
-        .feature-card {
-            background: #f8fafc;
-            padding: 40px 32px;
-            border-radius: 16px;
-            border: 1px solid #e2e8f0;
+        .product.reverse {
+            grid-template-columns: minmax(300px, 1fr) minmax(0, 0.92fr);
         }
 
-        .feature-card h3 {
-            font-size: 1.5rem;
+        .product.reverse .product-copy {
+            order: 2;
+        }
+
+        .product-copy {
+            max-width: 520px;
+        }
+
+        .eyebrow {
+            color: var(--muted);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        h2 {
+            font-size: clamp(40px, 6vw, 68px);
+            font-weight: 700;
+            letter-spacing: 0;
+            line-height: 1.03;
             margin-bottom: 16px;
         }
 
-        footer {
-            background: var(--dark);
-            color: #cbd5e1;
-            text-align: center;
-            padding: 60px 20px 40px;
+        .tagline {
+            color: var(--ink);
+            font-size: clamp(24px, 3.2vw, 36px);
+            font-weight: 600;
+            letter-spacing: 0;
+            line-height: 1.12;
+            margin-bottom: 18px;
         }
 
-        @media (max-width: 768px) {
-            .hero h1 { font-size: 2.8rem; }
-            .hero .tagline { font-size: 1.5rem; }
+        .body-copy {
+            color: var(--muted);
+            font-size: 20px;
+            max-width: 500px;
+        }
+
+        .cta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-top: 32px;
+        }
+
+        .button {
+            align-items: center;
+            background: var(--blue);
+            border-radius: 999px;
+            color: #ffffff;
+            display: inline-flex;
+            font-size: 17px;
+            font-weight: 500;
+            min-height: 44px;
+            padding: 10px 22px;
+            text-decoration: none;
+        }
+
+        .button:hover {
+            background: var(--blue-dark);
+        }
+
+        .button.secondary {
+            background: transparent;
+            color: var(--blue);
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        .button.secondary:hover {
+            background: transparent;
+            color: var(--blue-dark);
+        }
+
+        .preview {
+            background: linear-gradient(180deg, #fbfbfd, #f5f5f7);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 8px;
+            min-height: 430px;
+            overflow: hidden;
+            padding: 22px;
+            position: relative;
+        }
+
+        .preview::before {
+            color: #8e8e93;
+            content: "Screenshot placeholder";
+            font-size: 13px;
+            font-weight: 500;
+            left: 28px;
+            position: absolute;
+            top: 24px;
+        }
+
+        .screen {
+            background: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 8px;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
+            margin: 34px auto 0;
+            max-width: 360px;
+            min-height: 340px;
+            padding: 28px;
+        }
+
+        .screen-title {
+            color: var(--ink);
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 26px;
+        }
+
+        .screen-line {
+            background: #e8e8ed;
+            border-radius: 999px;
+            height: 12px;
+            margin-bottom: 14px;
+        }
+
+        .screen-line.short {
+            width: 58%;
+        }
+
+        .screen-grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: repeat(2, 1fr);
+            margin-top: 28px;
+        }
+
+        .screen-tile {
+            background: #f5f5f7;
+            border-radius: 8px;
+            min-height: 76px;
+        }
+
+        .footer {
+            background: #ffffff;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            padding: 44px 24px;
+            text-align: center;
+        }
+
+        .footer p:first-child {
+            color: var(--ink);
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        @media (max-width: 900px) {
+            .product,
+            .product.reverse {
+                gap: 40px;
+                grid-template-columns: 1fr;
+            }
+
+            .product.reverse .product-copy {
+                order: 0;
+            }
+
+            .product-copy {
+                max-width: 680px;
+                text-align: center;
+            }
+
+            .body-copy {
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .cta-row {
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .nav {
+                padding: 0 18px;
+            }
+
+            .nav-links {
+                gap: 14px;
+            }
+
+            .nav-links a {
+                font-size: 12px;
+            }
+
+            .hero {
+                min-height: 64vh;
+                padding: 84px 20px 72px;
+            }
+
+            .product-section {
+                padding: 72px 20px;
+            }
+
+            .body-copy {
+                font-size: 18px;
+            }
+
+            .preview {
+                border-radius: 8px;
+                min-height: 360px;
+                padding: 18px;
+            }
+
+            .screen {
+                min-height: 290px;
+                padding: 24px;
+            }
         }
     </style>
 </head>
 <body>
-
-    <header>
-        <div class="container">CieloTracker</div>
+    <header class="site-header">
+        <nav class="nav" aria-label="Primary navigation">
+            <a class="brand" href="/">Sadiom</a>
+            <ul class="nav-links">
+                <li><a href="/study.html">Study</a></li>
+                <li><a href="/flow/">Flow</a></li>
+                <li><a href="/cielotracker.html">CieloTracker</a></li>
+            </ul>
+        </nav>
     </header>
 
-    <section class="hero">
-        <div class="container">
-            <h1>CieloTracker</h1>
-            <p class="tagline">Aviation METAR/TAF Alerts</p>
-            <p>Professional weather monitoring for pilots. Get instant alerts when ceiling or visibility drops below your personal limits.</p>
-            
-            <a href="https://apps.apple.com/us/app/cielotracker/id6751013407" class="cta-button" target="_blank">
-                Download on the App Store
-            </a>
-        </div>
-    </section>
+    <main>
+        <section class="hero" aria-labelledby="hero-title">
+            <div class="hero-inner">
+                <h1 id="hero-title">Sadiom</h1>
+                <p>Aviation tools built by a dispatcher.</p>
+            </div>
+        </section>
 
-    <section class="features">
-        <div class="container">
-            <h2 class="section-title">Key Features</h2>
-            
-            <div class="features-grid">
-                <div class="feature-card">
-                    <h3>Custom Thresholds</h3>
-                    <p>Set your minimum ceiling (feet) and visibility (miles). The app automatically converts and compares against current METAR/TAF reports.</p>
+        <section class="product-section" id="study" aria-labelledby="study-title">
+            <div class="product">
+                <div class="product-copy">
+                    <p class="eyebrow">Flight Dispatch Study</p>
+                    <h2 id="study-title">Flight Dispatch Study</h2>
+                    <p class="tagline">Master dispatch knowledge.</p>
+                    <p class="body-copy">Active recall study system for ADX candidates and working aircraft dispatchers.</p>
+                    <div class="cta-row">
+                        <a class="button" href="https://apps.apple.com/us/app/flight-dispatch-question-bank/id6762245143" target="_blank" rel="noopener">Download on the App Store</a>
+                    </div>
                 </div>
-                <div class="feature-card">
-                    <h3>Smart Alerts</h3>
-                    <p>Receive reliable push notifications the moment weather conditions fall below your limits. No more constant manual checking.</p>
-                </div>
-                <div class="feature-card">
-                    <h3>Background Refresh</h3>
-                    <p>Fast and reliable METAR/TAF updates even when the app is closed.</p>
-                </div>
-                <div class="feature-card">
-                    <h3>Clean & Professional</h3>
-                    <p>Designed specifically for pilots and aviation professionals. Free to use with ads.</p>
+                <div class="preview" aria-label="Flight Dispatch Study screenshot placeholder">
+                    <div class="screen">
+                        <p class="screen-title">Study Session</p>
+                        <div class="screen-line"></div>
+                        <div class="screen-line"></div>
+                        <div class="screen-line short"></div>
+                        <div class="screen-grid">
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <footer>
-        <div class="container">
-            <p style="font-size: 1.4rem; margin-bottom: 12px;">CieloTracker</p>
-            <p>© 2026 Samuel Gonzalez. Made for aviation professionals.</p>
-        </div>
+        <section class="product-section alt" id="flow" aria-labelledby="flow-title">
+            <div class="product reverse">
+                <div class="product-copy">
+                    <p class="eyebrow">Sadiom Flow</p>
+                    <h2 id="flow-title">Sadiom Flow</h2>
+                    <p class="tagline">Track what matters.</p>
+                    <p class="body-copy">Flow tracking and operational awareness tools for aviation operations.</p>
+                    <div class="cta-row">
+                        <a class="button secondary" href="/flow/">Open Flow</a>
+                    </div>
+                </div>
+                <div class="preview" aria-label="Sadiom Flow screenshot placeholder">
+                    <div class="screen">
+                        <p class="screen-title">Flow Board</p>
+                        <div class="screen-line"></div>
+                        <div class="screen-line short"></div>
+                        <div class="screen-grid">
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="product-section" id="cielotracker" aria-labelledby="cielotracker-title">
+            <div class="product">
+                <div class="product-copy">
+                    <p class="eyebrow">CieloTracker</p>
+                    <h2 id="cielotracker-title">CieloTracker</h2>
+                    <p class="tagline">Weather without surprises.</p>
+                    <p class="body-copy">METAR and TAF monitoring with intelligent alerts for aviation professionals.</p>
+                    <div class="cta-row">
+                        <a class="button" href="https://apps.apple.com/us/app/cielotracker/id6751013407" target="_blank" rel="noopener">Download on the App Store</a>
+                    </div>
+                </div>
+                <div class="preview" aria-label="CieloTracker screenshot placeholder">
+                    <div class="screen">
+                        <p class="screen-title">Weather Watch</p>
+                        <div class="screen-line"></div>
+                        <div class="screen-line"></div>
+                        <div class="screen-line short"></div>
+                        <div class="screen-grid">
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                            <div class="screen-tile"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>Sadiom</p>
+        <p>Independent aviation tools.</p>
     </footer>
-
 </body>
 </html>

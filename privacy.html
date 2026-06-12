@@ -1,90 +1,243 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <!-- Google tag (gtag.js) - keeping for now; remove if you also eliminate analytics -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-59T34PRT4E"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-59T34PRT4E');
-  </script>
-
   <meta charset="utf-8" />
-  <title>Privacy Policy — CieloTracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Privacy Policy for CieloTracker by Sadiom." />
-  <link rel="canonical" href="/privacy/" />
+  <title>Privacy Policy - Sadiom</title>
+  <meta name="description" content="Privacy Policy for CieloTracker and Flight Dispatch Study by Sadiom." />
+  <link rel="canonical" href="/privacy.html" />
   <style>
-    :root { --ink:#0b6; --fg:#0b0b0b; --muted:#555; --bg:#fff; --card:#f7f7f7; }
-    *{box-sizing:border-box}
-    body{margin:40px auto; max-width:880px; font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; color:var(--fg); background:var(--bg)}
-    a{color:var(--ink); text-decoration:underline}
-    header h1{margin:0 0 6px}
-    header p{margin:0; color:var(--muted)}
-    section{background:var(--card); padding:18px 20px; border-radius:12px; margin:18px 0}
-    h2{margin:0 0 8px}
-    ul{margin:8px 0 0 18px}
-    nav{margin:0 0 16px}
-    nav a{margin-right:14px}
-    footer{margin-top:28px; color:var(--muted); font-size:14px}
-    code{background:#eef; padding:0 4px; border-radius:4px}
+    :root {
+      --page: #f5f5f7;
+      --surface: #ffffff;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0066cc;
+      --blue-dark: #004f9f;
+      --max: 980px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--page);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { color: var(--blue-dark); }
+
+    .site-header {
+      background: rgba(245, 245, 247, 0.86);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: saturate(180%) blur(18px);
+    }
+
+    .nav {
+      align-items: center;
+      display: flex;
+      justify-content: space-between;
+      margin: 0 auto;
+      max-width: 1120px;
+      min-height: 48px;
+      padding: 0 24px;
+    }
+
+    .brand {
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .nav-links {
+      align-items: center;
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+    }
+
+    .nav-links a:hover,
+    .nav-links a[aria-current="page"] {
+      color: var(--ink);
+    }
+
+    .wrap {
+      margin: 0 auto;
+      max-width: var(--max);
+      padding: 86px 24px 64px;
+    }
+
+    .hero {
+      margin: 0 auto 46px;
+      max-width: 860px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: clamp(44px, 7vw, 78px);
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 1;
+      margin-bottom: 18px;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: clamp(20px, 3vw, 28px);
+      font-weight: 500;
+      line-height: 1.2;
+      margin: 0 auto;
+      max-width: 760px;
+    }
+
+    .updated {
+      color: var(--muted);
+      font-size: 15px;
+      margin-top: 18px;
+    }
+
+    section {
+      background: var(--surface);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 8px;
+      margin: 18px 0;
+      padding: 24px;
+    }
+
+    h2 {
+      font-size: 26px;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+
+    h3 {
+      font-size: 19px;
+      margin: 18px 0 8px;
+    }
+
+    p,
+    li {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    strong { color: var(--ink); }
+    ul { margin: 10px 0 0 22px; }
+
+    .footer {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 28px 24px 46px;
+      text-align: center;
+    }
+
+    .footer a { margin: 0 8px; }
+
+    @media (max-width: 640px) {
+      .nav { padding: 0 18px; }
+      .nav-links { gap: 14px; }
+      .nav-links a { font-size: 12px; }
+      .wrap { padding: 70px 20px 54px; }
+      section { padding: 20px; }
+    }
   </style>
 </head>
 <body>
-  <nav>
-    <a href="/">Home</a>
-    <a href="/support/">Support</a>
-  </nav>
-
-  <header>
-    <h1>Privacy Policy</h1>
-    <p>for <strong>CieloTracker</strong> by Sadiom • Last updated: <strong>January 2026</strong></p>
+  <header class="site-header">
+    <nav class="nav" aria-label="Primary navigation">
+      <a class="brand" href="/">Sadiom</a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/study.html">Study</a></li>
+        <li><a href="/flow/">Flow</a></li>
+        <li><a href="/cielotracker.html">CieloTracker</a></li>
+      </ul>
+    </nav>
   </header>
 
-  <section id="overview">
-    <h2>Overview</h2>
-    <p>Sadiom respects your privacy. CieloTracker does not create user accounts, does not collect any personal data, and does not use any third-party advertising or analytics services that track you. Your alert thresholds, preferences, and all other app data are stored locally on your device only. The app makes direct requests to public weather services to fetch METAR/TAF data using ICAO codes you enter — these requests contain no personal information.</p>
-  </section>
+  <main class="wrap">
+    <div class="hero">
+      <h1>Privacy Policy</h1>
+      <p class="lead">Privacy information for CieloTracker and Flight Dispatch Study by Sadiom.</p>
+      <p class="updated">Last updated: January 2026</p>
+    </div>
 
-  <section id="data-we-process">
-    <h2>Data We Process</h2>
-    <p>CieloTracker processes <strong>no personal data</strong>. The only network activity is sending ICAO codes (e.g., airport identifiers) to weather data providers to retrieve aviation weather information (METAR/TAF). These requests do not include any identifiers, location data beyond what you explicitly enter, or other personal information.</p>
-    <ul>
-      <li><strong>Weather Requests</strong> — ICAO codes you enter are sent to weather providers; no personal data is included or collected.</li>
-      <li><strong>Support Email</strong> — if you email us, we receive your email address and message solely to respond.</li>
-    </ul>
-  </section>
+    <section id="overview">
+      <h2>Overview</h2>
+      <p>Sadiom respects your privacy. CieloTracker does not create user accounts, does not collect personal data, and does not use third-party advertising or analytics services that track you. Your alert thresholds, preferences, and all other CieloTracker app data are stored locally on your device only. The app makes direct requests to public weather services to fetch METAR/TAF data using ICAO codes you enter. These requests contain no personal information.</p>
+      <p>Flight Dispatch Study is a study app for aviation knowledge practice. It may use app services for study content, syncing, moderation, or optional community features when you choose to use those features.</p>
+    </section>
 
-  <section id="choices">
-    <h2>Your Choices</h2>
-    <p>Since no personal data is collected, there are no tracking settings to manage. You can continue using the app with full privacy — nothing is shared with third parties for advertising or profiling purposes.</p>
-  </section>
+    <section id="cielotracker">
+      <h2>CieloTracker</h2>
+      <p>CieloTracker processes <strong>no personal data</strong>. The only network activity is sending ICAO codes, such as airport identifiers, to weather providers to retrieve aviation weather information. These requests do not include identifiers, location data beyond what you explicitly enter, or other personal information.</p>
+      <ul>
+        <li><strong>Weather Requests</strong> - ICAO codes you enter are sent to weather providers; no personal data is included or collected.</li>
+        <li><strong>Support Email</strong> - if you email us, we receive your email address and message solely to respond.</li>
+      </ul>
+    </section>
 
-  <section id="sharing-retention">
-    <h2>Sharing & Retention</h2>
-    <ul>
-      <li>No data is shared with any third-party advertising or analytics providers.</li>
-      <li>Weather request history is never stored on our servers (or any servers we control).</li>
-      <li>Support emails are retained only as long as needed to respond and resolve your inquiry.</li>
-    </ul>
-  </section>
+    <section id="study">
+      <h2>Flight Dispatch Study</h2>
+      <p>Flight Dispatch Study may process the information needed to provide study sessions, content updates, progress syncing, and optional community-submitted question improvements.</p>
+      <ul>
+        <li><strong>Study Activity</strong> - progress, missed items, and session outcomes may be stored or synced to support app features.</li>
+        <li><strong>Optional Account Services</strong> - if Sign in with Apple or similar app services are used, the app receives only the identifiers needed to operate those features.</li>
+        <li><strong>Community Submissions</strong> - submitted questions, corrections, or feedback may be reviewed and used to improve study content.</li>
+        <li><strong>Support Email</strong> - if you email us, we receive your email address and message solely to respond.</li>
+      </ul>
+    </section>
 
-  <section id="children">
-    <h2>Children</h2>
-    <p>CieloTracker is intended for professional and general aviation users and is not directed to children under 13.</p>
-  </section>
+    <section id="choices">
+      <h2>Your Choices</h2>
+      <p>For CieloTracker, there are no tracking settings to manage because no personal data is collected. For Flight Dispatch Study, optional features can be used only when you choose to participate. You may contact support with privacy questions or requests.</p>
+    </section>
 
-  <section id="contact">
-    <h2>Contact</h2>
-    <p>For privacy questions or requests, email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.</p>
-  </section>
+    <section id="sharing-retention">
+      <h2>Sharing & Retention</h2>
+      <ul>
+        <li>No data is shared with third-party advertising or tracking providers.</li>
+        <li>CieloTracker weather request history is never stored on servers we control.</li>
+        <li>Flight Dispatch Study data is retained only as needed to provide app features, sync content, moderate submissions, or respond to support requests.</li>
+        <li>Support emails are retained only as long as needed to respond and resolve your inquiry.</li>
+      </ul>
+    </section>
 
-  <section id="lite">
-    <h2>CieloCheck Lite Privacy Policy</h2>
-    <p>CieloCheck Lite processes all data on-device and does not collect personal information. For inquiries, contact <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.</p>
-  </section>
+    <section id="children">
+      <h2>Children</h2>
+      <p>CieloTracker and Flight Dispatch Study are intended for aviation users and learners and are not directed to children under 13.</p>
+    </section>
 
-  <footer>© 2025 Sadiom.</footer>
+    <section id="contact">
+      <h2>Contact</h2>
+      <p>For privacy questions or requests, email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.</p>
+    </section>
+
+    <section id="lite">
+      <h2>CieloCheck Lite Privacy Policy</h2>
+      <p>CieloCheck Lite processes all data on-device and does not collect personal information. For inquiries, contact <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <a href="/">Home</a>
+    <a href="/support.html">Support</a>
+    <a href="/privacy.html" aria-current="page">Privacy</a>
+  </footer>
 </body>
 </html>

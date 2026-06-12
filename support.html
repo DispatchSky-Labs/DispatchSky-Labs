@@ -1,184 +1,254 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google tag (gtag.js) — REMOVE THIS ENTIRE BLOCK IF YOU ALSO ELIMINATE ANALYTICS TRACKING -->
-  <!-- <script async src="https://www.googletagmanager.com/gtag/js?id=G-59T34PRT4E"></script> -->
-  <!-- <script> -->
-  <!--   window.dataLayer = window.dataLayer || []; -->
-  <!--   function gtag(){dataLayer.push(arguments);} -->
-  <!--   gtag('js', new Date()); -->
-  <!--   gtag('config', 'G-59T34PRT4E'); -->
-  <!-- </script> -->
-
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Sadiom iOS Support</title>
-  <meta name="description" content="Support, FAQs, privacy, and contact information for Sadiom iOS apps."/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Support - Sadiom</title>
+  <meta name="description" content="Support, FAQs, privacy, and contact information for Sadiom aviation apps." />
   <style>
-    :root { --ink:#0b6; --fg:#0b0b0b; --muted:#555; --bg:#fff; --card:#f7f7f7; }
-    *{box-sizing:border-box}
-    body{margin:0; background:var(--bg); color:var(--fg);
-      font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;}
-    a{color:var(--ink); text-decoration:underline}
-    header{background:#0b2239; color:#fff; padding:16px 20px}
-    header h1{margin:0 0 4px; font-size:22px}
-    header p{margin:0; opacity:.85; font-size:14px}
-    nav{max-width:880px; margin:0 auto; padding:10px 12px; display:flex; gap:14px}
-    nav a{color:#cfe8ff; text-decoration:none; font-size:14px}
-    nav a:hover{text-decoration:underline}
-    main{max-width:880px; padding:20px; margin:0 auto}
-    h2{margin-top:28px; color:var(--ink)}
-    h3{margin-top:20px; color:var(--ink)}
-    ul{padding-left:1.2rem}
-    li{margin-bottom:10px}
-    .muted{color:var(--muted)}
-    .privacy,.disclaimer{font-size:0.95em; color:var(--muted)}
-    .jump-links{display:flex; flex-wrap:wrap; gap:10px; margin:14px 0 4px}
-    .jump-links a{display:inline-block; padding:7px 12px; border-radius:999px; text-decoration:none; background:#eef7f4; color:#0b6; font-weight:600}
-    hr{border:0; border-top:1px solid #e6e6e6; margin:24px 0}
-    footer{font-size:.9em; color:var(--muted); margin-top:36px; text-align:center}
+    :root {
+      --page: #f5f5f7;
+      --surface: #ffffff;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0066cc;
+      --blue-dark: #004f9f;
+      --max: 980px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--page);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { color: var(--blue-dark); }
+
+    .site-header {
+      background: rgba(245, 245, 247, 0.86);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: saturate(180%) blur(18px);
+    }
+
+    .nav {
+      align-items: center;
+      display: flex;
+      justify-content: space-between;
+      margin: 0 auto;
+      max-width: 1120px;
+      min-height: 48px;
+      padding: 0 24px;
+    }
+
+    .brand {
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .nav-links {
+      align-items: center;
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+    }
+
+    .nav-links a:hover,
+    .nav-links a[aria-current="page"] {
+      color: var(--ink);
+    }
+
+    .wrap {
+      margin: 0 auto;
+      max-width: var(--max);
+      padding: 86px 24px 64px;
+    }
+
+    .hero {
+      margin: 0 auto 46px;
+      max-width: 860px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: clamp(44px, 7vw, 78px);
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 1;
+      margin-bottom: 18px;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: clamp(20px, 3vw, 28px);
+      font-weight: 500;
+      line-height: 1.2;
+      margin: 0 auto;
+      max-width: 760px;
+    }
+
+    .jump-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      justify-content: center;
+      margin-top: 30px;
+    }
+
+    .jump-links a {
+      border-radius: 999px;
+      color: var(--blue);
+      font-size: 15px;
+      font-weight: 500;
+      text-decoration: none;
+    }
+
+    section {
+      background: var(--surface);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 8px;
+      margin: 18px 0;
+      padding: 24px;
+    }
+
+    h2 {
+      font-size: 30px;
+      line-height: 1.15;
+      margin-bottom: 12px;
+    }
+
+    h3 {
+      font-size: 20px;
+      line-height: 1.2;
+      margin: 24px 0 10px;
+    }
+
+    p,
+    li {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    strong { color: var(--ink); }
+    ul { margin: 10px 0 0 22px; }
+    li { margin-bottom: 10px; }
+
+    .footer {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 28px 24px 46px;
+      text-align: center;
+    }
+
+    .footer a { margin: 0 8px; }
+
+    @media (max-width: 640px) {
+      .nav { padding: 0 18px; }
+      .nav-links { gap: 14px; }
+      .nav-links a { font-size: 12px; }
+      .wrap { padding: 70px 20px 54px; }
+      section { padding: 20px; }
+      .jump-links {
+        gap: 12px;
+        justify-content: flex-start;
+      }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Sadiom iOS App Support</h1>
-    <p>Support center for Flight Dispatch Question Bank and CieloTracker</p>
-    <nav>
-      <a href="/">Home</a>
-      <a href="/support.html">Support</a>
-      <a href="/privacy/">Privacy</a>
+  <header class="site-header">
+    <nav class="nav" aria-label="Primary navigation">
+      <a class="brand" href="/">Sadiom</a>
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/study.html">Study</a></li>
+        <li><a href="/flow/">Flow</a></li>
+        <li><a href="/cielotracker.html">CieloTracker</a></li>
+      </ul>
     </nav>
   </header>
 
-  <main>
-    <p>
-      Welcome to Sadiom support. This page provides help, privacy details, and contact information for:
-      <strong>Flight Dispatch Question Bank</strong> and <strong>CieloTracker</strong>.
-    </p>
-
-    <div class="jump-links">
-      <a href="#fdqb">Flight Dispatch Question Bank</a>
-      <a href="#ct">CieloTracker</a>
-      <a href="#privacy">Privacy</a>
-      <a href="#contact">Contact</a>
+  <main class="wrap">
+    <div class="hero">
+      <h1>Support</h1>
+      <p class="lead">Help for Flight Dispatch Study and CieloTracker.</p>
+      <div class="jump-links" aria-label="Support sections">
+        <a href="#fdqb">Flight Dispatch Study</a>
+        <a href="#ct">CieloTracker</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#contact">Contact</a>
+      </div>
     </div>
 
-    <h2 id="fdqb">Flight Dispatch Question Bank Support</h2>
-    <p>
-      Flight Dispatch Question Bank is a structured study app for dispatcher and aviation knowledge practice,
-      with cloze-style recall, guided sessions, and optional community submissions.
-    </p>
+    <section id="fdqb">
+      <h2>Flight Dispatch Study Support</h2>
+      <p>Flight Dispatch Study is a structured study app for dispatcher and aviation knowledge practice, with cloze-style recall, guided sessions, and optional community submissions.</p>
 
-    <h3>Frequently Asked Questions</h3>
-    <ul>
-      <li><strong>How do I start studying?</strong><br/>
-        Open the app and begin a session from Home. The default flow supports tap-to-reveal and quick Got it / Missed responses.
-      </li>
-      <li><strong>How do cloze blanks work?</strong><br/>
-        Hidden segments are shown inline and revealed step-by-step. Multi-blank questions are supported.
-      </li>
-      <li><strong>Can I submit or suggest question fixes?</strong><br/>
-        Yes. Use the submission tools in-app. If signed in with Apple, submissions can be sent for moderation.
-      </li>
-      <li><strong>My sync looks stale. What should I do?</strong><br/>
-        Check internet connection, reopen the app, then try again. If it persists, contact support below with app version and screenshots.
-      </li>
-      <li><strong>Does the app force required updates?</strong><br/>
-        Required app updates may block access until the latest version is installed when version verification indicates an update is needed.
-      </li>
-    </ul>
+      <h3>Frequently Asked Questions</h3>
+      <ul>
+        <li><strong>How do I start studying?</strong><br>Open the app and begin a session from Home. The default flow supports tap-to-reveal and quick Got it / Missed responses.</li>
+        <li><strong>How do cloze blanks work?</strong><br>Hidden segments are shown inline and revealed step-by-step. Multi-blank questions are supported.</li>
+        <li><strong>Can I submit or suggest question fixes?</strong><br>Yes. Use the submission tools in-app. If signed in with Apple, submissions can be sent for moderation.</li>
+        <li><strong>My sync looks stale. What should I do?</strong><br>Check internet connection, reopen the app, then try again. If it persists, contact support below with app version and screenshots.</li>
+        <li><strong>Does the app force required updates?</strong><br>Required app updates may block access until the latest version is installed when version verification indicates an update is needed.</li>
+      </ul>
 
-    <h3>Aviation Disclaimer</h3>
-    <p class="disclaimer">
-      Flight Dispatch Question Bank is for educational and training support only. It is not an operational dispatch authority.
-      Always use official regulatory publications, carrier procedures, and approved operational systems for live operations.
-    </p>
+      <h3>Aviation Disclaimer</h3>
+      <p>Flight Dispatch Study is for educational and training support only. It is not an operational dispatch authority. Always use official regulatory publications, carrier procedures, and approved operational systems for live operations.</p>
+    </section>
 
-    <h2 id="ct">CieloTracker Support</h2>
-    <p>
-      CieloTracker provides aviation weather monitoring (METARs and TAFs) with alerting tailored for dispatchers and pilots.
-    </p>
+    <section id="ct">
+      <h2>CieloTracker Support</h2>
+      <p>CieloTracker provides aviation weather monitoring with METAR and TAF alerting for aviation professionals.</p>
 
-    <h3>Frequently Asked Questions</h3>
-    <ul>
-      <li><strong>What is CieloTracker?</strong><br/>
-        CieloTracker monitors METARs and TAFs and highlights conditions that meet your alert thresholds.
-        It is for informational use only; always verify with official sources such as
-        <a href="https://1800wxbrief.com" target="_blank" rel="noopener">1800WXBRIEF</a>.
-      </li>
-      <li><strong>Where does weather data come from?</strong><br/>
-        Data is retrieved from NOAA’s Aviation Weather Center and compatible aviation weather APIs.
-      </li>
-      <li><strong>How often is weather updated?</strong><br/>
-        The app checks for new reports on issuance; background checks depend on iOS scheduling.
-        Notifications require an active internet connection and permission.
-      </li>
-      <li><strong>How do I set up alerts?</strong><br/>
-        Enter ICAO identifiers in the app. Under <em>Settings → Thresholds</em>, set your own
-        <strong>Ceiling (feet)</strong> and <strong>Visibility (miles)</strong>.
-      </li>
-      <li><strong>Why isn’t data loading?</strong><br/>
-        Check connectivity and try a manual refresh. If issues persist, email
-        <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
-      </li>
-    </ul>
+      <h3>Frequently Asked Questions</h3>
+      <ul>
+        <li><strong>What is CieloTracker?</strong><br>CieloTracker monitors METARs and TAFs and highlights conditions that meet your alert thresholds. It is for informational use only; always verify with official sources such as <a href="https://1800wxbrief.com" target="_blank" rel="noopener">1800WXBRIEF</a>.</li>
+        <li><strong>Where does weather data come from?</strong><br>Data is retrieved from NOAA's Aviation Weather Center and compatible aviation weather APIs.</li>
+        <li><strong>How often is weather updated?</strong><br>The app checks for new reports on issuance; background checks depend on iOS scheduling. Notifications require an active internet connection and permission.</li>
+        <li><strong>How do I set up alerts?</strong><br>Enter ICAO identifiers in the app. Under Settings, set your own ceiling and visibility thresholds.</li>
+        <li><strong>Why isn't data loading?</strong><br>Check connectivity and try a manual refresh. If issues persist, email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.</li>
+      </ul>
 
-    <h3>Aviation Disclaimer</h3>
-    <p class="disclaimer">
-      CieloTracker is intended for informational use only. Always consult official FAA/ICAO sources before making
-      operational decisions. Sadiom assumes no responsibility for use of this app in flight planning or operations.
-    </p>
+      <h3>Aviation Disclaimer</h3>
+      <p>CieloTracker is intended for informational use only. Always consult official FAA/ICAO sources before making operational decisions. Sadiom assumes no responsibility for use of this app in flight planning or operations.</p>
+    </section>
 
-    <h2 id="privacy">Privacy Policy</h2>
-    <p class="privacy"><em>Last Updated: April 2026</em></p>
-    <p class="privacy">
-      Sadiom respects your privacy. Our apps do not sell personal data and do not use third-party advertising networks.
-      App data such as study progress, preferences, and local settings is stored on-device.
-    </p>
-    <p class="privacy">
-      For Flight Dispatch Question Bank, optional community features may use Sign in with Apple and network services to
-      submit and sync content. For CieloTracker, network requests fetch public weather data for user-entered airport identifiers.
-    </p>
+    <section id="privacy">
+      <h2>Privacy</h2>
+      <p>Sadiom respects your privacy. Our apps do not sell personal data and do not use third-party advertising networks. App data such as study progress, preferences, and local settings is stored on-device or processed only as needed for app functionality.</p>
+      <p>For Flight Dispatch Study, optional community features may use Sign in with Apple and network services to submit and sync content. For CieloTracker, network requests fetch public weather data for user-entered airport identifiers.</p>
+      <p><a href="/privacy.html">Read the full privacy policy.</a></p>
+    </section>
 
-    <h3>Data We Process</h3>
-    <ul>
-      <li><strong>App Function Data</strong> — Study state, preferences, and app configuration needed for core functionality.</li>
-      <li><strong>Optional Support Email</strong> — If you contact us, we use your email/message only to respond.</li>
-      <li><strong>Optional Community Submissions</strong> — Submitted content and moderation metadata used to review and distribute shared questions.</li>
-    </ul>
-
-    <h3>Sharing & Retention</h3>
-    <ul>
-      <li>No personal data is shared for advertising or profiling.</li>
-      <li>Operational app data is retained only as needed for product functionality.</li>
-      <li>Support communications are retained only as needed to resolve inquiries.</li>
-    </ul>
-
-    <h3>Children</h3>
-    <p class="privacy">
-      These apps are not directed to children under 13.
-    </p>
-
-    <h2 id="contact">Contact</h2>
-    <p class="privacy">
-      For support, privacy questions, or App Store review follow-up, email
-      <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.
-      Typical response time: 24–48 hours.
-    </p>
-
-    <footer>
-      <hr/>
-      <div style="max-width:880px;margin:0 auto;padding:14px 12px;
-                  display:flex;justify-content:space-between;flex-wrap:wrap;
-                  font-size:14px;color:#555;">
-        <div>© 2026 Sadiom</div>
-        <div>
-          <a href="/home.html">Home</a> &nbsp;|&nbsp;
-          <a href="/privacy.html">Privacy</a> &nbsp;|&nbsp;
-          <a href="/support.html">Support</a>
-        </div>
-      </div>
-    </footer>
+    <section id="contact">
+      <h2>Contact</h2>
+      <p>For support, privacy questions, or App Store review follow-up, email <a href="mailto:dispatchskylabs@icloud.com">dispatchskylabs@icloud.com</a>.</p>
+      <p>Typical response time: 24-48 hours.</p>
+    </section>
   </main>
+
+  <footer class="footer">
+    <a href="/">Home</a>
+    <a href="/support.html" aria-current="page">Support</a>
+    <a href="/privacy.html">Privacy</a>
+  </footer>
 </body>
 </html>

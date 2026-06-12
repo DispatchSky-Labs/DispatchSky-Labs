@@ -36,6 +36,45 @@ button.secondary {
   background: #fff;
   color: var(--ink);
 }
+.site-header {
+  background: rgba(245, 245, 247, 0.86);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: saturate(180%) blur(18px);
+}
+.site-nav {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: 1120px;
+  min-height: 48px;
+  padding: 0 24px;
+}
+.site-brand {
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.site-links {
+  align-items: center;
+  display: flex;
+  gap: 24px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.site-links a {
+  color: #6e6e73;
+  font-size: 13px;
+  text-decoration: none;
+}
+.site-links a:hover {
+  color: #1d1d1f;
+}
 .shell {
   width: min(720px, calc(100vw - 20px));
   margin: 0 auto;
@@ -385,6 +424,15 @@ dialog {
 
 @media (max-width: 520px) {
   body { background: #fff; }
+  .site-nav {
+    padding: 0 18px;
+  }
+  .site-links {
+    gap: 14px;
+  }
+  .site-links a {
+    font-size: 12px;
+  }
   .shell {
     width: 100%;
     padding: 8px 8px 18px;
