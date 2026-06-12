@@ -246,6 +246,14 @@
             width: 100%;
         }
 
+        .preview-image.portrait {
+            margin: 0 auto;
+            max-height: 620px;
+            max-width: 360px;
+            object-fit: contain;
+            width: auto;
+        }
+
         .screen {
             background: #ffffff;
             border: 1px solid rgba(0, 0, 0, 0.08);
@@ -432,19 +440,8 @@
                         <a class="button" href="https://apps.apple.com/us/app/cielotracker/id6751013407" target="_blank" rel="noopener">Download on the App Store</a>
                     </div>
                 </div>
-                <div class="preview" aria-label="CieloTracker screenshot placeholder">
-                    <div class="screen">
-                        <p class="screen-title">Weather Watch</p>
-                        <div class="screen-line"></div>
-                        <div class="screen-line"></div>
-                        <div class="screen-line short"></div>
-                        <div class="screen-grid">
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                            <div class="screen-tile"></div>
-                        </div>
-                    </div>
+                <div class="preview has-image" aria-label="CieloTracker screenshot">
+                    <img class="preview-image portrait" src="/assets/cielotracker-home.png" alt="CieloTracker weather alert notification and METAR TAF monitoring screen">
                 </div>
             </div>
         </section>
