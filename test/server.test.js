@@ -15,6 +15,7 @@ process.env.EDCT_DB_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "edct
 const mod = await import(`../src/server.js?test=${Date.now()}`);
 const { isPublicIp, server, store } = mod;
 const service = await import(`../src/edctService.js?test=${Date.now()}`);
+const nasService = await import("../src/nasStatusService.js");
 const originalFetch = global.fetch;
 
 function listen() {
@@ -852,6 +853,78 @@ test("failed source fetch keeps previous EDCT and successful omission removes it
     state = store.data.edct_flight_states.find((s) => s.normalized_acid === "SKW5338" && s.origin === "FAT" && s.destination === "SAN");
     assert.equal(state.current_edct_utc, null);
     assert.ok(store.data.edct_events.some((e) => e.event_type === "EDCT_REMOVED"));
+  } finally {
+    global.fetch = originalFetch;
+    await close();
+  }
+});
+
+test("NAS shadow endpoint is read-only and avoids GDP ended while NAS program active", async () => {
+  nasService.resetNasStatusCacheForTests();
+  const base = await listen();
+  const cookieRes = await fetch(`${base}/api/session`);
+  const cookie = cookieRes.headers.get("set-cookie").split(";")[0];
+  global.fetch = async (url, init) => {
+    const textUrl = String(url);
+    if (textUrl.startsWith(base)) return originalFetch(url, init);
+    if (textUrl.includes("/ois/oisedit/summary_pub")) {
+      return new Response("NATIONAL PROGRAMS\nSAN GDP\nGROUND STOPS\nDELAY INFO", { status: 200, headers: { "content-type": "text/html" } });
+    }
+    return new Response(JSON.stringify({ records: [{ acid: "SKW5338", origin: "FAT", destination: "SAN", etd: "E051500" }] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const created = await fetch(`${base}/api/flights`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ flight_number: "5338", origin: "FAT", destination: "SAN", etd: "2026-06-05T14:00:00.000Z", scheduled_departure_utc: "2026-06-05T14:00:00.000Z" })
+    });
+    assert.equal(created.status, 201, await created.text());
+
+    global.fetch = async (url, init) => {
+      const textUrl = String(url);
+      if (textUrl.startsWith(base)) return originalFetch(url, init);
+      if (textUrl.includes("/ois/oisedit/summary_pub")) {
+        return new Response("NATIONAL PROGRAMS\nSAN GDP\nGROUND STOPS\nDELAY INFO", { status: 200, headers: { "content-type": "text/html" } });
+      }
+      return new Response(JSON.stringify({ records: [] }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    await fetch(`${base}/api/edct/refresh`, { method: "POST", headers: { cookie } });
+
+    const beforeEvents = store.data.edct_events.length;
+    const beforeNotifications = store.data.notification_events.length;
+    const shadowResponse = await fetch(`${base}/api/edct/nas-shadow`, { headers: { cookie } });
+    assert.equal(shadowResponse.status, 200);
+    const shadow = await shadowResponse.json();
+    const flight = shadow.flights.find((item) => item.flight === "5338" || item.flight === "SKW5338");
+    assert.ok(flight);
+    assert.equal(flight.nas.active_gdp, true);
+    assert.notEqual(flight.beta_interpretation.label, "GDP ended");
+    assert.equal(flight.beta_interpretation.label, "No longer listed");
+    assert.equal(store.data.edct_events.length, beforeEvents);
+    assert.equal(store.data.notification_events.length, beforeNotifications);
+  } finally {
+    global.fetch = originalFetch;
+    await close();
+  }
+});
+
+test("NAS shadow endpoint falls back cautiously when NAS fetch fails", async () => {
+  nasService.resetNasStatusCacheForTests();
+  const base = await listen();
+  const cookieRes = await fetch(`${base}/api/session`);
+  const cookie = cookieRes.headers.get("set-cookie").split(";")[0];
+  global.fetch = async (url, init) => {
+    const textUrl = String(url);
+    if (textUrl.startsWith(base)) return originalFetch(url, init);
+    if (textUrl.includes("/ois/oisedit/summary_pub")) return new Response("nope", { status: 500 });
+    return new Response(JSON.stringify({ records: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const shadowResponse = await fetch(`${base}/api/edct/nas-shadow`, { headers: { cookie } });
+    assert.equal(shadowResponse.status, 200);
+    const shadow = await shadowResponse.json();
+    assert.equal(shadow.nas.ok, false);
+    assert.match(shadow.nas.error, /FAA NAS status fetch failed|unavailable|timed out/i);
   } finally {
     global.fetch = originalFetch;
     await close();

@@ -22,9 +22,11 @@ import {
   refreshWorkspace,
   statusForWorkspace
 } from "./edctService.js";
+import { buildNasShadow } from "./edctNasShadow.js";
 import { parseFlightEntries } from "./inputParsers.js";
 import { RateLimiter } from "./rateLimit.js";
 import { fetchSourceForAirport, sourceEfficiencySnapshot } from "./sourceClient.js";
+import { fetchNasStatus } from "./nasStatusService.js";
 import { Store } from "./store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -547,6 +549,10 @@ async function api(req, res, pathname) {
       return send(res, 200, { session: publicSession({ ...workspace, ...patch }, { ...session, notification_permission: body.notification_permission || session.notification_permission }) });
     }
     if (req.method === "GET" && pathname === "/api/flights") return send(res, 200, { flights: flightsFor(workspace.id) });
+    if (req.method === "GET" && pathname === "/api/edct/nas-shadow") {
+      const nasStatus = await fetchNasStatus();
+      return send(res, 200, buildNasShadow(store, workspace.id, nasStatus));
+    }
     if (req.method === "POST" && pathname === "/api/flights") {
       if (!rate(req, session.id, "flight-entry", 40, 60_000)) return send(res, 429, { error: "Too many flight changes." });
       const body = await readBody(req);
@@ -1097,9 +1103,18 @@ function adminUsageMessage(event) {
 }
 
 function staticFile(req, res, pathname) {
-  if (pathname !== "/edct" && pathname !== "/edct/" && !pathname.startsWith("/edct/")) return false;
-  const relative = pathname === "/edct" || pathname === "/edct/" ? "index.html" : pathname.slice("/edct/".length);
-  const root = path.resolve(__dirname, "../edct");
+  const staticRoots = [
+    { prefix: "/edct", root: path.resolve(__dirname, "../edct") },
+    { prefix: "/edct-beta", root: path.resolve(__dirname, "../edct-beta") }
+  ];
+  const route = staticRoots.find((candidate) =>
+    pathname === candidate.prefix ||
+    pathname === `${candidate.prefix}/` ||
+    pathname.startsWith(`${candidate.prefix}/`)
+  );
+  if (!route) return false;
+  const relative = pathname === route.prefix || pathname === `${route.prefix}/` ? "index.html" : pathname.slice(route.prefix.length + 1);
+  const root = route.root;
   const file = path.resolve(root, relative);
   if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return false;
   const ext = path.extname(file);

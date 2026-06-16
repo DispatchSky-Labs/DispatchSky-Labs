@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sadiom Flow NAS Beta</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.sadiom.com; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'">
+    <link rel="stylesheet" href="/edct/styles.css">
+    <style>
+      .beta-panel { display: grid; gap: 14px; }
+      .beta-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .beta-grid { display: grid; gap: 12px; }
+      .beta-row { border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 14px; display: grid; gap: 10px; background: rgba(255,255,255,.04); }
+      .beta-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .beta-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .beta-meta div { display: grid; gap: 2px; min-width: 0; }
+      .beta-meta span { color: var(--muted); font-size: .78rem; }
+      .beta-meta strong { font-size: .92rem; overflow-wrap: anywhere; }
+      .beta-pill { border-radius: 999px; padding: 5px 9px; font-size: .78rem; font-weight: 700; width: fit-content; }
+      .beta-pill.normal { background: var(--assigned); }
+      .beta-pill.caution { background: var(--removed); }
+      .beta-pill.ended { background: var(--better); }
+      .beta-pill.unknown { background: var(--stale); }
+      .beta-note { color: var(--muted); font-size: .9rem; }
+      @media (max-width: 640px) { .beta-meta { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a class="site-brand" href="/">Sadiom</a>
+        <ul class="site-links">
+          <li><a href="/edct/">Live Flow</a></li>
+          <li><a href="/">Home</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main class="shell beta-panel">
+      <header class="topbar">
+        <div>
+          <h1>Sadiom Flow NAS Beta</h1>
+          <p>Read-only A/B diagnostics</p>
+        </div>
+      </header>
+
+      <p class="disclaimer">Internal shadow comparison only. This page does not add flights, delete flights, create alerts, or request notifications.</p>
+      <section id="warningBanner" class="warning" hidden></section>
+
+      <section class="beta-toolbar">
+        <div id="sourceStatus" class="beta-note">Loading...</div>
+        <button id="refreshBtn" type="button">Refresh</button>
+      </section>
+
+      <section id="summaryStats" class="quick-stats" aria-label="Beta statistics"></section>
+      <section id="betaRows" class="beta-grid" aria-label="NAS shadow comparison"></section>
+    </main>
+
+    <script src="/edct/config.js"></script>
+    <script src="/edct-beta/app.js?v=20260616-nas-shadow"></script>
+  </body>
+</html>
+
