@@ -84,6 +84,120 @@ test("session persists across browser refresh via httpOnly cookie", async () => 
   }
 });
 
+test("manually deleting a flight removes only its EDCT and notification history", async () => {
+  const base = await listen();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  try {
+    const sessionResponse = await fetch(`${base}/api/session`);
+    const cookie = sessionResponse.headers.get("set-cookie").split(";")[0];
+    const sessionId = cookie.split("=")[1];
+    const workspaceId = store.data.sessions.find((session) => session.id === sessionId).workspace_id;
+    const removedFlight = store.insert("flights", {
+      id: `flight_events_removed_${suffix}`,
+      workspace_id: workspaceId,
+      display_flight_number: "SKW1001",
+      normalized_acid: "SKW1001",
+      origin: "DEN",
+      destination: "SFO",
+      etd_utc: `${yesterday}T12:00:00.000Z`,
+      operational_day_key: yesterday,
+      active: true,
+      created_at: nowIso,
+      updated_at: nowIso
+    });
+    const retainedFlight = store.insert("flights", {
+      id: `flight_events_retained_${suffix}`,
+      workspace_id: workspaceId,
+      display_flight_number: "SKW1002",
+      normalized_acid: "SKW1002",
+      origin: "DEN",
+      destination: "SFO",
+      etd_utc: `${yesterday}T12:00:00.000Z`,
+      operational_day_key: yesterday,
+      active: true,
+      created_at: nowIso,
+      updated_at: nowIso
+    });
+    const insertEvent = (id, workspace, flightId, message, createdAt) => store.insert("edct_events", {
+      id,
+      workspace_id: workspace,
+      flight_id: flightId,
+      flight_signature: `${id}|${yesterday}`,
+      event_type: "EDCT_ASSIGNED",
+      previous_edct_utc: null,
+      new_edct_utc: nowIso,
+      delay_minutes: 20,
+      source_airport: "SFO",
+      source_fetch_at: nowIso,
+      message,
+      created_at: createdAt
+    });
+
+    const removedEvent = insertEvent(
+      `event_events_removed_${suffix}`,
+      workspaceId,
+      removedFlight.id,
+      `removed-flight-${suffix}`,
+      nowIso
+    );
+    const retainedEvent = insertEvent(
+      `event_events_retained_${suffix}`,
+      workspaceId,
+      retainedFlight.id,
+      `retained-flight-${suffix}`,
+      new Date(now.getTime() - 1000).toISOString()
+    );
+    const removedNotification = store.insert("notification_events", {
+      id: `notification_events_removed_${suffix}`,
+      workspace_id: workspaceId,
+      edct_event_id: removedEvent.id,
+      title: "Removed flight alert",
+      body: removedEvent.message,
+      created_at: nowIso
+    });
+    const retainedNotification = store.insert("notification_events", {
+      id: `notification_events_retained_${suffix}`,
+      workspace_id: workspaceId,
+      edct_event_id: retainedEvent.id,
+      title: "Retained flight alert",
+      body: retainedEvent.message,
+      created_at: nowIso
+    });
+    store.insert("notification_deliveries", {
+      notification_event_id: removedNotification.id,
+      session_id: sessionId,
+      delivery_state: "failed",
+      attempted_at: nowIso,
+      delivered_at: null
+    });
+
+    const initialResponse = await fetch(`${base}/api/edct/events`, { headers: { cookie } });
+    assert.equal(initialResponse.status, 200);
+    const initial = await initialResponse.json();
+    assert.deepEqual(initial.events.map((event) => event.message), [removedEvent.message, retainedEvent.message]);
+
+    const deleteResponse = await fetch(`${base}/api/flights/${removedFlight.id}`, { method: "DELETE", headers: { cookie } });
+    assert.equal(deleteResponse.status, 200);
+    const afterDeleteResponse = await fetch(`${base}/api/edct/events`, { headers: { cookie } });
+    const afterDelete = await afterDeleteResponse.json();
+    assert.deepEqual(afterDelete.events.map((event) => event.message), [retainedEvent.message]);
+    assert.equal(store.data.edct_events.some((event) => event.id === removedEvent.id), false);
+    assert.equal(store.data.edct_events.some((event) => event.id === retainedEvent.id), true);
+    assert.equal(store.data.notification_events.some((notification) => notification.id === removedNotification.id), false);
+    assert.equal(store.data.notification_events.some((notification) => notification.id === retainedNotification.id), true);
+    assert.equal(store.data.notification_deliveries.some((delivery) => delivery.notification_event_id === removedNotification.id), false);
+
+    const pendingResponse = await fetch(`${base}/api/notifications/pending`, { headers: { cookie } });
+    const pending = await pendingResponse.json();
+    assert.deepEqual(pending.notifications.map((notification) => notification.notification_key), [retainedNotification.id]);
+  } finally {
+    await close();
+  }
+});
+
 test("admin API requires bearer auth and admin page is not publicly served", async () => {
   const base = await listen();
   try {

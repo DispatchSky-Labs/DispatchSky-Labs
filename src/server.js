@@ -577,6 +577,19 @@ async function api(req, res, pathname) {
       const existing = store.data.flights.find((f) => f.id === flightMatch[1] && f.workspace_id === workspace.id);
       if (!existing) return send(res, 404, { error: "Flight not found." });
       store.update("flights", existing.id, { active: false, updated_at: nowIso() });
+      const removedEventIds = new Set(store.data.edct_events
+        .filter((event) => event.workspace_id === workspace.id && event.flight_id === existing.id)
+        .map((event) => event.id));
+      const removedNotificationIds = new Set(store.data.notification_events
+        .filter((notification) => notification.workspace_id === workspace.id && removedEventIds.has(notification.edct_event_id))
+        .map((notification) => notification.id));
+      store.data.notification_deliveries = store.data.notification_deliveries
+        .filter((delivery) => !removedNotificationIds.has(delivery.notification_event_id));
+      store.data.notification_events = store.data.notification_events
+        .filter((notification) => !removedNotificationIds.has(notification.id));
+      store.data.edct_events = store.data.edct_events
+        .filter((event) => !removedEventIds.has(event.id));
+      store.save();
       store.usage("FLIGHT_DELETED", workspace.id, session.id, { destination: existing.destination });
       return send(res, 200, { ok: true });
     }
