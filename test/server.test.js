@@ -255,12 +255,114 @@ test("heartbeat updates active session state without noisy heartbeat events", as
 
     const oldTs = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     for (const existing of store.data.sessions) {
-      store.update("sessions", existing.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+      store.update("sessions", existing.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_user_activity_at: oldTs, last_heartbeat_at: oldTs });
     }
     const summary = await fetch(`${base}/api/admin/summary`, { headers: { authorization: "Bearer admin-test" } });
     const body = await summary.json();
     assert.equal(body.activeSessionsNow, 0);
   } finally {
+    await close();
+  }
+});
+
+test("automatic requests and idle heartbeats keep a session seen without keeping it human-active", async () => {
+  const base = await listen();
+  try {
+    const initial = await fetch(`${base}/api/session`);
+    const cookie = initial.headers.get("set-cookie").split(";")[0];
+    const sessionId = cookie.split("=")[1];
+    const oldTs = new Date(Date.now() - 10 * 60_000).toISOString();
+    for (const existing of store.data.sessions) {
+      store.update("sessions", existing.id, {
+        last_seen_at: oldTs,
+        last_activity_at: oldTs,
+        last_user_activity_at: oldTs,
+        last_heartbeat_at: oldTs
+      });
+    }
+
+    await fetch(`${base}/api/flights`, { headers: { cookie } });
+    await fetch(`${base}/api/edct/status`, { headers: { cookie } });
+    await fetch(`${base}/api/notifications/pending`, { headers: { cookie } });
+    let session = store.data.sessions.find((item) => item.id === sessionId);
+    assert.ok(Date.parse(session.last_seen_at) > Date.parse(oldTs));
+    assert.equal(session.last_user_activity_at, oldTs);
+
+    const idleHeartbeat = await fetch(`${base}/api/session/heartbeat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ page_visible: true, page_focused: true, last_user_activity_at: oldTs })
+    });
+    assert.equal(idleHeartbeat.status, 200);
+    session = store.data.sessions.find((item) => item.id === sessionId);
+    assert.ok(Date.parse(session.last_heartbeat_at) > Date.parse(oldTs));
+    assert.equal(session.last_user_activity_at, oldTs);
+
+    let summary = await fetch(`${base}/api/admin/summary`, { headers: { authorization: "Bearer admin-test" } }).then((response) => response.json());
+    const idleProfile = summary.recentProfiles.find((profile) => profile.connectedButIdle);
+    assert.equal(summary.activeSessionsNow, 0);
+    assert.ok(summary.connectedSessionsNow >= 1);
+    assert.ok(summary.connectedIdleSessionsNow >= 1);
+    assert.ok(idleProfile.lastSeenAgeSeconds !== null);
+    assert.ok(idleProfile.lastHeartbeatAgeSeconds !== null);
+    assert.ok(idleProfile.lastUserActivityAgeSeconds >= 9 * 60);
+
+    const recentActivityAt = new Date().toISOString();
+    const hiddenHeartbeat = await fetch(`${base}/api/session/heartbeat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ page_visible: false, page_focused: false, last_user_activity_at: recentActivityAt })
+    });
+    assert.equal(hiddenHeartbeat.status, 200);
+    assert.equal(store.data.sessions.find((item) => item.id === sessionId).last_user_activity_at, oldTs);
+
+    const activeHeartbeat = await fetch(`${base}/api/session/heartbeat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ page_visible: true, page_focused: true, last_user_activity_at: recentActivityAt })
+    });
+    assert.equal(activeHeartbeat.status, 200);
+    session = store.data.sessions.find((item) => item.id === sessionId);
+    assert.equal(session.last_user_activity_at, recentActivityAt);
+    summary = await fetch(`${base}/api/admin/summary`, { headers: { authorization: "Bearer admin-test" } }).then((response) => response.json());
+    assert.ok(summary.activeSessionsNow >= 1);
+  } finally {
+    await close();
+  }
+});
+
+test("lookup add and remove record human activity", async () => {
+  const base = await listen();
+  const initial = await fetch(`${base}/api/session`);
+  const cookie = initial.headers.get("set-cookie").split(";")[0];
+  const sessionId = cookie.split("=")[1];
+  const oldTs = new Date(Date.now() - 10 * 60_000).toISOString();
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    return new Response(JSON.stringify({ records: [{ acid: "SKW5338", origin: "FAT", destination: "SAN", etd: "E211900" }] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const ageSession = () => store.update("sessions", sessionId, { last_activity_at: oldTs, last_user_activity_at: oldTs });
+    ageSession();
+    const lookup = await fetch(`${base}/api/edct/lookup?flight=5338&destination=SAN`, { headers: { cookie } }).then((response) => response.json());
+    assert.ok(Date.parse(store.data.sessions.find((item) => item.id === sessionId).last_user_activity_at) > Date.parse(oldTs));
+
+    ageSession();
+    const addedResponse = await fetch(`${base}/api/edct/lookup/add`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ candidate_key: lookup.candidates[0].candidate_key })
+    });
+    const added = await addedResponse.json();
+    assert.equal(addedResponse.status, 201);
+    assert.ok(Date.parse(store.data.sessions.find((item) => item.id === sessionId).last_user_activity_at) > Date.parse(oldTs));
+
+    ageSession();
+    const removed = await fetch(`${base}/api/flights/${added.flight.flight_key}`, { method: "DELETE", headers: { cookie } });
+    assert.equal(removed.status, 200);
+    assert.ok(Date.parse(store.data.sessions.find((item) => item.id === sessionId).last_user_activity_at) > Date.parse(oldTs));
+  } finally {
+    global.fetch = originalFetch;
     await close();
   }
 });
@@ -603,7 +705,9 @@ test("flight lookup returns sanitized candidates and can add one to monitoring",
     assert.equal(body.candidates[0].candidate_id, undefined);
     assert.ok(body.candidates[0].candidate_key);
     assert.equal(body.candidates[0].status, "matched");
-    assert.equal(body.candidates[0].source_freshness_at, undefined);
+    assert.ok(body.candidates[0].source_freshness_at);
+    assert.equal(body.candidates[0].source_stale, false);
+    assert.equal(body.candidates[0].source_status, "fresh");
     const ualLookup = await fetch(`${base}/api/edct/lookup?flight=UAL1597&destination=SFO`, { headers: { cookie } });
     const ualBody = await ualLookup.json();
     assert.equal(ualLookup.status, 200);
@@ -684,11 +788,127 @@ test("bulk lookup parses rows, groups airport fetches, and marks duplicate watch
   }
 });
 
+test("stale source cache is non-actionable for lookup, bulk add, and public flight state", async () => {
+  const base = await listen();
+  const cookieRes = await fetch(`${base}/api/session`);
+  const cookie = cookieRes.headers.get("set-cookie").split(";")[0];
+  const day = String(new Date().getUTCDate()).padStart(2, "0");
+  const sourceRecord = { acid: "SKW4777", origin: "DEN", destination: "ICT", etd: `E${day}1900` };
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    return new Response(JSON.stringify({ records: [sourceRecord] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const freshLookup = await fetch(`${base}/api/edct/lookup?flight=4777&destination=ICT`, { headers: { cookie } }).then((response) => response.json());
+    assert.equal(freshLookup.candidates.length, 1);
+    assert.equal(freshLookup.candidates[0].source_stale, false);
+    assert.ok(freshLookup.candidates[0].current_edct_utc);
+
+    const addedResponse = await fetch(`${base}/api/edct/lookup/add`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ candidate_key: freshLookup.candidates[0].candidate_key })
+    });
+    const added = await addedResponse.json();
+    assert.equal(addedResponse.status, 201);
+    const stateBefore = store.data.edct_flight_states.find((state) => state.flight_id === added.flight.flight_key);
+    assert.ok(stateBefore.current_edct_utc);
+    const currentEdctBefore = stateBefore.current_edct_utc;
+
+    global.fetch = async (url, init) => {
+      if (String(url).startsWith(base)) return originalFetch(url, init);
+      return new Response("unavailable", { status: 500 });
+    };
+    await fetch(`${base}/api/edct/refresh`, { method: "POST", headers: { cookie } });
+
+    const stateAfter = store.data.edct_flight_states.find((state) => state.flight_id === added.flight.flight_key);
+    assert.equal(stateAfter.current_edct_utc, currentEdctBefore);
+    assert.equal(stateAfter.source_stale, true);
+
+    const staleLookup = await fetch(`${base}/api/edct/lookup?flight=4777&destination=ICT`, { headers: { cookie } }).then((response) => response.json());
+    assert.equal(staleLookup.candidates.length, 1);
+    assert.equal(staleLookup.candidates[0].source_stale, true);
+    assert.equal(staleLookup.candidates[0].source_status, "stale");
+    assert.ok(staleLookup.candidates[0].source_freshness_at);
+    assert.equal(staleLookup.candidates[0].etd_utc, null);
+    assert.equal(staleLookup.candidates[0].current_edct_utc, null);
+    assert.match(staleLookup.message, /stale or unavailable/i);
+
+    const staleBulk = await fetch(`${base}/api/edct/lookup/bulk`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ text: "SKW4777 ICT" })
+    }).then((response) => response.json());
+    assert.equal(staleBulk.candidates.length, 1);
+    assert.equal(staleBulk.candidates[0].source_stale, true);
+    assert.equal(staleBulk.candidates[0].etd_utc, null);
+    assert.equal(staleBulk.candidates[0].current_edct_utc, null);
+
+    const staleAdd = await fetch(`${base}/api/edct/lookup/add`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ candidate_key: staleLookup.candidates[0].candidate_key })
+    });
+    assert.equal(staleAdd.status, 409);
+
+    const publicFlights = await fetch(`${base}/api/flights`, { headers: { cookie } }).then((response) => response.json());
+    const publicFlight = publicFlights.flights.find((flight) => flight.flight_key === added.flight.flight_key);
+    assert.equal(publicFlight.state.source_stale, true);
+    assert.equal(publicFlight.state.current_edct_utc, null);
+  } finally {
+    global.fetch = originalFetch;
+    await close();
+  }
+});
+
+test("stale warning copy uses minutes, hours, and an over-24-hour message", async () => {
+  const base = await listen();
+  const cookieRes = await fetch(`${base}/api/session`);
+  const cookie = cookieRes.headers.get("set-cookie").split(";")[0];
+  const sessionId = cookie.split("=")[1];
+  const session = store.data.sessions.find((item) => item.id === sessionId);
+  const now = new Date().toISOString();
+  store.insert("flights", {
+    workspace_id: session.workspace_id,
+    display_flight_number: "SKW4888",
+    normalized_acid: "SKW4888",
+    origin: "DEN",
+    destination: "RNO",
+    etd_utc: now,
+    operational_day_key: now.slice(0, 10),
+    active: true,
+    created_at: now,
+    updated_at: now
+  });
+  const snapshot = store.insert("source_airport_snapshots", {
+    airport: "RNO",
+    fetched_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+    success: true,
+    record_count: 0,
+    normalized_records: [],
+    error_message: ""
+  });
+  try {
+    let status = await fetch(`${base}/api/edct/status`, { headers: { cookie } }).then((response) => response.json());
+    assert.match(status.warning.message, /30 min ago/);
+
+    store.update("source_airport_snapshots", snapshot.id, { fetched_at: new Date(Date.now() - 2 * 60 * 60_000).toISOString() });
+    status = await fetch(`${base}/api/edct/status`, { headers: { cookie } }).then((response) => response.json());
+    assert.match(status.warning.message, /2 hours ago/);
+
+    store.update("source_airport_snapshots", snapshot.id, { fetched_at: new Date(Date.now() - 26 * 60 * 60_000).toISOString() });
+    status = await fetch(`${base}/api/edct/status`, { headers: { cookie } }).then((response) => response.json());
+    assert.equal(status.warning.message, "Stale source data. Last successful update was over 24 hours ago. Verify official source.");
+  } finally {
+    await close();
+  }
+});
+
 test("scheduled polling sleeps when idle and wakes for active monitoring", async () => {
-  const oldTs = new Date(Date.now() - 61 * 60 * 1000).toISOString();
+  const oldTs = new Date(Date.now() - 4 * 60 * 1000).toISOString();
   for (const flight of store.data.flights) store.update("flights", flight.id, { active: false, updated_at: oldTs });
   for (const existingSession of store.data.sessions) {
-    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_user_activity_at: oldTs, last_heartbeat_at: oldTs });
   }
   const workspace = store.insert("workspaces", { created_at: oldTs, updated_at: oldTs, optional_label: "", monitoring_enabled: true, refresh_interval_minutes: 5 });
   const session = store.insert("sessions", {
@@ -697,6 +917,7 @@ test("scheduled polling sleeps when idle and wakes for active monitoring", async
     created_at: oldTs,
     last_seen_at: oldTs,
     last_activity_at: oldTs,
+    last_user_activity_at: oldTs,
     last_heartbeat_at: oldTs,
     user_agent_approx: "test",
     ip_hash: "hash",
@@ -710,7 +931,7 @@ test("scheduled polling sleeps when idle and wakes for active monitoring", async
   assert.ok(store.data.admin_events.some((event) => event.event_type === "backend_slept"));
 
   const now = new Date().toISOString();
-  store.update("sessions", session.id, { last_seen_at: now, last_activity_at: now, last_heartbeat_at: now });
+  store.update("sessions", session.id, { last_seen_at: now, last_activity_at: now, last_user_activity_at: now, last_heartbeat_at: now });
   store.insert("flights", {
     workspace_id: workspace.id,
     display_flight_number: "UAL1597",
@@ -743,7 +964,7 @@ test("idle watched flights do not keep scheduled airport polling alive", async (
   const oldTs = new Date(Date.now() - 61 * 60 * 1000).toISOString();
   for (const flight of store.data.flights) store.update("flights", flight.id, { active: false, updated_at: oldTs });
   for (const existingSession of store.data.sessions) {
-    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_user_activity_at: oldTs, last_heartbeat_at: oldTs });
   }
   const workspace = store.insert("workspaces", { created_at: oldTs, updated_at: oldTs, optional_label: "", monitoring_enabled: true, refresh_interval_minutes: 5 });
   store.insert("sessions", {
@@ -752,6 +973,7 @@ test("idle watched flights do not keep scheduled airport polling alive", async (
     created_at: oldTs,
     last_seen_at: oldTs,
     last_activity_at: oldTs,
+    last_user_activity_at: oldTs,
     last_heartbeat_at: oldTs,
     user_agent_approx: "test",
     ip_hash: "hash",
@@ -808,7 +1030,7 @@ test("recent active workspaces share one airport fetch and expose safe source co
   const now = new Date().toISOString();
   for (const flight of store.data.flights) store.update("flights", flight.id, { active: false, updated_at: oldTs });
   for (const existingSession of store.data.sessions) {
-    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_user_activity_at: oldTs, last_heartbeat_at: oldTs });
   }
   const workspaces = ["A", "B"].map((suffix) => store.insert("workspaces", {
     id: `ws_shared_${suffix}`,
@@ -884,7 +1106,7 @@ test("admin polling does not wake idle public monitoring", async () => {
   const oldTs = new Date(Date.now() - 61 * 60 * 1000).toISOString();
   for (const flight of store.data.flights) store.update("flights", flight.id, { active: false, updated_at: oldTs });
   for (const existingSession of store.data.sessions) {
-    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_heartbeat_at: oldTs });
+    store.update("sessions", existingSession.id, { last_seen_at: oldTs, last_activity_at: oldTs, last_user_activity_at: oldTs, last_heartbeat_at: oldTs });
   }
   const workspace = store.insert("workspaces", { created_at: oldTs, updated_at: oldTs, optional_label: "", monitoring_enabled: true, refresh_interval_minutes: 5 });
   store.insert("sessions", {
@@ -893,6 +1115,7 @@ test("admin polling does not wake idle public monitoring", async () => {
     created_at: oldTs,
     last_seen_at: oldTs,
     last_activity_at: oldTs,
+    last_user_activity_at: oldTs,
     last_heartbeat_at: oldTs,
     user_agent_approx: "test",
     ip_hash: "hash",

@@ -4,6 +4,19 @@ const state = { flights: [], events: [], session: null, status: null, pending: [
 const $ = (id) => document.getElementById(id);
 const API_BASE_URL = String(window.EDCT_API_BASE_URL || "").replace(/\/+$/, "");
 const pendingAdds = new Map();
+let lastHumanActivityAt = Date.now();
+let lastPointerActivityAt = 0;
+
+function noteHumanActivity() {
+  lastHumanActivityAt = Date.now();
+}
+
+function notePointerActivity() {
+  const now = Date.now();
+  if (now - lastPointerActivityAt < 5000) return;
+  lastPointerActivityAt = now;
+  noteHumanActivity();
+}
 
 async function api(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
@@ -69,11 +82,15 @@ function normalizeStoredFlight(flight) {
     origin,
     destination,
     etd_utc: flight?.etd_utc || null,
+    source_stale: flight?.source_stale === true || flight?.state?.source_stale === true,
+    source_status: flight?.source_status || null,
+    source_freshness_at: flight?.source_freshness_at || null,
     state: flight?.state && typeof flight.state === "object" ? {
-      current_edct_utc: flight.state.current_edct_utc || null,
+      current_edct_utc: flight.state.source_stale ? null : flight.state.current_edct_utc || null,
       previous_edct_utc: flight.state.previous_edct_utc || null,
       last_change: flight.state.last_change || "UNCHANGED",
-      last_checked_utc: flight.state.last_checked_utc || null
+      last_checked_utc: flight.state.last_checked_utc || null,
+      source_stale: flight.state.source_stale === true
     } : null
   };
 }
@@ -139,17 +156,22 @@ function mergeServerFlights(serverFlights) {
 }
 
 function localFlightFromCandidate(candidate) {
+  const sourceStale = candidate.source_stale === true;
   return {
     flight_key: `local_${candidate.candidate_key}`,
     display_flight_number: candidate.flight_number,
     origin: candidate.origin,
     destination: candidate.destination,
-    etd_utc: candidate.etd_utc || candidate.current_edct_utc || new Date().toISOString(),
+    etd_utc: sourceStale ? null : candidate.etd_utc || candidate.current_edct_utc || new Date().toISOString(),
+    source_stale: sourceStale,
+    source_status: candidate.source_status || (sourceStale ? "stale" : "fresh"),
+    source_freshness_at: candidate.source_freshness_at || null,
     state: {
-      current_edct_utc: candidate.current_edct_utc || null,
+      current_edct_utc: sourceStale ? null : candidate.current_edct_utc || null,
       previous_edct_utc: null,
-      last_change: candidate.current_edct_utc ? "EDCT_ASSIGNED" : "UNCHANGED",
-      last_checked_utc: null
+      last_change: !sourceStale && candidate.current_edct_utc ? "EDCT_ASSIGNED" : "UNCHANGED",
+      last_checked_utc: candidate.source_freshness_at || null,
+      source_stale: sourceStale
     }
   };
 }
@@ -206,6 +228,7 @@ function compactChange(flight) {
   const change = flight.state?.last_change || "UNCHANGED";
   const current = flight.state?.current_edct_utc;
   const previous = flight.state?.previous_edct_utc;
+  if (flight.source_stale || flight.state?.source_stale) return { label: "STALE", className: "stale" };
   if (state.status?.warning && !current) return { label: "STALE", className: "stale" };
   if (change === "EDCT_ASSIGNED") return { label: "NEW", className: "assigned" };
   if (change === "EDCT_REMOVED") return { label: "REMOVED", className: "removed" };
@@ -270,6 +293,7 @@ function renderFlights() {
   const rows = state.flights.map((flight, index) => {
     const change = compactChange(flight);
     const route = `${flight.origin}-${flight.destination}`;
+    const currentEdct = flight.source_stale || flight.state?.source_stale ? null : flight.state?.current_edct_utc;
     return `<div class="flight-row" data-flight="${escapeHtml(flight.flight_key)}" role="button" tabindex="0">
       <div class="reorder-controls" aria-label="Reorder ${escapeHtml(flight.display_flight_number)}">
         <button class="move-btn" data-move="${escapeHtml(flight.flight_key)}" data-direction="-1" type="button" aria-label="Move ${escapeHtml(flight.display_flight_number)} up" ${index === 0 ? "disabled" : ""}>Up</button>
@@ -277,7 +301,7 @@ function renderFlights() {
       </div>
       <strong>${escapeHtml(flight.display_flight_number)}</strong>
       <span>${escapeHtml(route)}</span>
-      <span class="edct">${escapeHtml(hhmmz(flight.state?.current_edct_utc))}</span>
+      <span class="edct">${escapeHtml(hhmmz(currentEdct))}</span>
       <span class="change ${change.className}">${escapeHtml(change.label)}</span>
       <button class="delete-btn" data-delete="${escapeHtml(flight.flight_key)}" type="button" aria-label="Remove ${escapeHtml(flight.display_flight_number)}">Remove</button>
     </div>`;
@@ -366,12 +390,12 @@ function renderCandidates(candidates) {
   state.candidates = candidates || [];
   $("candidateList").innerHTML = state.candidates.map((candidate) => `
     <div class="candidate" data-candidate-row="${escapeHtml(candidate.candidate_key)}">
-      <button class="candidate-main" type="button" data-candidate="${escapeHtml(candidate.candidate_key)}" ${candidate.already_watched ? "disabled" : ""}>
+      <button class="candidate-main" type="button" data-candidate="${escapeHtml(candidate.candidate_key)}" ${candidate.already_watched || candidate.source_stale ? "disabled" : ""}>
         <strong>${escapeHtml(candidate.flight_number)}</strong>
         <span>${escapeHtml(candidate.origin)}-${escapeHtml(candidate.destination)}</span>
-        <span>${escapeHtml(candidate.etd_utc ? `ETD ${hhmmz(candidate.etd_utc)}` : "ETD --")}</span>
-        <span>${escapeHtml(candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "No time")}</span>
-        <span>${escapeHtml(candidate.already_watched ? "Watched" : "Add")}</span>
+        <span>${escapeHtml(candidate.source_stale ? "ETD unavailable" : candidate.etd_utc ? `ETD ${hhmmz(candidate.etd_utc)}` : "ETD --")}</span>
+        <span>${escapeHtml(candidate.source_stale ? "Stale source" : candidate.current_edct_utc ? hhmmz(candidate.current_edct_utc) : "No time")}</span>
+        <span>${escapeHtml(candidate.already_watched ? "Watched" : candidate.source_stale ? "Unavailable" : "Add")}</span>
       </button>
       <button class="candidate-remove secondary" type="button" data-remove-candidate="${escapeHtml(candidate.candidate_key)}" aria-label="Remove candidate">x</button>
     </div>
@@ -381,6 +405,10 @@ function renderCandidates(candidates) {
 async function monitorCandidate(candidateId, options = {}) {
   const candidate = state.candidates.find((item) => item.candidate_key === candidateId);
   if (!candidate) return;
+  if (candidate.source_stale) {
+    setLookupMessage("Source data is stale or unavailable. Verify official source.", true);
+    return;
+  }
   const localFlight = localFlightFromCandidate(candidate);
   state.flights.push(localFlight);
   pendingAdds.set(localFlight.flight_key, candidateId);
@@ -469,7 +497,14 @@ async function pollNotifications() {
 
 async function heartbeat() {
   try {
-    await api("/api/session/heartbeat", { method: "POST", body: "{}" });
+    await api("/api/session/heartbeat", {
+      method: "POST",
+      body: JSON.stringify({
+        page_visible: document.visibilityState === "visible",
+        page_focused: document.hasFocus(),
+        last_user_activity_at: new Date(lastHumanActivityAt).toISOString()
+      })
+    });
   } catch {
   }
 }
@@ -499,7 +534,7 @@ function serverPayloadFromFlight(flight) {
 }
 
 function shouldReconcileFlight(flight) {
-  return flight && !String(flight.flight_key || "").startsWith("local_");
+  return flight && !flight.source_stale && !flight.state?.source_stale && !String(flight.flight_key || "").startsWith("local_");
 }
 
 async function reconcileSavedFlightsInBackground() {
@@ -523,7 +558,7 @@ function keepEntryOpenAfterAdd() {
 function showSummary(flightKey) {
   const flight = state.flights.find((item) => item.flight_key === flightKey);
   if (!flight) return;
-  const current = flight.state?.current_edct_utc;
+  const current = flight.source_stale || flight.state?.source_stale ? null : flight.state?.current_edct_utc;
   const previous = flight.state?.previous_edct_utc;
   const change = flight.state?.last_change || "UNCHANGED";
   const lines = [
@@ -560,7 +595,7 @@ $("lookupForm").addEventListener("submit", async (event) => {
     const data = await api(`/api/edct/lookup?${params.toString()}`);
     const candidates = data.candidates || [];
     state.candidates = candidates;
-    if (candidates.length === 1 && !candidates[0].already_watched) {
+    if (candidates.length === 1 && !candidates[0].already_watched && !candidates[0].source_stale) {
       await monitorCandidate(candidates[0].candidate_key, { keepOpen: keepEntryOpenAfterAdd() });
       return;
     }
@@ -580,6 +615,7 @@ $("lookupForm").addEventListener("submit", async (event) => {
 $("notifyBtn").addEventListener("click", async () => {
   const status = notificationStatus();
   if (typeof window.Notification === "function" && Notification.permission === "default" && status.level !== "warning") await Notification.requestPermission();
+  await heartbeat();
   await pollNotifications();
   $("alertsModal").showModal();
   renderWarning();
@@ -623,6 +659,20 @@ document.addEventListener("keydown", (event) => {
   if (!row) return;
   event.preventDefault();
   showSummary(row.dataset.flight);
+});
+
+document.addEventListener("pointermove", notePointerActivity, { passive: true });
+document.addEventListener("pointerdown", noteHumanActivity, { passive: true });
+document.addEventListener("touchstart", noteHumanActivity, { passive: true });
+document.addEventListener("keydown", noteHumanActivity, { passive: true });
+window.addEventListener("focus", () => {
+  noteHumanActivity();
+  heartbeat();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  noteHumanActivity();
+  heartbeat();
 });
 
 function initialize() {

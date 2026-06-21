@@ -20,6 +20,8 @@ import {
   recentlyActiveWorkspacesWithFlights,
   refreshDueAirports,
   refreshWorkspace,
+  isOperationalSnapshot,
+  sessionUserActivityMs,
   statusForWorkspace
 } from "./edctService.js";
 import { buildNasShadow } from "./edctNasShadow.js";
@@ -358,6 +360,23 @@ function rate(req, sessionId, name, limit, windowMs) {
   return ok;
 }
 
+function markUserActivity(sessionId, activityAt = nowIso()) {
+  const session = store.data.sessions.find((item) => item.id === sessionId);
+  if (!session) return null;
+  const patch = { last_activity_at: activityAt, last_user_activity_at: activityAt };
+  return store.update("sessions", sessionId, patch);
+}
+
+function heartbeatUserActivityAt(body, receivedAt) {
+  if (body?.page_visible !== true || body?.page_focused !== true) return null;
+  const clientMs = Date.parse(body.last_user_activity_at || "");
+  const receivedMs = Date.parse(receivedAt);
+  if (!Number.isFinite(clientMs) || !Number.isFinite(receivedMs)) return null;
+  if (clientMs > receivedMs + 60_000) return null;
+  if (receivedMs - clientMs > config.activeSessionThresholdSeconds * 1000) return null;
+  return new Date(Math.min(clientMs, receivedMs)).toISOString();
+}
+
 function publicSession(workspace, session) {
   return {
     optional_label: workspace.optional_label || "",
@@ -401,10 +420,11 @@ function publicFlight(flight, state = null) {
     destination: flight.destination,
     etd_utc: flight.etd_utc,
     state: state ? {
-      current_edct_utc: state.current_edct_utc,
+      current_edct_utc: state.source_stale ? null : state.current_edct_utc,
       previous_edct_utc: state.previous_edct_utc,
       last_change: state.last_change,
-      last_checked_utc: state.last_source_fetch_at
+      last_checked_utc: state.last_source_fetch_at,
+      source_stale: state.source_stale === true
     } : null
   };
 }
@@ -438,8 +458,9 @@ function isWatchedCandidate(record, workspaceId) {
   );
 }
 
-function lookupCandidate(record, fetchedAt, workspaceId) {
+function lookupCandidate(record, snapshot, workspaceId) {
   const duplicate = isWatchedCandidate(record, workspaceId);
+  const operational = isOperationalSnapshot(snapshot);
   const candidateId = id("cand");
   const cached = {
     candidate_id: candidateId,
@@ -447,9 +468,11 @@ function lookupCandidate(record, fetchedAt, workspaceId) {
     normalized_acid: record.acid,
     origin: record.origin,
     destination: record.destination,
-    etd_utc: record.etd_utc || null,
-    current_edct_utc: record.edct_utc,
-    source_freshness_at: fetchedAt
+    etd_utc: operational ? record.etd_utc || null : null,
+    current_edct_utc: operational ? record.edct_utc : null,
+    source_stale: !operational,
+    source_status: operational ? "fresh" : snapshot?.stale ? "stale" : "unavailable",
+    source_freshness_at: snapshot?.last_successful_fetch_at || snapshot?.fetched_at || null
   };
   lookupCache.set(candidateId, { ...cached, expires_at: Date.now() + 10 * 60_000 });
   return {
@@ -459,6 +482,9 @@ function lookupCandidate(record, fetchedAt, workspaceId) {
     destination: cached.destination,
     etd_utc: cached.etd_utc,
     current_edct_utc: cached.current_edct_utc,
+    source_stale: cached.source_stale,
+    source_status: cached.source_status,
+    source_freshness_at: cached.source_freshness_at,
     status: duplicate ? "already_watched" : "matched",
     already_watched: duplicate
   };
@@ -503,13 +529,15 @@ async function api(req, res, pathname) {
     if (!session) return send(res, 401, { error: "Session required." });
     if (!rate(req, session.id, "heartbeat", 90, 60_000)) return send(res, 429, { error: "Too many heartbeats." });
     const ts = nowIso();
+    const body = await readBody(req);
+    const userActivityAt = heartbeatUserActivityAt(body, ts);
     store.update("sessions", session.id, {
       last_seen_at: ts,
       last_heartbeat_at: ts,
-      last_activity_at: ts,
+      ...(userActivityAt ? { last_activity_at: userActivityAt, last_user_activity_at: userActivityAt } : {}),
       ...(await ipEnrichment(req))
     });
-    const woke = noteBackendActivity(store, "Backend woke after heartbeat");
+    const woke = userActivityAt ? noteBackendActivity(store, "Backend woke after human activity heartbeat") : false;
     const heartbeatWorkspaceId = session.workspace_id;
     if (woke && store.data.flights.some((f) => f.workspace_id === heartbeatWorkspaceId && f.active)) {
       await refreshWorkspace(store, heartbeatWorkspaceId, false, session.id, "wake_refresh");
@@ -526,12 +554,8 @@ async function api(req, res, pathname) {
   if (!rate(req, session.id, "api", 240, 60_000)) return send(res, 429, { error: "Too many requests." });
   try {
     if (req.method === "GET" && pathname === "/api/session") {
-      const woke = noteBackendActivity(store, "Backend woke after page load");
       store.update("sessions", session.id, { page_load_count: (session.page_load_count || 0) + 1 });
       store.usage("PAGE_OR_SESSION_LOAD", workspace.id, session.id, {});
-      if (woke && store.data.flights.some((f) => f.workspace_id === workspace.id && f.active)) {
-        await refreshWorkspace(store, workspace.id, false, session.id, "wake_refresh");
-      }
       return send(res, 200, { session: publicSession(workspace, session) });
     }
     if (req.method === "POST" && pathname === "/api/session/label") {
@@ -556,6 +580,7 @@ async function api(req, res, pathname) {
     if (req.method === "POST" && pathname === "/api/flights") {
       if (!rate(req, session.id, "flight-entry", 40, 60_000)) return send(res, 429, { error: "Too many flight changes." });
       const body = await readBody(req);
+      markUserActivity(session.id);
       const created = store.insert("flights", { ...flightPayload(body, workspace.id), created_at: nowIso() });
       store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination });
       noteBackendActivity(store, "Backend woke after watched flight was added");
@@ -568,6 +593,7 @@ async function api(req, res, pathname) {
       const existing = store.data.flights.find((f) => f.id === flightMatch[1] && f.workspace_id === workspace.id);
       if (!existing) return send(res, 404, { error: "Flight not found." });
       const body = await readBody(req);
+      markUserActivity(session.id);
       const updated = store.update("flights", existing.id, flightPayload(body, workspace.id, existing));
       store.usage("FLIGHT_EDITED", workspace.id, session.id, { destination: updated.destination });
       await refreshWorkspace(store, workspace.id, false, session.id, "wake_refresh");
@@ -576,6 +602,7 @@ async function api(req, res, pathname) {
     if (flightMatch && req.method === "DELETE") {
       const existing = store.data.flights.find((f) => f.id === flightMatch[1] && f.workspace_id === workspace.id);
       if (!existing) return send(res, 404, { error: "Flight not found." });
+      markUserActivity(session.id);
       store.update("flights", existing.id, { active: false, updated_at: nowIso() });
       const removedEventIds = new Set(store.data.edct_events
         .filter((event) => event.workspace_id === workspace.id && event.flight_id === existing.id)
@@ -600,6 +627,7 @@ async function api(req, res, pathname) {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const flight = normalizeFlightNumber(url.searchParams.get("flight") || "");
       const destination = normalizeAirport(url.searchParams.get("destination") || "");
+      markUserActivity(session.id);
       const matches = [];
       store.usage("LOOKUP_ATTEMPTED", workspace.id, session.id, { destination });
       noteBackendActivity(store, "Backend woke after flight lookup");
@@ -608,19 +636,22 @@ async function api(req, res, pathname) {
         for (const record of snapshot.records) {
           if (record.acid !== flight.normalizedAcid) continue;
           if (record.destination !== destination) continue;
-          matches.push(lookupCandidate(record, snapshot.fetched_at, workspace.id));
+          matches.push(lookupCandidate(record, snapshot, workspace.id));
         }
       }
       store.usage(matches.length ? "LOOKUP_SUCCEEDED" : "LOOKUP_FAILED", workspace.id, session.id, { destination });
       return send(res, 200, {
         candidates: matches,
-        message: matches.length ? (matches.some((candidate) => candidate.current_edct_utc) ? "" : `Flight found in ${destination} feed, no active time.`) : "No matching flight found in destination feed."
+        message: matches.some((candidate) => candidate.source_stale)
+          ? `Source data for ${destination} is stale or unavailable. Verify official source.`
+          : matches.length ? (matches.some((candidate) => candidate.current_edct_utc) ? "" : `Flight found in ${destination} feed, no active time.`) : "No matching flight found in destination feed."
       });
     }
     if (req.method === "POST" && pathname === "/api/edct/lookup/bulk") {
       if (!rate(req, session.id, "lookup-bulk", 12, 60_000)) return send(res, 429, { error: "Too many bulk lookups." });
       purgeLookupCache();
       const body = await readBody(req);
+      markUserActivity(session.id);
       const parsed = parseFlightEntries(body.text || body.input || "", sanitizeText(body.parser || "generic", 40));
       noteBackendActivity(store, "Backend woke after bulk lookup");
       const candidates = [];
@@ -638,7 +669,7 @@ async function api(req, res, pathname) {
             const matches = snapshot.records.filter((record) => record.acid === entry.normalized_acid && record.destination === destination);
             matchedForAirport += matches.length;
             for (const record of matches) {
-              candidates.push({ input_key: entry.input_key, ...lookupCandidate(record, snapshot.fetched_at, workspace.id) });
+              candidates.push({ input_key: entry.input_key, ...lookupCandidate(record, snapshot, workspace.id) });
             }
           }
         }
@@ -648,15 +679,19 @@ async function api(req, res, pathname) {
         parser: parsed.parser,
         candidates,
         errors: parsed.errors,
-        message: candidates.length ? "Review matches, remove any you do not want, then add selected." : "No matching flights found in destination feeds."
+        message: candidates.some((candidate) => candidate.source_stale)
+          ? "One or more airport sources are stale or unavailable. Stale matches cannot be added."
+          : candidates.length ? "Review matches, remove any you do not want, then add selected." : "No matching flights found in destination feeds."
       });
     }
     if (req.method === "POST" && pathname === "/api/edct/lookup/add") {
       if (!rate(req, session.id, "flight-entry", 40, 60_000)) return send(res, 429, { error: "Too many flight changes." });
       purgeLookupCache();
       const body = await readBody(req);
+      markUserActivity(session.id);
       const candidate = lookupCache.get(sanitizeText(body.candidate_key || body.candidate_id, 80));
       if (!candidate) return send(res, 404, { error: "Flight candidate expired. Search again." });
+      if (candidate.source_stale) return send(res, 409, { error: "Source data is stale or unavailable. Search again after the source recovers." });
       const existing = store.data.flights.find((f) =>
         f.workspace_id === workspace.id &&
         f.active &&
@@ -687,6 +722,7 @@ async function api(req, res, pathname) {
     }
     if (req.method === "POST" && pathname === "/api/edct/refresh") {
       if (!rate(req, session.id, "refresh", 12, 60_000)) return send(res, 429, { error: "Too many refreshes." });
+      markUserActivity(session.id);
       noteBackendActivity(store, "Backend woke after manual refresh");
       return send(res, 200, await refreshWorkspace(store, workspace.id, true, session.id, "manual_refresh"));
     }
@@ -763,7 +799,11 @@ function adminSummary() {
   const todayMs = todayStart.getTime();
   const activeSince = now - config.activeSessionThresholdSeconds * 1000;
   const activeFlights = store.data.flights.filter((f) => f.active);
-  const activeSessionsNow = store.data.sessions.filter((s) => sessionActiveMs(s) >= activeSince).length;
+  const activeSessionsNow = store.data.sessions.filter((s) => sessionUserActivityMs(s) >= activeSince).length;
+  const connectedSessionsNow = store.data.sessions.filter((s) => dateMs(s.last_seen_at) >= activeSince).length;
+  const connectedIdleSessionsNow = store.data.sessions.filter((s) =>
+    dateMs(s.last_seen_at) >= activeSince && sessionUserActivityMs(s) < activeSince
+  ).length;
   const runtime = backendRuntimeState(store);
   const destinationCounts = countBy(activeFlights.map((f) => f.destination).filter(Boolean));
   const prefixCounts = countBy(activeFlights.map((f) => callsignPrefix(f.normalized_acid || f.display_flight_number)).filter(Boolean));
@@ -795,6 +835,8 @@ function adminSummary() {
   return {
     backendState: degraded ? "degraded" : runtime.shouldSleep || runtime.backendSleeping ? "sleeping" : "awake",
     activeSessionsNow,
+    connectedSessionsNow,
+    connectedIdleSessionsNow,
     sessionsToday: store.data.sessions.filter((s) => dateMs(s.created_at) >= todayMs || dateMs(s.last_seen_at) >= todayMs).length,
     uniqueProfilesToday: store.data.sessions.filter((s) => dateMs(s.created_at) >= todayMs || dateMs(s.last_seen_at) >= todayMs || dateMs(s.last_heartbeat_at) >= todayMs).length,
     flightsWatchedNow: activeFlights.length,
@@ -823,7 +865,7 @@ function adminSummary() {
       estimatedSourceRequestsToday: efficiency.estimatedSourceRequestsToday
     },
     lastUserQueryAt: latestUserEventAt,
-    lastHeartbeatAt: latestSessionSeenAt,
+    lastHeartbeatAt: latestDate(store.data.sessions.map((session) => session.last_heartbeat_at)),
     lastFaaFetchAt: latestFetchAt,
     nextSleepAt: runtime.nextSleepAt,
     lastSleepAt: lastSleepEvent?.created_at || null,
@@ -876,7 +918,7 @@ function latestAdminEvent(eventType) {
 }
 
 function sessionActiveMs(session) {
-  return Math.max(dateMs(session.last_heartbeat_at), dateMs(session.last_activity_at), dateMs(session.last_seen_at));
+  return sessionUserActivityMs(session);
 }
 
 function countedList(counts, key = "name", limit = 10) {
@@ -973,14 +1015,22 @@ function adminProfile(session, activeSince) {
   const workspaceFlights = store.data.flights.filter((f) => workspaceIds.has(f.workspace_id) && f.active);
   const destinationCounts = countBy(workspaceFlights.map((f) => f.destination).filter(Boolean));
   const prefixCounts = countBy(workspaceFlights.map((f) => callsignPrefix(f.normalized_acid || f.display_flight_number)).filter(Boolean));
-  const profileActiveMs = sessionActiveMs(session);
+  const profileActiveMs = sessionUserActivityMs(session);
+  const lastSeenMs = dateMs(session.last_seen_at);
+  const lastHeartbeatMs = dateMs(session.last_heartbeat_at);
   const device = parseDevice(session.user_agent_approx);
   return {
     shortSessionId: shortOpaqueId(session.id),
     firstSeenAt: session.created_at || null,
-    lastSeenAt: latestDate([session.last_seen_at, session.last_activity_at, session.last_heartbeat_at]),
+    lastSeenAt: session.last_seen_at || null,
     lastHeartbeatAt: session.last_heartbeat_at || null,
+    lastUserActivityAt: session.last_user_activity_at || session.last_activity_at || session.created_at || null,
     activeNow: profileActiveMs >= activeSince,
+    connectedNow: lastSeenMs >= activeSince,
+    connectedButIdle: lastSeenMs >= activeSince && profileActiveMs < activeSince,
+    lastSeenAgeSeconds: lastSeenMs ? Math.max(0, Math.round((Date.now() - lastSeenMs) / 1000)) : null,
+    lastHeartbeatAgeSeconds: lastHeartbeatMs ? Math.max(0, Math.round((Date.now() - lastHeartbeatMs) / 1000)) : null,
+    lastUserActivityAgeSeconds: profileActiveMs ? Math.max(0, Math.round((Date.now() - profileActiveMs) / 1000)) : null,
     sessionAge: sessionAgeLabel(session.created_at),
     approximateDevice: device.device,
     browser: device.browser,
@@ -1051,7 +1101,7 @@ function adminWatchedFlight(flight) {
   return {
     flightNumber: flight.display_flight_number,
     route: `${flight.origin}-${flight.destination}`,
-    currentEdctUtc: state?.current_edct_utc || null,
+    currentEdctUtc: state?.source_stale ? null : state?.current_edct_utc || null,
     change: state?.last_change || "UNCHANGED"
   };
 }

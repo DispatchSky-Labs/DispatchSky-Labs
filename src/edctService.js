@@ -10,6 +10,10 @@ import { fetchSourceForAirport } from "./sourceClient.js";
 
 let backendSleeping = true;
 
+export function isOperationalSnapshot(snapshot) {
+  return Boolean(snapshot?.success && !snapshot?.stale);
+}
+
 export function activeFlights(store, workspaceId = null) {
   return store.data.flights.filter((f) => f.active && (!workspaceId || f.workspace_id === workspaceId));
 }
@@ -30,18 +34,19 @@ export async function refreshWorkspace(store, workspaceId, manual = false, sessi
   for (const airport of airports) {
     const reference = flights.find((f) => f.destination === airport)?.scheduled_departure_utc || nowIso();
     const snapshot = await fetchSourceForAirport(airport, reference, { force: manual, reason });
+    const operational = isOperationalSnapshot(snapshot);
     store.insert("source_airport_snapshots", {
       airport,
       fetched_at: snapshot.fetched_at,
-      success: snapshot.success && !snapshot.stale,
+      success: operational,
       record_count: snapshot.record_count,
-      normalized_records: snapshot.success ? snapshot.records : [],
+      normalized_records: operational ? snapshot.records : [],
       error_message: snapshot.error_message || ""
     });
-    store.usage(snapshot.success && !snapshot.stale ? "SOURCE_FETCH_SUCCESS" : "SOURCE_FETCH_FAILED", workspaceId, sessionId, { airport });
-    if (snapshot.success && !snapshot.stale) summary.fetched += snapshot.record_count;
+    store.usage(operational ? "SOURCE_FETCH_SUCCESS" : "SOURCE_FETCH_FAILED", workspaceId, sessionId, { airport });
+    if (operational) summary.fetched += snapshot.record_count;
     for (const flight of flights.filter((f) => f.destination === airport)) {
-      const match = snapshot.success
+      const match = operational
         ? snapshot.records.find((r) => r.acid === flight.normalized_acid && r.origin === flight.origin && r.destination === flight.destination)
         : null;
       if (match) summary.matched += 1;
@@ -61,16 +66,17 @@ export async function refreshWorkspace(store, workspaceId, manual = false, sessi
       );
       const previousEdct = previousState?.current_edct_utc || null;
       const newEdct = match?.edct_utc || null;
-      const eventType = compareEdct(previousEdct, newEdct, snapshot.success && !snapshot.stale);
+      const eventType = compareEdct(previousEdct, newEdct, operational);
       const statePatch = {
         ...key,
         flight_id: flight.id,
-        current_edct_utc: snapshot.success ? newEdct : previousEdct,
+        current_edct_utc: operational ? newEdct : previousEdct,
         previous_edct_utc: eventType ? previousEdct : previousState?.previous_edct_utc || null,
         last_change: eventType || previousState?.last_change || "UNCHANGED",
-        last_seen_at: match ? snapshot.fetched_at : previousState?.last_seen_at || null,
+        last_seen_at: operational && match ? snapshot.fetched_at : previousState?.last_seen_at || null,
         last_source_fetch_at: snapshot.last_successful_fetch_at || snapshot.fetched_at,
-        source_record: match || previousState?.source_record || null
+        source_stale: !operational,
+        source_record: operational && match ? match : previousState?.source_record || null
       };
       store.upsertState(statePatch);
       if (!eventType) continue;
@@ -163,7 +169,6 @@ function noteBackendSleep(store) {
 }
 
 export function backendRuntimeState(store) {
-  const idleCutoff = Date.now() - config.idleSleepMinutes * 60_000;
   const activeCutoff = Date.now() - config.activeSessionThresholdSeconds * 1000;
   const sessions = store.data.sessions || [];
   const flights = activeFlights(store);
@@ -176,7 +181,7 @@ export function backendRuntimeState(store) {
   );
   const hasActiveSession = sessions.some((s) => sessionActivityMs(s) >= activeCutoff);
   const hasActiveFlights = activePollingWorkspaces.length > 0;
-  const idleForSleep = lastActivityMs > 0 && lastActivityMs < idleCutoff;
+  const idleForSleep = lastActivityMs > 0 && lastActivityMs < activeCutoff;
   const shouldSleep = !hasActiveSession && !hasActiveFlights && (idleForSleep || idleWorkspaces.length > 0);
   return {
     shouldSleep,
@@ -186,29 +191,28 @@ export function backendRuntimeState(store) {
     idleWorkspaceIds: idleWorkspaces.map((workspace) => workspace.id),
     backendSleeping,
     lastActivityAt: lastActivityMs ? new Date(lastActivityMs).toISOString() : null,
-    nextSleepAt: !shouldSleep && !hasActiveFlights && lastActivityMs ? new Date(lastActivityMs + config.idleSleepMinutes * 60_000).toISOString() : null
+    nextSleepAt: !shouldSleep && !hasActiveFlights && lastActivityMs ? new Date(lastActivityMs + config.activeSessionThresholdSeconds * 1000).toISOString() : null
   };
 }
 
 function sessionActivityMs(session) {
-  return Math.max(
-    Date.parse(session.last_heartbeat_at || "") || 0,
-    Date.parse(session.last_activity_at || "") || 0,
-    Date.parse(session.last_seen_at || "") || 0
-  );
+  return sessionUserActivityMs(session);
+}
+
+export function sessionUserActivityMs(session) {
+  return Date.parse(session.last_user_activity_at || session.last_activity_at || session.created_at || "") || 0;
 }
 
 export function workspaceActivityMs(store, workspaceId) {
   return Math.max(
-    Date.parse(store.data.workspaces.find((w) => w.id === workspaceId)?.updated_at || "") || 0,
     ...store.data.sessions
       .filter((session) => session.workspace_id === workspaceId)
-      .map(sessionActivityMs)
+      .map(sessionUserActivityMs)
   );
 }
 
 export function isWorkspaceRecentlyActive(store, workspaceId) {
-  const cutoff = Date.now() - config.idleSleepMinutes * 60_000;
+  const cutoff = Date.now() - config.activeSessionThresholdSeconds * 1000;
   return workspaceActivityMs(store, workspaceId) >= cutoff;
 }
 
@@ -254,10 +258,20 @@ function warningFor(lastSuccess, lastError) {
   if (!lastSuccess) return null;
   const ageMinutes = Math.round((Date.now() - new Date(lastSuccess.fetched_at).getTime()) / 60000);
   if (lastError && new Date(lastError.fetched_at) > new Date(lastSuccess.fetched_at)) {
-    return { message: `Data may be stale. Last update ${Math.max(ageMinutes, 1)} min ago. Verify official source.` };
+    return { message: staleWarningMessage(ageMinutes) };
   }
   if (ageMinutes > Math.max(10, config.pollMinutes * 3)) {
-    return { message: `Data may be stale. Last update ${ageMinutes} min ago. Verify official source.` };
+    return { message: staleWarningMessage(ageMinutes) };
   }
   return null;
+}
+
+function staleWarningMessage(ageMinutes) {
+  const age = Math.max(ageMinutes, 1);
+  if (age > 24 * 60) return "Stale source data. Last successful update was over 24 hours ago. Verify official source.";
+  if (age >= 60) {
+    const hours = Math.max(1, Math.round(age / 60));
+    return `Data may be stale. Last update ${hours} ${hours === 1 ? "hour" : "hours"} ago. Verify official source.`;
+  }
+  return `Data may be stale. Last update ${age} min ago. Verify official source.`;
 }
