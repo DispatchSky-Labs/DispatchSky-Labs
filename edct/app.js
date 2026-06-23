@@ -1,22 +1,11 @@
+import { freshnessView } from "./freshness.js?v=20260622";
+
 const STORAGE_KEY = "sadiom.flow.trackedFlights.v1";
 const STORAGE_BACKUP_PREFIX = `${STORAGE_KEY}.backup`;
 const state = { flights: [], events: [], session: null, status: null, pending: [], candidates: [], serverFlightKeys: [], deletedFlightKeys: new Set() };
 const $ = (id) => document.getElementById(id);
 const API_BASE_URL = String(window.EDCT_API_BASE_URL || "").replace(/\/+$/, "");
 const pendingAdds = new Map();
-let lastHumanActivityAt = Date.now();
-let lastPointerActivityAt = 0;
-
-function noteHumanActivity() {
-  lastHumanActivityAt = Date.now();
-}
-
-function notePointerActivity() {
-  const now = Date.now();
-  if (now - lastPointerActivityAt < 5000) return;
-  lastPointerActivityAt = now;
-  noteHumanActivity();
-}
 
 async function api(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
@@ -82,6 +71,10 @@ function normalizeStoredFlight(flight) {
     origin,
     destination,
     etd_utc: flight?.etd_utc || null,
+    etd_lifecycle_eligible: flight?.etd_lifecycle_eligible !== false,
+    etd_met_for_utc: flight?.etd_met_for_utc || null,
+    etd_met_at: flight?.etd_met_at || null,
+    etd_met_acknowledged_at: flight?.etd_met_acknowledged_at || null,
     source_stale: flight?.source_stale === true || flight?.state?.source_stale === true,
     source_status: flight?.source_status || null,
     source_freshness_at: flight?.source_freshness_at || null,
@@ -163,6 +156,7 @@ function localFlightFromCandidate(candidate) {
     origin: candidate.origin,
     destination: candidate.destination,
     etd_utc: sourceStale ? null : candidate.etd_utc || candidate.current_edct_utc || new Date().toISOString(),
+    etd_lifecycle_eligible: !sourceStale && Boolean(candidate.etd_utc || candidate.current_edct_utc),
     source_stale: sourceStale,
     source_status: candidate.source_status || (sourceStale ? "stale" : "fresh"),
     source_freshness_at: candidate.source_freshness_at || null,
@@ -243,12 +237,32 @@ function compactChange(flight) {
   return { label: "--", className: "same" };
 }
 
+function renderFreshness() {
+  const view = freshnessView(state.status);
+  const line = $("freshnessLine");
+  line.textContent = view.text;
+  line.className = `freshness-line${view.level === "healthy" ? "" : ` ${view.level}`}`;
+}
+
+function etdMetAgeMinutes(flight, now = Date.now()) {
+  const displayedEtd = flight.state?.current_edct_utc || (flight.etd_lifecycle_eligible === false ? null : flight.etd_utc);
+  const lifecycleTarget = flight.etd_met_for_utc === displayedEtd ? flight.etd_met_for_utc : displayedEtd;
+  const etdMs = Date.parse(lifecycleTarget || "");
+  if (!Number.isFinite(etdMs) || now < etdMs) return null;
+  return Math.max(0, Math.floor((now - etdMs) / 60000));
+}
+
+function lifecycleTargetLabel(flight) {
+  return flight.state?.current_edct_utc ? "EDCT" : "ETD";
+}
+
 function alertText(event) {
   return event.message || "Change detected.";
 }
 
 function render() {
   renderWarning();
+  renderFreshness();
   renderFlights();
   renderAlerts();
   renderStats();
@@ -294,7 +308,11 @@ function renderFlights() {
     const change = compactChange(flight);
     const route = `${flight.origin}-${flight.destination}`;
     const currentEdct = flight.source_stale || flight.state?.source_stale ? null : flight.state?.current_edct_utc;
-    return `<div class="flight-row" data-flight="${escapeHtml(flight.flight_key)}" role="button" tabindex="0">
+    const etdAge = etdMetAgeMinutes(flight);
+    const sourceStale = flight.source_stale || flight.state?.source_stale;
+    const lifecycleClass = sourceStale ? "source-stale" : etdAge === null ? "" : etdAge >= 30 ? "etd-met etd-review" : "etd-met";
+    const lifecycleLabel = sourceStale ? null : etdAge === null ? null : etdAge >= 30 ? "REVIEW" : `${lifecycleTargetLabel(flight)} MET`;
+    return `<div class="flight-row ${lifecycleClass}" data-flight="${escapeHtml(flight.flight_key)}" role="button" tabindex="0">
       <div class="reorder-controls" aria-label="Reorder ${escapeHtml(flight.display_flight_number)}">
         <button class="move-btn" data-move="${escapeHtml(flight.flight_key)}" data-direction="-1" type="button" aria-label="Move ${escapeHtml(flight.display_flight_number)} up" ${index === 0 ? "disabled" : ""}>Up</button>
         <button class="move-btn" data-move="${escapeHtml(flight.flight_key)}" data-direction="1" type="button" aria-label="Move ${escapeHtml(flight.display_flight_number)} down" ${index === state.flights.length - 1 ? "disabled" : ""}>Down</button>
@@ -302,7 +320,7 @@ function renderFlights() {
       <strong>${escapeHtml(flight.display_flight_number)}</strong>
       <span>${escapeHtml(route)}</span>
       <span class="edct">${escapeHtml(hhmmz(currentEdct))}</span>
-      <span class="change ${change.className}">${escapeHtml(change.label)}</span>
+      <span class="change ${sourceStale ? change.className : lifecycleLabel ? "assigned" : change.className}">${escapeHtml(lifecycleLabel || change.label)}</span>
       <button class="delete-btn" data-delete="${escapeHtml(flight.flight_key)}" type="button" aria-label="Remove ${escapeHtml(flight.display_flight_number)}">Remove</button>
     </div>`;
   }).join("");
@@ -310,10 +328,18 @@ function renderFlights() {
 }
 
 function renderAlerts() {
-  const latest = state.events.slice(0, 3);
+  const visibleEvents = state.events.filter((event) => !event.acknowledged_at);
+  const latest = visibleEvents.slice(0, 3);
   $("recentAlerts").hidden = latest.length === 0;
-  $("historyList").innerHTML = latest.map((event) => `<div class="alert-line">${escapeHtml(alertText(event))}</div>`).join("");
-  $("alertsModalList").innerHTML = state.events.map((event) => `<div class="alert-line">${escapeHtml(alertText(event))}</div>`).join("") || `<div class="empty">No alerts yet.</div>`;
+  $("historyList").innerHTML = latest.map(renderAlertLine).join("");
+  $("alertsModalList").innerHTML = visibleEvents.map(renderAlertLine).join("") || `<div class="empty">No alerts yet.</div>`;
+}
+
+function renderAlertLine(event) {
+  const dismiss = event.event_type === "ETD_MET" && event.event_key
+    ? `<button class="secondary alert-dismiss" type="button" data-ack-event="${escapeHtml(event.event_key)}">Dismiss</button>`
+    : "";
+  return `<div class="alert-line"><span>${escapeHtml(alertText(event))}</span>${dismiss}</div>`;
 }
 
 function renderStats() {
@@ -501,8 +527,7 @@ async function heartbeat() {
       method: "POST",
       body: JSON.stringify({
         page_visible: document.visibilityState === "visible",
-        page_focused: document.hasFocus(),
-        last_user_activity_at: new Date(lastHumanActivityAt).toISOString()
+        page_focused: document.hasFocus()
       })
     });
   } catch {
@@ -649,6 +674,18 @@ document.addEventListener("click", async (event) => {
     renderCandidates(state.candidates);
     return;
   }
+  const acknowledgeEventId = event.target.dataset.ackEvent;
+  if (acknowledgeEventId) {
+    event.stopPropagation();
+    try {
+      await api(`/api/edct/events/${encodeURIComponent(acknowledgeEventId)}/acknowledge`, { method: "POST", body: "{}" });
+      state.events = state.events.map((item) => item.event_key === acknowledgeEventId ? { ...item, acknowledged_at: new Date().toISOString() } : item);
+      renderAlerts();
+    } catch (error) {
+      setLookupMessage(error.message || "Unable to dismiss alert.", true);
+    }
+    return;
+  }
   const row = event.target.closest("[data-flight]");
   if (row) showSummary(row.dataset.flight);
 });
@@ -661,17 +698,9 @@ document.addEventListener("keydown", (event) => {
   showSummary(row.dataset.flight);
 });
 
-document.addEventListener("pointermove", notePointerActivity, { passive: true });
-document.addEventListener("pointerdown", noteHumanActivity, { passive: true });
-document.addEventListener("touchstart", noteHumanActivity, { passive: true });
-document.addEventListener("keydown", noteHumanActivity, { passive: true });
-window.addEventListener("focus", () => {
-  noteHumanActivity();
-  heartbeat();
-});
+window.addEventListener("focus", heartbeat);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
-  noteHumanActivity();
   heartbeat();
 });
 
@@ -693,3 +722,7 @@ initialize();
 setInterval(() => scheduleLoadAll(), 60_000);
 setInterval(heartbeat, 45_000);
 setInterval(pollNotifications, 30_000);
+setInterval(() => {
+  renderFreshness();
+  renderFlights();
+}, 15_000);

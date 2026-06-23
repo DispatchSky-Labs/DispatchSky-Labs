@@ -59,6 +59,9 @@ export class Store {
       if (!session.last_user_activity_at) {
         session.last_user_activity_at = session.last_activity_at || session.created_at || ts;
       }
+      if (!Object.hasOwn(session, "last_operator_action_at")) {
+        session.last_operator_action_at = session.last_user_activity_at || session.last_activity_at || session.created_at || ts;
+      }
       session.user_agent_approx = userAgent || session.user_agent_approx || "";
       session.ip_hash = ipHash || session.ip_hash || "";
       Object.assign(session, safeEnrichment(enrichment, session));
@@ -80,6 +83,7 @@ export class Store {
       last_seen_at: ts,
       last_activity_at: ts,
       last_user_activity_at: ts,
+      last_operator_action_at: null,
       last_heartbeat_at: null,
       user_agent_approx: userAgent,
       ip_hash: ipHash,

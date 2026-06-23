@@ -48,16 +48,18 @@ function flightShadow(store, flight, nasStatus) {
 }
 
 function aadcState(flight, state, latestSnapshot) {
-  const current = state?.current_edct_utc || null;
+  const sourceStale = state?.source_stale === true;
+  const current = sourceStale ? null : state?.current_edct_utc || null;
   const previous = state?.previous_edct_utc || null;
   const lastSeen = state?.last_seen_at || null;
   const lastFetch = state?.last_source_fetch_at || latestSnapshot?.fetched_at || null;
   const successfulFetch = latestSnapshot?.success === true;
   const rowPresent = Boolean(current);
-  const rowMissingAfterSuccess = Boolean(state && !current && successfulFetch);
+  const rowMissingAfterSuccess = Boolean(state && !sourceStale && !current && successfulFetch);
 
   return {
     status: rowPresent ? "present" : rowMissingAfterSuccess ? "missing" : state ? "unknown" : "not_tracked",
+    source_stale: sourceStale,
     current_edct_utc: current,
     current_edct_display: formatHHMMZ(current) || "",
     previous_edct_utc: previous,
@@ -71,6 +73,7 @@ function aadcState(flight, state, latestSnapshot) {
 }
 
 function oldLiveInterpretation(state) {
+  if (state?.source_stale) return { label: "Checking...", detail: "AADC source data is stale or unavailable." };
   const change = state?.last_change || "UNCHANGED";
   if (change === "EDCT_ASSIGNED") return { label: "Normal EDCT", detail: "Live logic shows assigned EDCT." };
   if (change === "EDCT_WORSENED") return { label: "EDCT worsened", detail: "Live logic shows a later EDCT." };

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Sadiom Flow</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.sadiom.com; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'">
-    <link rel="stylesheet" href="/edct/styles.css">
+    <link rel="stylesheet" href="/edct/styles.css?v=20260622-freshness-etd">
   </head>
   <body>
     <header class="site-header">
@@ -32,6 +32,8 @@
           <span id="alertBadge" class="badge" hidden>0</span>
         </button>
       </header>
+
+      <p id="freshnessLine" class="freshness-line" aria-live="polite">Checking data freshness...</p>
 
       <p class="disclaimer">Awareness aid only. Verify in the official operational source.</p>
 
@@ -84,6 +86,6 @@
     </dialog>
 
     <script src="/edct/config.js"></script>
-    <script src="/edct/app.js?v=20260621-stale-gating"></script>
+    <script type="module" src="/edct/app.js?v=20260622-freshness-edct-copy"></script>
   </body>
 </html>

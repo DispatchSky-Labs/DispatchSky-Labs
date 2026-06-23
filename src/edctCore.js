@@ -4,7 +4,8 @@ export const EVENT_TYPES = {
   ASSIGNED: "EDCT_ASSIGNED",
   WORSENED: "EDCT_WORSENED",
   IMPROVED: "EDCT_IMPROVED",
-  REMOVED: "EDCT_REMOVED"
+  REMOVED: "EDCT_REMOVED",
+  ETD_MET: "ETD_MET"
 };
 
 export function id(prefix = "id") {

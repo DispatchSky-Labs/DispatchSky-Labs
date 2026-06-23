@@ -99,6 +99,7 @@ function safeFailure(message = "FAA NAS status unavailable.", errorClass = "fetc
 
 export function parseNasStatusSummary(raw) {
   const text = String(raw || "");
+  if (/<Delay_type\b/i.test(text)) return parseSummaryXml(text);
   const htmlSnapshot = parseSummaryHtml(text);
   if (Object.keys(htmlSnapshot).length) return htmlSnapshot;
   return parseSummaryXml(text);

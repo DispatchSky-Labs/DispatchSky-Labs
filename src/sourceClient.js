@@ -4,6 +4,12 @@ import { normalizeSourceRecord, sanitizeText } from "./edctCore.js";
 const airportCache = new Map();
 const sourceMetrics = new Map();
 
+export function resetSourceCachesForTests() {
+  if (process.env.NODE_ENV !== "test") return;
+  airportCache.clear();
+  sourceMetrics.clear();
+}
+
 function noSecretError() {
   return new Error("EDCT source fetch failed.");
 }
@@ -177,12 +183,8 @@ export async function fetchSourceForAirport(airport, referenceIso, options = {})
   const reason = sanitizeText(options.reason || (options.force ? "manual_refresh" : "unknown"), 40);
   const now = Date.now();
   const ttlMs = config.source.cacheTtlSeconds * 1000;
-  if (!options.force && entry.records && entry.last_successful_fetch_at && now - new Date(entry.last_successful_fetch_at).getTime() <= ttlMs) {
-    metrics.cacheHits += 1;
-    return publicSnapshotFromEntry(airport, entry, false);
-  }
-  metrics.cacheMisses += 1;
   if (!options.force && entry.next_retry_at && now < entry.next_retry_at) {
+    metrics.cacheMisses += 1;
     return entry.records ? publicSnapshotFromEntry(airport, entry, true) : {
       success: false,
       stale: false,
@@ -197,6 +199,11 @@ export async function fetchSourceForAirport(airport, referenceIso, options = {})
       error_message: entry.last_error_message || sanitizeText(noSecretError().message, 80)
     };
   }
+  if (!options.force && entry.records && entry.last_successful_fetch_at && now - new Date(entry.last_successful_fetch_at).getTime() <= ttlMs) {
+    metrics.cacheHits += 1;
+    return publicSnapshotFromEntry(airport, entry, false);
+  }
+  metrics.cacheMisses += 1;
   if (!entry.inflight) {
     metrics.fetchCount += 1;
     metrics.lastFetchAt = new Date().toISOString();

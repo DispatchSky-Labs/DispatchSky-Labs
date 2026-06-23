@@ -14,6 +14,7 @@ import {
 } from "../src/edctCore.js";
 import { parseFlightEntries } from "../src/inputParsers.js";
 import { Store } from "../src/store.js";
+import { freshnessView, relativeAge } from "../edct/freshness.js";
 
 test("flight and airport normalization", () => {
   assert.deepEqual(normalizeFlightNumber("5338"), { display: "5338", normalizedAcid: "SKW5338" });
@@ -21,6 +22,28 @@ test("flight and airport normalization", () => {
   assert.deepEqual(normalizeFlightNumber("ual1597"), { display: "UAL1597", normalizedAcid: "UAL1597" });
   assert.deepEqual(normalizeFlightNumber("aal123"), { display: "AAL123", normalizedAcid: "AAL123" });
   assert.equal(normalizeAirport("klax"), "LAX");
+});
+
+test("freshness indicator formats relative age and thresholds", () => {
+  const now = Date.parse("2026-06-22T12:00:00.000Z");
+  assert.equal(relativeAge("2026-06-22T11:59:45.000Z", now), "just now");
+  assert.equal(relativeAge("2026-06-22T11:59:00.000Z", now), "1m ago");
+  assert.equal(relativeAge("2026-06-22T11:53:30.000Z", now), "7m ago");
+  const status = (ageMinutes) => ({
+    last_updated_utc: new Date(now - 60_000).toISOString(),
+    sources: [{ airport: "SFO", last_successful_update_utc: new Date(now - ageMinutes * 60_000).toISOString() }]
+  });
+  assert.equal(freshnessView(status(4), now).level, "healthy");
+  assert.equal(freshnessView(status(5), now).level, "warning");
+  assert.equal(freshnessView(status(15), now).level, "hard-stale");
+  assert.match(freshnessView(status(15), now).text, /Data may be stale/);
+});
+
+test("stale-source row styling takes priority over ETD-met styling", () => {
+  const css = fs.readFileSync(new URL("../edct/styles.css", import.meta.url), "utf8");
+  assert.ok(css.indexOf(".flight-row.source-stale") > css.indexOf(".flight-row.etd-met"));
+  const app = fs.readFileSync(new URL("../edct/app.js", import.meta.url), "utf8");
+  assert.match(app, /sourceStale \? "source-stale" : etdAge/);
 });
 
 test("EDCT compact parsing resolves UTC date and month rollover", () => {

@@ -98,6 +98,14 @@ h1 {
   font-size: 13px;
   margin-top: 2px;
 }
+.freshness-line {
+  color: var(--muted);
+  font-size: 12px;
+  margin: -2px 0 8px;
+  transition: color .2s ease;
+}
+.freshness-line.warning { color: #9a6700; }
+.freshness-line.hard-stale { color: #b42318; font-weight: 600; }
 .disclaimer {
   color: #3d4c56;
   font-size: 12px;
@@ -228,6 +236,9 @@ textarea {
   border-bottom: 1px solid var(--line);
   background: #fff;
 }
+.flight-row.etd-met { background: #e8f4ff; }
+.flight-row.etd-review { background: #dceeff; }
+.flight-row.source-stale { background: #fff4e5; }
 .flight-row:last-child { border-bottom: 0; }
 .flight-row strong {
   font-size: 14px;
@@ -335,9 +346,14 @@ textarea {
   gap: 6px;
 }
 .alert-line {
+  align-items: center;
   color: #33434d;
+  display: flex;
   font-size: 13px;
+  gap: 8px;
+  justify-content: space-between;
 }
+.alert-dismiss { min-height: 28px; padding: 3px 8px; }
 footer {
   color: var(--muted);
   font-size: 12px;

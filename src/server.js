@@ -21,6 +21,7 @@ import {
   refreshDueAirports,
   refreshWorkspace,
   isOperationalSnapshot,
+  sessionConnectionMs,
   sessionUserActivityMs,
   statusForWorkspace
 } from "./edctService.js";
@@ -360,21 +361,15 @@ function rate(req, sessionId, name, limit, windowMs) {
   return ok;
 }
 
-function markUserActivity(sessionId, activityAt = nowIso()) {
+function markOperatorAction(sessionId, activityAt = nowIso()) {
   const session = store.data.sessions.find((item) => item.id === sessionId);
   if (!session) return null;
-  const patch = { last_activity_at: activityAt, last_user_activity_at: activityAt };
+  const patch = {
+    last_activity_at: activityAt,
+    last_user_activity_at: activityAt,
+    last_operator_action_at: activityAt
+  };
   return store.update("sessions", sessionId, patch);
-}
-
-function heartbeatUserActivityAt(body, receivedAt) {
-  if (body?.page_visible !== true || body?.page_focused !== true) return null;
-  const clientMs = Date.parse(body.last_user_activity_at || "");
-  const receivedMs = Date.parse(receivedAt);
-  if (!Number.isFinite(clientMs) || !Number.isFinite(receivedMs)) return null;
-  if (clientMs > receivedMs + 60_000) return null;
-  if (receivedMs - clientMs > config.activeSessionThresholdSeconds * 1000) return null;
-  return new Date(Math.min(clientMs, receivedMs)).toISOString();
 }
 
 function publicSession(workspace, session) {
@@ -401,6 +396,7 @@ function flightPayload(body, workspaceId, existing = null) {
     scheduled_departure_utc: scheduledDeparture,
     scheduled_arrival_utc: scheduledArrival,
     operational_day_key: operationalDayKey(scheduledDeparture || etd),
+    etd_lifecycle_eligible: body.etd_lifecycle_eligible === undefined ? existing?.etd_lifecycle_eligible !== false : body.etd_lifecycle_eligible !== false,
     active: true,
     updated_at: nowIso()
   };
@@ -419,6 +415,10 @@ function publicFlight(flight, state = null) {
     origin: flight.origin,
     destination: flight.destination,
     etd_utc: flight.etd_utc,
+    etd_lifecycle_eligible: flight.etd_lifecycle_eligible !== false,
+    etd_met_for_utc: flight.etd_met_for_utc || null,
+    etd_met_at: flight.etd_met_at || null,
+    etd_met_acknowledged_at: flight.etd_met_acknowledged_at || null,
     state: state ? {
       current_edct_utc: state.source_stale ? null : state.current_edct_utc,
       previous_edct_utc: state.previous_edct_utc,
@@ -431,11 +431,13 @@ function publicFlight(flight, state = null) {
 
 function publicEvent(event) {
   return {
+    event_key: event.id,
     event_type: event.event_type,
     previous_edct_utc: event.previous_edct_utc,
     new_edct_utc: event.new_edct_utc,
     message: event.message,
-    created_at: event.created_at
+    created_at: event.created_at,
+    acknowledged_at: event.acknowledged_at || null
   };
 }
 
@@ -500,7 +502,11 @@ function purgeLookupCache() {
 function pendingNotifications(workspaceId, sessionId) {
   return store.data.notification_events.filter((n) =>
     n.workspace_id === workspaceId &&
-    !store.data.notification_deliveries.some((d) => d.notification_event_id === n.id && d.session_id === sessionId && d.delivery_state === "delivered")
+    !store.data.notification_deliveries.some((d) =>
+      d.notification_event_id === n.id &&
+      d.session_id === sessionId &&
+      (d.delivery_state === "delivered" || d.delivery_state === "acknowledged")
+    )
   );
 }
 
@@ -530,14 +536,14 @@ async function api(req, res, pathname) {
     if (!rate(req, session.id, "heartbeat", 90, 60_000)) return send(res, 429, { error: "Too many heartbeats." });
     const ts = nowIso();
     const body = await readBody(req);
-    const userActivityAt = heartbeatUserActivityAt(body, ts);
     store.update("sessions", session.id, {
       last_seen_at: ts,
       last_heartbeat_at: ts,
-      ...(userActivityAt ? { last_activity_at: userActivityAt, last_user_activity_at: userActivityAt } : {}),
+      page_visible: body.page_visible === true,
+      page_focused: body.page_focused === true,
       ...(await ipEnrichment(req))
     });
-    const woke = userActivityAt ? noteBackendActivity(store, "Backend woke after human activity heartbeat") : false;
+    const woke = noteBackendActivity(store, "Backend woke after page heartbeat");
     const heartbeatWorkspaceId = session.workspace_id;
     if (woke && store.data.flights.some((f) => f.workspace_id === heartbeatWorkspaceId && f.active)) {
       await refreshWorkspace(store, heartbeatWorkspaceId, false, session.id, "wake_refresh");
@@ -580,7 +586,7 @@ async function api(req, res, pathname) {
     if (req.method === "POST" && pathname === "/api/flights") {
       if (!rate(req, session.id, "flight-entry", 40, 60_000)) return send(res, 429, { error: "Too many flight changes." });
       const body = await readBody(req);
-      markUserActivity(session.id);
+      markOperatorAction(session.id);
       const created = store.insert("flights", { ...flightPayload(body, workspace.id), created_at: nowIso() });
       store.usage("FLIGHT_ADDED", workspace.id, session.id, { destination: created.destination });
       noteBackendActivity(store, "Backend woke after watched flight was added");
@@ -593,7 +599,7 @@ async function api(req, res, pathname) {
       const existing = store.data.flights.find((f) => f.id === flightMatch[1] && f.workspace_id === workspace.id);
       if (!existing) return send(res, 404, { error: "Flight not found." });
       const body = await readBody(req);
-      markUserActivity(session.id);
+      markOperatorAction(session.id);
       const updated = store.update("flights", existing.id, flightPayload(body, workspace.id, existing));
       store.usage("FLIGHT_EDITED", workspace.id, session.id, { destination: updated.destination });
       await refreshWorkspace(store, workspace.id, false, session.id, "wake_refresh");
@@ -602,8 +608,14 @@ async function api(req, res, pathname) {
     if (flightMatch && req.method === "DELETE") {
       const existing = store.data.flights.find((f) => f.id === flightMatch[1] && f.workspace_id === workspace.id);
       if (!existing) return send(res, 404, { error: "Flight not found." });
-      markUserActivity(session.id);
-      store.update("flights", existing.id, { active: false, updated_at: nowIso() });
+      markOperatorAction(session.id);
+      store.update("flights", existing.id, {
+        active: false,
+        etd_met_for_utc: null,
+        etd_met_at: null,
+        etd_met_acknowledged_at: null,
+        updated_at: nowIso()
+      });
       const removedEventIds = new Set(store.data.edct_events
         .filter((event) => event.workspace_id === workspace.id && event.flight_id === existing.id)
         .map((event) => event.id));
@@ -627,7 +639,6 @@ async function api(req, res, pathname) {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const flight = normalizeFlightNumber(url.searchParams.get("flight") || "");
       const destination = normalizeAirport(url.searchParams.get("destination") || "");
-      markUserActivity(session.id);
       const matches = [];
       store.usage("LOOKUP_ATTEMPTED", workspace.id, session.id, { destination });
       noteBackendActivity(store, "Backend woke after flight lookup");
@@ -651,7 +662,6 @@ async function api(req, res, pathname) {
       if (!rate(req, session.id, "lookup-bulk", 12, 60_000)) return send(res, 429, { error: "Too many bulk lookups." });
       purgeLookupCache();
       const body = await readBody(req);
-      markUserActivity(session.id);
       const parsed = parseFlightEntries(body.text || body.input || "", sanitizeText(body.parser || "generic", 40));
       noteBackendActivity(store, "Backend woke after bulk lookup");
       const candidates = [];
@@ -688,10 +698,10 @@ async function api(req, res, pathname) {
       if (!rate(req, session.id, "flight-entry", 40, 60_000)) return send(res, 429, { error: "Too many flight changes." });
       purgeLookupCache();
       const body = await readBody(req);
-      markUserActivity(session.id);
       const candidate = lookupCache.get(sanitizeText(body.candidate_key || body.candidate_id, 80));
       if (!candidate) return send(res, 404, { error: "Flight candidate expired. Search again." });
       if (candidate.source_stale) return send(res, 409, { error: "Source data is stale or unavailable. Search again after the source recovers." });
+      markOperatorAction(session.id);
       const existing = store.data.flights.find((f) =>
         f.workspace_id === workspace.id &&
         f.active &&
@@ -711,6 +721,7 @@ async function api(req, res, pathname) {
         scheduled_departure_utc: null,
         scheduled_arrival_utc: null,
         operational_day_key: operationalDayKey(etd),
+        etd_lifecycle_eligible: Boolean(candidate.etd_utc || candidate.current_edct_utc),
         active: true,
         created_at: nowIso(),
         updated_at: nowIso()
@@ -722,12 +733,38 @@ async function api(req, res, pathname) {
     }
     if (req.method === "POST" && pathname === "/api/edct/refresh") {
       if (!rate(req, session.id, "refresh", 12, 60_000)) return send(res, 429, { error: "Too many refreshes." });
-      markUserActivity(session.id);
+      markOperatorAction(session.id);
       noteBackendActivity(store, "Backend woke after manual refresh");
       return send(res, 200, await refreshWorkspace(store, workspace.id, true, session.id, "manual_refresh"));
     }
     if (req.method === "GET" && pathname === "/api/edct/events") {
       return send(res, 200, { events: store.data.edct_events.filter((e) => e.workspace_id === workspace.id).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 10).map(publicEvent) });
+    }
+    const acknowledgeEventMatch = pathname.match(/^\/api\/edct\/events\/([^/]+)\/acknowledge$/);
+    if (acknowledgeEventMatch && req.method === "POST") {
+      const event = store.data.edct_events.find((item) =>
+        item.id === acknowledgeEventMatch[1] && item.workspace_id === workspace.id && item.event_type === "ETD_MET"
+      );
+      if (!event) return send(res, 404, { error: "Alert not found." });
+      const acknowledgedAt = nowIso();
+      store.update("edct_events", event.id, { acknowledged_at: acknowledgedAt });
+      const flight = store.data.flights.find((item) => item.id === event.flight_id && item.workspace_id === workspace.id);
+      if (flight && flight.etd_met_for_utc === event.new_edct_utc) {
+        store.update("flights", flight.id, { etd_met_acknowledged_at: acknowledgedAt });
+      }
+      markOperatorAction(session.id, acknowledgedAt);
+      for (const notification of store.data.notification_events.filter((item) => item.edct_event_id === event.id)) {
+        if (!store.data.notification_deliveries.some((delivery) => delivery.notification_event_id === notification.id && delivery.session_id === session.id)) {
+          store.insert("notification_deliveries", {
+            notification_event_id: notification.id,
+            session_id: session.id,
+            delivery_state: "acknowledged",
+            attempted_at: acknowledgedAt,
+            delivered_at: acknowledgedAt
+          });
+        }
+      }
+      return send(res, 200, { ok: true, acknowledged_at: acknowledgedAt });
     }
     const flightEvents = pathname.match(/^\/api\/edct\/flights\/([^/]+)\/events$/);
     if (flightEvents && req.method === "GET") {
@@ -782,6 +819,10 @@ function adminUsage() {
       workspace_id: s.workspace_id,
       created_at: s.created_at,
       last_seen_at: s.last_seen_at,
+      last_heartbeat_at: s.last_heartbeat_at || null,
+      last_operator_action_at: operatorActionAt(s),
+      page_visible: s.page_visible === true,
+      page_focused: s.page_focused === true,
       user_agent_approx: s.user_agent_approx,
       ip_hash: s.ip_hash,
       notification_permission: s.notification_permission,
@@ -797,12 +838,13 @@ function adminSummary() {
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
   const todayMs = todayStart.getTime();
-  const activeSince = now - config.activeSessionThresholdSeconds * 1000;
+  const connectedSince = now - config.activeSessionThresholdSeconds * 1000;
+  const operatorActiveSince = now - 2 * 60 * 60_000;
   const activeFlights = store.data.flights.filter((f) => f.active);
-  const activeSessionsNow = store.data.sessions.filter((s) => sessionUserActivityMs(s) >= activeSince).length;
-  const connectedSessionsNow = store.data.sessions.filter((s) => dateMs(s.last_seen_at) >= activeSince).length;
+  const activeSessionsNow = store.data.sessions.filter((s) => sessionUserActivityMs(s) >= operatorActiveSince).length;
+  const connectedSessionsNow = store.data.sessions.filter((s) => sessionConnectionMs(s) >= connectedSince).length;
   const connectedIdleSessionsNow = store.data.sessions.filter((s) =>
-    dateMs(s.last_seen_at) >= activeSince && sessionUserActivityMs(s) < activeSince
+    sessionConnectionMs(s) >= connectedSince && sessionUserActivityMs(s) < operatorActiveSince
   ).length;
   const runtime = backendRuntimeState(store);
   const destinationCounts = countBy(activeFlights.map((f) => f.destination).filter(Boolean));
@@ -817,7 +859,7 @@ function adminSummary() {
   const latestUserEventAt = latestDate(store.data.usage_events.map((event) => event.created_at));
   const latestFetchAt = latestDate(store.data.source_airport_snapshots.map((snapshot) => snapshot.fetched_at));
   const degraded = sourceHealthByAirport.some((item) => item.state === "degraded" || item.state === "failed");
-  const profiles = adminProfiles(activeSince);
+  const profiles = adminProfiles(operatorActiveSince, connectedSince);
   const lastWakeEvent = latestAdminEvent("backend_woke");
   const lastSleepEvent = latestAdminEvent("backend_slept");
   const activePollingWorkspaces = recentlyActiveWorkspacesWithFlights(store);
@@ -865,6 +907,7 @@ function adminSummary() {
       estimatedSourceRequestsToday: efficiency.estimatedSourceRequestsToday
     },
     lastUserQueryAt: latestUserEventAt,
+    lastOperatorActionAt: latestDate(store.data.sessions.map(operatorActionAt)),
     lastHeartbeatAt: latestDate(store.data.sessions.map((session) => session.last_heartbeat_at)),
     lastFaaFetchAt: latestFetchAt,
     nextSleepAt: runtime.nextSleepAt,
@@ -915,10 +958,6 @@ function latestAdminEvent(eventType) {
   return [...(store.data.admin_events || [])]
     .filter((event) => event.event_type === eventType)
     .sort((a, b) => dateMs(b.created_at) - dateMs(a.created_at))[0] || null;
-}
-
-function sessionActiveMs(session) {
-  return sessionUserActivityMs(session);
 }
 
 function countedList(counts, key = "name", limit = 10) {
@@ -1003,13 +1042,13 @@ function recentAdminEvents() {
     .slice(0, 20);
 }
 
-function adminProfiles(activeSince) {
+function adminProfiles(operatorActiveSince, connectedSince) {
   return store.data.sessions
-    .map((session) => adminProfile(session, activeSince))
+    .map((session) => adminProfile(session, operatorActiveSince, connectedSince))
     .sort((a, b) => dateMs(b.lastSeenAt) - dateMs(a.lastSeenAt));
 }
 
-function adminProfile(session, activeSince) {
+function adminProfile(session, operatorActiveSince, connectedSince) {
   const usage = store.data.usage_events.filter((event) => event.session_id === session.id);
   const workspaceIds = new Set([session.workspace_id, ...usage.map((event) => event.workspace_id)].filter(Boolean));
   const workspaceFlights = store.data.flights.filter((f) => workspaceIds.has(f.workspace_id) && f.active);
@@ -1024,10 +1063,13 @@ function adminProfile(session, activeSince) {
     firstSeenAt: session.created_at || null,
     lastSeenAt: session.last_seen_at || null,
     lastHeartbeatAt: session.last_heartbeat_at || null,
-    lastUserActivityAt: session.last_user_activity_at || session.last_activity_at || session.created_at || null,
-    activeNow: profileActiveMs >= activeSince,
-    connectedNow: lastSeenMs >= activeSince,
-    connectedButIdle: lastSeenMs >= activeSince && profileActiveMs < activeSince,
+    lastUserActivityAt: operatorActionAt(session),
+    lastOperatorActionAt: operatorActionAt(session),
+    activeNow: profileActiveMs >= operatorActiveSince,
+    connectedNow: sessionConnectionMs(session) >= connectedSince,
+    connectedButIdle: sessionConnectionMs(session) >= connectedSince && profileActiveMs < operatorActiveSince,
+    pageVisible: session.page_visible === true,
+    pageFocused: session.page_focused === true,
     lastSeenAgeSeconds: lastSeenMs ? Math.max(0, Math.round((Date.now() - lastSeenMs) / 1000)) : null,
     lastHeartbeatAgeSeconds: lastHeartbeatMs ? Math.max(0, Math.round((Date.now() - lastHeartbeatMs) / 1000)) : null,
     lastUserActivityAgeSeconds: profileActiveMs ? Math.max(0, Math.round((Date.now() - profileActiveMs) / 1000)) : null,
@@ -1057,6 +1099,11 @@ function adminProfile(session, activeSince) {
     inferredUserType: inferredUserType(workspaceFlights.length),
     likelyOperatorSignals: likelyOperatorSignals(prefixCounts, destinationCounts)
   };
+}
+
+function operatorActionAt(session) {
+  if (Object.hasOwn(session, "last_operator_action_at")) return session.last_operator_action_at || null;
+  return session.last_user_activity_at || session.last_activity_at || session.created_at || null;
 }
 
 function shortOpaqueId(sessionId) {
