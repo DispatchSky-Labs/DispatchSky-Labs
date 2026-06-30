@@ -313,7 +313,7 @@
       </div>
 
       <div class="panel">
-        <h2>Where Are Users?</h2>
+        <h2>Coarse Region / Device Signals</h2>
         <div id="geographyPanel"></div>
       </div>
 
@@ -535,17 +535,20 @@
       if (!rows || rows.length === 0) return '<p class="muted">No coarse geography data returned.</p>';
       const body = rows.map((row) => `
         <tr>
-          <td>${escapeHtml(row.country || "Unknown")}</td>
-          <td>${escapeHtml(row.region || "Unknown")}</td>
-          <td>${escapeHtml(row.time_zone || row.timeZone || "Unknown")}</td>
-          <td>${escapeHtml(row.locale || "Unknown")}</td>
+          <td>${escapeHtml(row.server_country || row.country || "Unknown")}</td>
+          <td>${escapeHtml(row.server_region || row.region || "Unknown")}</td>
+          <td>${escapeHtml(row.server_city || row.city || "Unknown")}</td>
+          <td>${escapeHtml(row.device_time_zone || row.time_zone || row.timeZone || "Unknown")}</td>
+          <td>${escapeHtml(row.device_locale || row.locale || "Unknown")}</td>
+          <td>${escapeHtml(row.platform || "Unknown")}</td>
           <td>${escapeHtml(formatNumber(row.installs))}</td>
           <td>${escapeHtml(formatNumber(row.events))}</td>
         </tr>
       `).join("");
       return `
+        <p class="muted">Region is coarse and may be unavailable; timezone is a device setting, not physical location.</p>
         <table>
-          <thead><tr><th>Country</th><th>Region</th><th>Time zone</th><th>Locale</th><th>Installs</th><th>Events</th></tr></thead>
+          <thead><tr><th>Server country</th><th>Server region/state</th><th>Server city/metro</th><th>Device timezone</th><th>Device locale</th><th>Platform</th><th>Installs</th><th>Events</th></tr></thead>
           <tbody>${body}</tbody>
         </table>
       `;
@@ -560,7 +563,7 @@
           <td>${escapeHtml([row.app_version, row.build_number].filter(Boolean).join(" / ") || "Unknown")}</td>
           <td>${escapeHtml(row.locale || "Unknown")}</td>
           <td>${escapeHtml(row.time_zone || "Unknown")}</td>
-          <td>${escapeHtml([row.country, row.region].filter(Boolean).join(" / ") || "Unknown")}</td>
+          <td>${escapeHtml([row.country, row.region, row.city].filter((value) => value && value !== "Unknown").join(" / ") || "Unknown")}</td>
           <td>${escapeHtml(row.first_event_at ? new Date(row.first_event_at).toLocaleString() : "Unknown")}</td>
           <td>${escapeHtml(row.last_event_at ? new Date(row.last_event_at).toLocaleString() : "Unknown")}</td>
           <td>${escapeHtml(formatNumber(row.events))}</td>
@@ -568,7 +571,7 @@
       `).join("");
       return `
         <table>
-          <thead><tr><th>Install</th><th>Platform</th><th>Version / Build</th><th>Locale</th><th>Time zone</th><th>Coarse region</th><th>First event</th><th>Last event</th><th>Events</th></tr></thead>
+          <thead><tr><th>Install</th><th>Platform</th><th>Version / Build</th><th>Device locale</th><th>Device timezone</th><th>Server coarse region</th><th>First event</th><th>Last event</th><th>Events</th></tr></thead>
           <tbody>${body}</tbody>
         </table>
       `;
