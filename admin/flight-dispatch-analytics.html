@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Flight Dispatch Analytics - Sadiom Admin</title>
+  <style>
+    :root {
+      --page: #f5f5f7;
+      --surface: #ffffff;
+      --ink: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --blue: #0066cc;
+      --blue-dark: #004f9f;
+      --green: #1f7a3f;
+      --red: #b42318;
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--page);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.5;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .wrap {
+      margin: 0 auto;
+      max-width: var(--max);
+      padding: 36px 20px 52px;
+    }
+
+    header {
+      align-items: flex-start;
+      display: flex;
+      gap: 18px;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: clamp(30px, 5vw, 48px);
+      line-height: 1.05;
+      margin-bottom: 8px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .auth-panel,
+    .panel {
+      background: var(--surface);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .auth-panel {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(220px, 1fr) auto auto;
+      margin-bottom: 18px;
+    }
+
+    label {
+      color: var(--muted);
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    input {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-height: 42px;
+      padding: 9px 11px;
+      width: 100%;
+    }
+
+    button {
+      background: var(--blue);
+      border: 0;
+      border-radius: 8px;
+      color: #ffffff;
+      cursor: pointer;
+      font-weight: 600;
+      min-height: 42px;
+      padding: 9px 14px;
+    }
+
+    button:hover { background: var(--blue-dark); }
+    button.secondary {
+      background: #e8e8ed;
+      color: var(--ink);
+    }
+    button.secondary:hover { background: #d7d7dd; }
+
+    .status {
+      border-radius: 8px;
+      display: none;
+      margin-bottom: 18px;
+      padding: 12px 14px;
+    }
+
+    .status.info {
+      background: #e9f2ff;
+      color: #063d78;
+      display: block;
+    }
+
+    .status.error {
+      background: #fff0ee;
+      color: var(--red);
+      display: block;
+    }
+
+    .status.success {
+      background: #edf8f0;
+      color: var(--green);
+      display: block;
+    }
+
+    .toolbar {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 18px;
+    }
+
+    .metric {
+      background: var(--surface);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .metric .value {
+      font-size: 29px;
+      font-weight: 700;
+      line-height: 1.1;
+      overflow-wrap: anywhere;
+    }
+
+    .sections {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .panel h2 {
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th,
+    td {
+      border-top: 1px solid var(--line);
+      padding: 9px 0;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    td:last-child,
+    th:last-child {
+      text-align: right;
+    }
+
+    .full {
+      grid-column: 1 / -1;
+    }
+
+    details {
+      margin-top: 8px;
+    }
+
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    pre {
+      background: #111827;
+      border-radius: 8px;
+      color: #f9fafb;
+      overflow: auto;
+      padding: 14px;
+      white-space: pre-wrap;
+    }
+
+    footer {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 22px;
+    }
+
+    @media (max-width: 860px) {
+      header,
+      .toolbar {
+        display: block;
+      }
+
+      .auth-panel,
+      .grid,
+      .sections {
+        grid-template-columns: 1fr;
+      }
+
+      .auth-panel button,
+      .toolbar button {
+        margin-top: 10px;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div>
+        <h1>Flight Dispatch Analytics</h1>
+        <p class="muted">Private admin viewer for anonymous app analytics.</p>
+      </div>
+    </header>
+
+    <section class="auth-panel" aria-label="Admin authentication">
+      <div>
+        <label for="adminToken">Admin bearer token</label>
+        <input id="adminToken" type="password" autocomplete="off" placeholder="Paste token for this session" />
+      </div>
+      <button id="loadButton" type="button">Load dashboard</button>
+      <button id="forgetButton" class="secondary" type="button">Forget token</button>
+    </section>
+
+    <div id="status" class="status info">Enter an admin token to load analytics.</div>
+
+    <div class="toolbar">
+      <p class="muted" id="lastRefreshed">Last refreshed: never</p>
+      <button id="refreshButton" class="secondary" type="button">Refresh</button>
+    </div>
+
+    <section id="overview" class="grid" aria-label="Analytics overview"></section>
+
+    <section class="sections" aria-label="Analytics details">
+      <div class="panel">
+        <h2>Activity Counts</h2>
+        <div id="activityCounts"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Active Installs</h2>
+        <div id="activeInstalls"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Sessions</h2>
+        <div id="sessions"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Likely School Region</h2>
+        <div id="schoolRegions"></div>
+      </div>
+
+      <div class="panel full">
+        <h2>Top Canonical Questions</h2>
+        <div id="questions"></div>
+      </div>
+
+      <div class="panel full">
+        <h2>Coarse Region Usage</h2>
+        <div id="coarseRegions"></div>
+      </div>
+
+      <div class="panel full">
+        <h2>Raw Summary</h2>
+        <details>
+          <summary>Show JSON</summary>
+          <pre id="rawJson">{}</pre>
+        </details>
+      </div>
+    </section>
+
+    <footer>
+      Analytics shown here are intended for app improvement and diagnostics. Do not enter or store personal user data in this dashboard.
+    </footer>
+  </main>
+
+  <script>
+    const ANALYTICS_ENDPOINT = "https://dispatch-study-backend-production.up.railway.app/api/admin/analytics/summary";
+    const TOKEN_STORAGE_KEY = "flightDispatchAnalyticsAdminToken";
+
+    const tokenInput = document.getElementById("adminToken");
+    const loadButton = document.getElementById("loadButton");
+    const forgetButton = document.getElementById("forgetButton");
+    const refreshButton = document.getElementById("refreshButton");
+    const statusEl = document.getElementById("status");
+    const lastRefreshedEl = document.getElementById("lastRefreshed");
+    const overviewEl = document.getElementById("overview");
+    const activityCountsEl = document.getElementById("activityCounts");
+    const activeInstallsEl = document.getElementById("activeInstalls");
+    const sessionsEl = document.getElementById("sessions");
+    const schoolRegionsEl = document.getElementById("schoolRegions");
+    const questionsEl = document.getElementById("questions");
+    const coarseRegionsEl = document.getElementById("coarseRegions");
+    const rawJsonEl = document.getElementById("rawJson");
+
+    function setStatus(message, type) {
+      statusEl.textContent = message;
+      statusEl.className = "status " + type;
+    }
+
+    function formatNumber(value) {
+      if (value === null || value === undefined || value === "") return "n/a";
+      if (typeof value === "number") return value.toLocaleString();
+      return String(value);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function metric(label, value) {
+      return `
+        <article class="metric">
+          <div class="label">${escapeHtml(label)}</div>
+          <div class="value">${escapeHtml(formatNumber(value))}</div>
+        </article>
+      `;
+    }
+
+    function rowsFromObject(object, labels) {
+      return Object.entries(labels)
+        .map(([key, label]) => ({ label, value: object?.[key] }))
+        .filter((row) => row.value !== undefined && row.value !== null);
+    }
+
+    function renderTable(rows, emptyMessage) {
+      if (!rows || rows.length === 0) {
+        return `<p class="muted">${escapeHtml(emptyMessage)}</p>`;
+      }
+
+      const body = rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.label)}</td>
+          <td>${escapeHtml(formatNumber(row.value))}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <table>
+          <thead><tr><th>Name</th><th>Count</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    function renderQuestionTable(title, rows) {
+      if (!rows || rows.length === 0) return "";
+      const body = rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.canonical_question_id || row.canonicalQuestionID || row.question_id || "Unknown")}</td>
+          <td>${escapeHtml(formatNumber(row.count))}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <h3>${escapeHtml(title)}</h3>
+        <table>
+          <thead><tr><th>Canonical question ID</th><th>Count</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    function renderCoarseRegions(rows) {
+      if (!rows || rows.length === 0) return '<p class="muted">No coarse region data returned.</p>';
+
+      const body = rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.country || "Unknown")}</td>
+          <td>${escapeHtml(row.region || "Unknown")}</td>
+          <td>${escapeHtml(row.time_zone || row.timeZone || "Unknown")}</td>
+          <td>${escapeHtml(formatNumber(row.count))}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <table>
+          <thead><tr><th>Country</th><th>Region</th><th>Time zone</th><th>Events</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    function renderSchoolRegions(rows, notice) {
+      if (!rows || rows.length === 0) return '<p class="muted">No likely-school-region aggregates returned.</p>';
+
+      const body = rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.likely_school_region || row.likelySchoolRegion || "Unknown")}</td>
+          <td>${escapeHtml(formatNumber(row.installs))}</td>
+          <td>${escapeHtml(formatNumber(row.events))}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <table>
+          <thead><tr><th>Inference</th><th>Installs</th><th>Events</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+        ${notice ? `<p class="muted">${escapeHtml(notice)}</p>` : ""}
+      `;
+    }
+
+    function renderDashboard(summary) {
+      const activityRows = [
+        { label: "Study sessions", value: summary.studySessions },
+        { label: "Library opens", value: summary.libraryOpens },
+        { label: "Study/library ratio", value: summary.studyToLibraryRatio },
+        { label: "Private cards created", value: summary.privateCardsCreated },
+        { label: "Private cards shared", value: summary.privateCardsShared }
+      ];
+
+      overviewEl.innerHTML = [
+        metric("Anonymous installs", summary.totalAnonymousInstalls),
+        metric("Active installs, 7 days", summary.activeInstalls?.last7Days),
+        metric("Sessions, 7 days", summary.sessions?.last7Days),
+        metric("Study/library ratio", summary.studyToLibraryRatio)
+      ].join("");
+
+      activityCountsEl.innerHTML = renderTable(activityRows, "No activity counts returned.");
+      activeInstallsEl.innerHTML = renderTable(rowsFromObject(summary.activeInstalls, {
+        last1Day: "Last 1 day",
+        last7Days: "Last 7 days",
+        last30Days: "Last 30 days"
+      }), "No active install windows returned.");
+      sessionsEl.innerHTML = renderTable(rowsFromObject(summary.sessions, {
+        last1Day: "Last 1 day",
+        last7Days: "Last 7 days",
+        last30Days: "Last 30 days"
+      }), "No session windows returned.");
+      schoolRegionsEl.innerHTML = renderSchoolRegions(summary.likelySchoolRegionAggregates, summary.inferenceNotice);
+      questionsEl.innerHTML = [
+        renderQuestionTable("Views", summary.topCanonicalQuestionsByViews),
+        renderQuestionTable("Missed", summary.topCanonicalQuestionsByMissedCount),
+        renderQuestionTable("Got it", summary.topCanonicalQuestionsByGotItCount)
+      ].filter(Boolean).join("") || '<p class="muted">No canonical question activity returned.</p>';
+      coarseRegionsEl.innerHTML = renderCoarseRegions(summary.usageByCoarseRegion);
+      rawJsonEl.textContent = JSON.stringify(summary, null, 2);
+      lastRefreshedEl.textContent = "Last refreshed: " + new Date().toLocaleString();
+    }
+
+    async function loadDashboard() {
+      const token = tokenInput.value.trim();
+      if (!token) {
+        setStatus("Enter an admin token to load analytics.", "info");
+        return;
+      }
+
+      sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+      setStatus("Loading analytics summary...", "info");
+      loadButton.disabled = true;
+      refreshButton.disabled = true;
+
+      try {
+        const response = await fetch(ANALYTICS_ENDPOINT, {
+          headers: {
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json"
+          },
+          cache: "no-store"
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          setStatus("Unauthorized or expired token.", "error");
+          return;
+        }
+
+        if (!response.ok) {
+          setStatus("Analytics summary request failed with status " + response.status + ".", "error");
+          return;
+        }
+
+        const summary = await response.json();
+        renderDashboard(summary);
+        setStatus("Analytics summary loaded.", "success");
+      } catch (error) {
+        setStatus("Could not load analytics summary. Check network access and try again.", "error");
+      } finally {
+        loadButton.disabled = false;
+        refreshButton.disabled = false;
+      }
+    }
+
+    function forgetToken() {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      tokenInput.value = "";
+      setStatus("Token forgotten for this browser session.", "info");
+    }
+
+    loadButton.addEventListener("click", loadDashboard);
+    refreshButton.addEventListener("click", loadDashboard);
+    forgetButton.addEventListener("click", forgetToken);
+    tokenInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") loadDashboard();
+    });
+
+    const storedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (storedToken) {
+      tokenInput.value = storedToken;
+      loadDashboard();
+    }
+  </script>
+</body>
+</html>
