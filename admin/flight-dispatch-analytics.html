@@ -214,6 +214,12 @@
       text-align: right;
     }
 
+    td:first-child,
+    th:first-child {
+      max-width: 520px;
+      text-align: left;
+    }
+
     .full {
       grid-column: 1 / -1;
     }
@@ -312,6 +318,11 @@
       </div>
 
       <div class="panel full">
+        <h2>Install Diagnostics</h2>
+        <div id="installDiagnosticsPanel"></div>
+      </div>
+
+      <div class="panel full">
         <h2>Why Aren't People Contributing?</h2>
         <div id="communityPanel"></div>
       </div>
@@ -375,6 +386,7 @@
     const studyPanelEl = document.getElementById("studyPanel");
     const quitPanelEl = document.getElementById("quitPanel");
     const geographyPanelEl = document.getElementById("geographyPanel");
+    const installDiagnosticsPanelEl = document.getElementById("installDiagnosticsPanel");
     const recentStudyPanelEl = document.getElementById("recentStudyPanel");
     const purchasePanelWrapEl = document.getElementById("purchasePanelWrap");
     const purchasePanelEl = document.getElementById("purchasePanel");
@@ -470,9 +482,13 @@
         : formatNumber(row[countKey] ?? row.count);
       const body = rows.map((row) => `
         <tr>
-          <td>${escapeHtml(row.question_id || row.canonical_question_id || row.canonicalQuestionID || "Unknown")}</td>
+          <td>
+            ${escapeHtml(row.question_text || row.question_id || row.canonical_question_id || row.canonicalQuestionID || "Unknown")}
+            <div class="muted">${escapeHtml(row.question_id || row.canonical_question_id || row.canonicalQuestionID || "")}</div>
+          </td>
           <td>${escapeHtml(row.source || "n/a")}</td>
           <td>${escapeHtml(row.topic || "n/a")}</td>
+          <td>${escapeHtml(row.status || "n/a")}</td>
           <td>${escapeHtml(formatQuestionMetric(row))}</td>
         </tr>
       `).join("");
@@ -480,7 +496,7 @@
       return `
         ${title ? `<h3>${escapeHtml(title)}</h3>` : ""}
         <table>
-          <thead><tr><th>Question ID</th><th>Source</th><th>Topic</th><th>${escapeHtml(countLabel)}</th></tr></thead>
+          <thead><tr><th>Question</th><th>Source</th><th>Topic</th><th>Status</th><th>${escapeHtml(countLabel)}</th></tr></thead>
           <tbody>${body}</tbody>
         </table>
       `;
@@ -535,20 +551,73 @@
       `;
     }
 
+    function renderInstallDiagnostics(rows) {
+      if (!rows || rows.length === 0) return '<p class="muted">No install diagnostics returned.</p>';
+      const body = rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.install_label || "Unknown")}</td>
+          <td>${escapeHtml(row.platform || "Unknown")}</td>
+          <td>${escapeHtml([row.app_version, row.build_number].filter(Boolean).join(" / ") || "Unknown")}</td>
+          <td>${escapeHtml(row.locale || "Unknown")}</td>
+          <td>${escapeHtml(row.time_zone || "Unknown")}</td>
+          <td>${escapeHtml([row.country, row.region].filter(Boolean).join(" / ") || "Unknown")}</td>
+          <td>${escapeHtml(row.first_event_at ? new Date(row.first_event_at).toLocaleString() : "Unknown")}</td>
+          <td>${escapeHtml(row.last_event_at ? new Date(row.last_event_at).toLocaleString() : "Unknown")}</td>
+          <td>${escapeHtml(formatNumber(row.events))}</td>
+        </tr>
+      `).join("");
+      return `
+        <table>
+          <thead><tr><th>Install</th><th>Platform</th><th>Version / Build</th><th>Locale</th><th>Time zone</th><th>Coarse region</th><th>First event</th><th>Last event</th><th>Events</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
     function renderRecentStudyActivity(rows) {
       if (!rows || rows.length === 0) return '<p class="muted">No recent study activity returned.</p>';
       const body = rows.map((row) => `
         <tr>
           <td>${escapeHtml(row.occurred_at ? new Date(row.occurred_at).toLocaleString() : "Unknown")}</td>
           <td>${escapeHtml(row.platform || "Unknown")}</td>
-          <td>${escapeHtml(row.question_id || "n/a")}</td>
+          <td>${escapeHtml([row.app_version, row.build_number].filter(Boolean).join(" / ") || "Unknown")}</td>
+          <td>
+            ${escapeHtml(row.question_text || row.question_id || "n/a")}
+            <div class="muted">${escapeHtml(row.question_id || "")}</div>
+          </td>
           <td>${escapeHtml(row.name || "Unknown")}</td>
           <td>${escapeHtml(row.result || resultFromEvent(row.name))}</td>
         </tr>
       `).join("");
       return `
         <table>
-          <thead><tr><th>Time</th><th>Platform</th><th>Question ID</th><th>Event</th><th>Result</th></tr></thead>
+          <thead><tr><th>Time</th><th>Platform</th><th>Version / Build</th><th>Question</th><th>Event</th><th>Result</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    function renderCanonicalQuestionAnalytics(rows) {
+      if (!rows || rows.length === 0) return '<p class="muted">No canonical question performance data returned.</p>';
+      const body = rows.map((row) => `
+        <tr>
+          <td>
+            ${escapeHtml(row.question_text || row.question_id || "Unknown")}
+            <div class="muted">${escapeHtml(row.question_id || "")}</div>
+          </td>
+          <td>${escapeHtml(row.topic || "n/a")}</td>
+          <td>${escapeHtml(row.status || "n/a")}</td>
+          <td>${escapeHtml(formatNumber(row.views))}</td>
+          <td>${escapeHtml(formatPercent(row.reveal_rate))}</td>
+          <td>${escapeHtml(formatPercent(row.correct_rate))}</td>
+          <td>${escapeHtml(formatNumber(row.average_attempts))}</td>
+          <td>${escapeHtml(formatNumber(row.repeat_miss_installs))}</td>
+        </tr>
+      `).join("");
+      return `
+        <h3>Canonical question performance</h3>
+        <table>
+          <thead><tr><th>Question</th><th>Topic</th><th>Status</th><th>Views</th><th>Reveal</th><th>Correct</th><th>Avg attempts</th><th>Repeat misses</th></tr></thead>
           <tbody>${body}</tbody>
         </table>
       `;
@@ -608,6 +677,7 @@
       ], "No quitting metrics returned.");
 
       geographyPanelEl.innerHTML = renderGeography(summary.coarseGeography);
+      installDiagnosticsPanelEl.innerHTML = renderInstallDiagnostics(summary.installDiagnostics);
 
       communityPanelEl.innerHTML = renderMetricRows([
         { label: "Contribution page opened", value: community.contributionPageOpened },
@@ -621,11 +691,12 @@
       ], "No community funnel events returned.");
 
       const contentSections = [
-        renderTitledQuestionTable("Most viewed question IDs", summary.content?.topCanonicalQuestionsByViews, "views", "Views"),
+        renderTitledQuestionTable("Most viewed questions", summary.content?.topCanonicalQuestionsByViews, "views", "Views"),
         renderTitledQuestionTable("Most missed canonical questions", summary.content?.mostMissedCanonicalQuestions, "missed", "Missed"),
-        renderTitledQuestionTable("Lowest correct-rate question IDs", summary.content?.lowestCorrectRateQuestions, "correct_rate", "Correct rate"),
+        renderTitledQuestionTable("Lowest correct-rate questions", summary.content?.lowestCorrectRateQuestions, "correct_rate", "Correct rate"),
         renderTitledQuestionTable("Abandoned before reveal", summary.content?.questionsAbandonedBeforeReveal, "abandoned_before_reveal", "Abandoned"),
-        renderTitledQuestionTable("Repeatedly missed", summary.content?.questionsRepeatedlyMissed, "missed", "Missed")
+        renderTitledQuestionTable("Repeatedly missed", summary.content?.questionsRepeatedlyMissed, "missed", "Missed"),
+        renderCanonicalQuestionAnalytics(summary.content?.canonicalQuestionAnalytics)
       ];
       if (hasRows(summary.content?.mostStudiedPacks)) {
         contentSections.push("<h3>Most studied packs</h3>", renderPackTable(summary.content.mostStudiedPacks, "No pack study data returned."));
