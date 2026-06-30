@@ -185,6 +185,10 @@
       margin: 16px 0 8px;
     }
 
+    .is-hidden {
+      display: none;
+    }
+
     table {
       border-collapse: collapse;
       width: 100%;
@@ -303,8 +307,8 @@
       </div>
 
       <div class="panel">
-        <h2>Are People Buying Pro?</h2>
-        <div id="purchasePanel"></div>
+        <h2>Where Are Users?</h2>
+        <div id="geographyPanel"></div>
       </div>
 
       <div class="panel full">
@@ -317,6 +321,11 @@
         <div id="contentPanel"></div>
       </div>
 
+      <div class="panel full">
+        <h2>Recent Study Activity</h2>
+        <div id="recentStudyPanel"></div>
+      </div>
+
       <div class="panel">
         <h2>Platforms</h2>
         <div id="platformPanel"></div>
@@ -325,6 +334,11 @@
       <div class="panel">
         <h2>Reliability</h2>
         <div id="reliabilityPanel"></div>
+      </div>
+
+      <div class="panel full is-hidden" id="purchasePanelWrap">
+        <h2>Purchase Funnel</h2>
+        <div id="purchasePanel"></div>
       </div>
 
       <div class="panel full">
@@ -360,6 +374,9 @@
     const usagePanelEl = document.getElementById("usagePanel");
     const studyPanelEl = document.getElementById("studyPanel");
     const quitPanelEl = document.getElementById("quitPanel");
+    const geographyPanelEl = document.getElementById("geographyPanel");
+    const recentStudyPanelEl = document.getElementById("recentStudyPanel");
+    const purchasePanelWrapEl = document.getElementById("purchasePanelWrap");
     const purchasePanelEl = document.getElementById("purchasePanel");
     const communityPanelEl = document.getElementById("communityPanel");
     const contentPanelEl = document.getElementById("contentPanel");
@@ -448,18 +465,22 @@
 
     function renderQuestionTable(title, rows, countKey, countLabel) {
       if (!rows || rows.length === 0) return "";
+      const formatQuestionMetric = (row) => countKey.includes("rate")
+        ? formatPercent(row[countKey])
+        : formatNumber(row[countKey] ?? row.count);
       const body = rows.map((row) => `
         <tr>
           <td>${escapeHtml(row.question_id || row.canonical_question_id || row.canonicalQuestionID || "Unknown")}</td>
-          <td>${escapeHtml(row.pack_id || "n/a")}</td>
-          <td>${escapeHtml(formatNumber(row[countKey] ?? row.count))}</td>
+          <td>${escapeHtml(row.source || "n/a")}</td>
+          <td>${escapeHtml(row.topic || "n/a")}</td>
+          <td>${escapeHtml(formatQuestionMetric(row))}</td>
         </tr>
       `).join("");
 
       return `
         ${title ? `<h3>${escapeHtml(title)}</h3>` : ""}
         <table>
-          <thead><tr><th>Question ID</th><th>Pack</th><th>${escapeHtml(countLabel)}</th></tr></thead>
+          <thead><tr><th>Question ID</th><th>Source</th><th>Topic</th><th>${escapeHtml(countLabel)}</th></tr></thead>
           <tbody>${body}</tbody>
         </table>
       `;
@@ -486,6 +507,60 @@
       `;
     }
 
+    function hasRows(rows) {
+      return Array.isArray(rows) && rows.length > 0;
+    }
+
+    function hasAnyValue(object) {
+      return Object.values(object || {}).some((value) => Number(value) > 0);
+    }
+
+    function renderGeography(rows) {
+      if (!rows || rows.length === 0) return '<p class="muted">No coarse geography data returned.</p>';
+      const body = rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.country || "Unknown")}</td>
+          <td>${escapeHtml(row.region || "Unknown")}</td>
+          <td>${escapeHtml(row.time_zone || row.timeZone || "Unknown")}</td>
+          <td>${escapeHtml(row.locale || "Unknown")}</td>
+          <td>${escapeHtml(formatNumber(row.installs))}</td>
+          <td>${escapeHtml(formatNumber(row.events))}</td>
+        </tr>
+      `).join("");
+      return `
+        <table>
+          <thead><tr><th>Country</th><th>Region</th><th>Time zone</th><th>Locale</th><th>Installs</th><th>Events</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    function renderRecentStudyActivity(rows) {
+      if (!rows || rows.length === 0) return '<p class="muted">No recent study activity returned.</p>';
+      const body = rows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row.occurred_at ? new Date(row.occurred_at).toLocaleString() : "Unknown")}</td>
+          <td>${escapeHtml(row.platform || "Unknown")}</td>
+          <td>${escapeHtml(row.question_id || "n/a")}</td>
+          <td>${escapeHtml(row.name || "Unknown")}</td>
+          <td>${escapeHtml(row.result || resultFromEvent(row.name))}</td>
+        </tr>
+      `).join("");
+      return `
+        <table>
+          <thead><tr><th>Time</th><th>Platform</th><th>Question ID</th><th>Event</th><th>Result</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    function resultFromEvent(eventName) {
+      if (eventName === "answer_marked_correct") return "correct";
+      if (eventName === "answer_marked_incorrect") return "incorrect";
+      if (eventName === "answer_revealed") return "revealed";
+      return "";
+    }
+
     function renderDashboard(summary) {
       const study = summary.study || {};
       const community = summary.communityFunnel || {};
@@ -494,10 +569,10 @@
       const appSessions = summary.appSessions || {};
 
       overviewEl.innerHTML = [
-        metric("DAU / WAU / MAU", `${formatNumber(active.dau)} / ${formatNumber(active.wau)} / ${formatNumber(active.mau)}`),
-        metric("Study Starts", study.sessionsStarted),
+        metric("Active Installs", `${formatNumber(active.dau)} / ${formatNumber(active.wau)} / ${formatNumber(active.mau)}`),
+        metric("Questions Viewed", study.questionsViewed),
         metric("Reveal Rate", formatPercent(study.revealRate)),
-        metric("Purchase Conversion", formatPercent(purchase.purchaseConversionPercentage))
+        metric("Correct Rate", formatPercent(study.correctPercentage))
       ].join("");
 
       usagePanelEl.innerHTML = renderMetricRows([
@@ -519,7 +594,10 @@
         { label: "Average study sessions/day", value: study.averageStudySessionsPerDay },
         { label: "Questions viewed", value: study.questionsViewed },
         { label: "Answers revealed", value: study.answersRevealed },
-        { label: "Correct / incorrect", value: `${formatPercent(study.correctPercentage)} / ${formatPercent(study.incorrectPercentage)}` }
+        { label: "Correct answers", value: study.correctAnswers },
+        { label: "Incorrect answers", value: study.incorrectAnswers },
+        { label: "Unanswered/unrated questions", value: study.unansweredOrUnrated },
+        { label: "Correct / incorrect rate", value: `${formatPercent(study.correctPercentage)} / ${formatPercent(study.incorrectPercentage)}` }
       ], "No study metrics returned.");
 
       quitPanelEl.innerHTML = renderMetricRows([
@@ -530,14 +608,7 @@
         { label: "Study/library ratio", value: study.studyToLibraryRatio }
       ], "No quitting metrics returned.");
 
-      purchasePanelEl.innerHTML = renderMetricRows([
-        { label: "Purchase screen opened", value: purchase.purchaseScreenOpened },
-        { label: "Purchase started", value: purchase.purchaseStarted },
-        { label: "Purchase succeeded", value: purchase.purchaseSucceeded },
-        { label: "Purchase failed", value: purchase.purchaseFailed },
-        { label: "Restore succeeded", value: purchase.restorePurchaseSucceeded },
-        { label: "Conversion", value: formatPercent(purchase.purchaseConversionPercentage) }
-      ], "No purchase events returned.");
+      geographyPanelEl.innerHTML = renderGeography(summary.coarseGeography);
 
       communityPanelEl.innerHTML = renderMetricRows([
         { label: "Contribution page opened", value: community.contributionPageOpened },
@@ -550,15 +621,22 @@
         { label: "Contribution rejected", value: community.contributionRejected }
       ], "No community funnel events returned.");
 
-      contentPanelEl.innerHTML = [
+      const contentSections = [
+        renderTitledQuestionTable("Most viewed question IDs", summary.content?.topCanonicalQuestionsByViews, "views", "Views"),
         renderTitledQuestionTable("Most missed canonical questions", summary.content?.mostMissedCanonicalQuestions, "missed", "Missed"),
+        renderTitledQuestionTable("Lowest correct-rate question IDs", summary.content?.lowestCorrectRateQuestions, "correct_rate", "Correct rate"),
         renderTitledQuestionTable("Abandoned before reveal", summary.content?.questionsAbandonedBeforeReveal, "abandoned_before_reveal", "Abandoned"),
-        renderTitledQuestionTable("Repeatedly missed", summary.content?.questionsRepeatedlyMissed, "missed", "Missed"),
-        "<h3>Most studied packs</h3>",
-        renderPackTable(summary.content?.mostStudiedPacks, "No pack study data returned."),
-        "<h3>Least studied packs</h3>",
-        renderPackTable(summary.content?.leastStudiedPacks, "No pack study data returned.")
-      ].filter(Boolean).join("") || '<p class="muted">No canonical question activity returned.</p>';
+        renderTitledQuestionTable("Repeatedly missed", summary.content?.questionsRepeatedlyMissed, "missed", "Missed")
+      ];
+      if (hasRows(summary.content?.mostStudiedPacks)) {
+        contentSections.push("<h3>Most studied packs</h3>", renderPackTable(summary.content.mostStudiedPacks, "No pack study data returned."));
+      }
+      if (hasRows(summary.content?.leastStudiedPacks)) {
+        contentSections.push("<h3>Least studied packs</h3>", renderPackTable(summary.content.leastStudiedPacks, "No pack study data returned."));
+      }
+      contentPanelEl.innerHTML = contentSections.filter(Boolean).join("") || '<p class="muted">No question activity returned.</p>';
+
+      recentStudyPanelEl.innerHTML = renderRecentStudyActivity(summary.recentStudyActivity);
 
       platformPanelEl.innerHTML = renderTable((summary.platformBreakdown || []).map((row) => ({
         label: row.platform || "Unknown",
@@ -569,6 +647,21 @@
         label: row.name,
         value: row.count
       })), "No failure events returned.");
+
+      if (hasAnyValue(purchase)) {
+        purchasePanelWrapEl.classList.remove("is-hidden");
+        purchasePanelEl.innerHTML = renderMetricRows([
+          { label: "Purchase screen opened", value: purchase.purchaseScreenOpened },
+          { label: "Purchase started", value: purchase.purchaseStarted },
+          { label: "Purchase succeeded", value: purchase.purchaseSucceeded },
+          { label: "Purchase failed", value: purchase.purchaseFailed },
+          { label: "Restore succeeded", value: purchase.restorePurchaseSucceeded },
+          { label: "Conversion", value: formatPercent(purchase.purchaseConversionPercentage) }
+        ], "No purchase events returned.");
+      } else {
+        purchasePanelWrapEl.classList.add("is-hidden");
+        purchasePanelEl.innerHTML = "";
+      }
 
       eventCountsPanelEl.innerHTML = renderObjectCounts(summary.eventCounts, "No events returned.");
       rawJsonEl.textContent = JSON.stringify(summary, null, 2);
