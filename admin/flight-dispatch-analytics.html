@@ -180,6 +180,11 @@
       margin-bottom: 12px;
     }
 
+    .panel h3 {
+      font-size: 15px;
+      margin: 16px 0 8px;
+    }
+
     table {
       border-collapse: collapse;
       width: 100%;
@@ -283,33 +288,48 @@
 
     <section class="sections" aria-label="Analytics details">
       <div class="panel">
-        <h2>Activity Counts</h2>
-        <div id="activityCounts"></div>
+        <h2>Are People Using It?</h2>
+        <div id="usagePanel"></div>
       </div>
 
       <div class="panel">
-        <h2>Active Installs</h2>
-        <div id="activeInstalls"></div>
+        <h2>How Are They Studying?</h2>
+        <div id="studyPanel"></div>
       </div>
 
       <div class="panel">
-        <h2>Sessions</h2>
-        <div id="sessions"></div>
+        <h2>Where Are They Quitting?</h2>
+        <div id="quitPanel"></div>
       </div>
 
       <div class="panel">
-        <h2>Likely School Region</h2>
-        <div id="schoolRegions"></div>
+        <h2>Are People Buying Pro?</h2>
+        <div id="purchasePanel"></div>
       </div>
 
       <div class="panel full">
-        <h2>Top Canonical Questions</h2>
-        <div id="questions"></div>
+        <h2>Why Aren't People Contributing?</h2>
+        <div id="communityPanel"></div>
       </div>
 
       <div class="panel full">
-        <h2>Coarse Region Usage</h2>
-        <div id="coarseRegions"></div>
+        <h2>What Content Needs Improvement?</h2>
+        <div id="contentPanel"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Platforms</h2>
+        <div id="platformPanel"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Reliability</h2>
+        <div id="reliabilityPanel"></div>
+      </div>
+
+      <div class="panel full">
+        <h2>Event Counts</h2>
+        <div id="eventCountsPanel"></div>
       </div>
 
       <div class="panel full">
@@ -337,12 +357,15 @@
     const statusEl = document.getElementById("status");
     const lastRefreshedEl = document.getElementById("lastRefreshed");
     const overviewEl = document.getElementById("overview");
-    const activityCountsEl = document.getElementById("activityCounts");
-    const activeInstallsEl = document.getElementById("activeInstalls");
-    const sessionsEl = document.getElementById("sessions");
-    const schoolRegionsEl = document.getElementById("schoolRegions");
-    const questionsEl = document.getElementById("questions");
-    const coarseRegionsEl = document.getElementById("coarseRegions");
+    const usagePanelEl = document.getElementById("usagePanel");
+    const studyPanelEl = document.getElementById("studyPanel");
+    const quitPanelEl = document.getElementById("quitPanel");
+    const purchasePanelEl = document.getElementById("purchasePanel");
+    const communityPanelEl = document.getElementById("communityPanel");
+    const contentPanelEl = document.getElementById("contentPanel");
+    const platformPanelEl = document.getElementById("platformPanel");
+    const reliabilityPanelEl = document.getElementById("reliabilityPanel");
+    const eventCountsPanelEl = document.getElementById("eventCountsPanel");
     const rawJsonEl = document.getElementById("rawJson");
 
     function setStatus(message, type) {
@@ -354,6 +377,18 @@
       if (value === null || value === undefined || value === "") return "n/a";
       if (typeof value === "number") return value.toLocaleString();
       return String(value);
+    }
+
+    function formatDuration(milliseconds) {
+      if (milliseconds === null || milliseconds === undefined || Number.isNaN(Number(milliseconds))) return "n/a";
+      const seconds = Math.round(Number(milliseconds) / 1000);
+      if (seconds < 60) return seconds + "s";
+      return Math.floor(seconds / 60) + "m " + String(seconds % 60).padStart(2, "0") + "s";
+    }
+
+    function formatPercent(value) {
+      if (value === null || value === undefined || value === "") return "n/a";
+      return Number(value).toFixed(1) + "%";
     }
 
     function escapeHtml(value) {
@@ -400,98 +435,142 @@
       `;
     }
 
-    function renderQuestionTable(title, rows) {
+    function renderMetricRows(rows, emptyMessage) {
+      return renderTable(rows.filter((row) => row.value !== undefined), emptyMessage);
+    }
+
+    function renderObjectCounts(object, emptyMessage) {
+      const rows = Object.entries(object || {})
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
+        .map(([label, value]) => ({ label, value }));
+      return renderTable(rows, emptyMessage);
+    }
+
+    function renderQuestionTable(title, rows, countKey, countLabel) {
       if (!rows || rows.length === 0) return "";
       const body = rows.map((row) => `
         <tr>
-          <td>${escapeHtml(row.canonical_question_id || row.canonicalQuestionID || row.question_id || "Unknown")}</td>
-          <td>${escapeHtml(formatNumber(row.count))}</td>
+          <td>${escapeHtml(row.question_id || row.canonical_question_id || row.canonicalQuestionID || "Unknown")}</td>
+          <td>${escapeHtml(row.pack_id || "n/a")}</td>
+          <td>${escapeHtml(formatNumber(row[countKey] ?? row.count))}</td>
         </tr>
       `).join("");
 
       return `
-        <h3>${escapeHtml(title)}</h3>
+        ${title ? `<h3>${escapeHtml(title)}</h3>` : ""}
         <table>
-          <thead><tr><th>Canonical question ID</th><th>Count</th></tr></thead>
+          <thead><tr><th>Question ID</th><th>Pack</th><th>${escapeHtml(countLabel)}</th></tr></thead>
           <tbody>${body}</tbody>
         </table>
       `;
     }
 
-    function renderCoarseRegions(rows) {
-      if (!rows || rows.length === 0) return '<p class="muted">No coarse region data returned.</p>';
+    function renderTitledQuestionTable(title, rows, countKey, countLabel) {
+      if (!rows || rows.length === 0) return "";
+      return `<h3>${escapeHtml(title)}</h3>` + renderQuestionTable("", rows, countKey, countLabel);
+    }
 
+    function renderPackTable(rows, emptyMessage) {
+      if (!rows || rows.length === 0) return `<p class="muted">${escapeHtml(emptyMessage)}</p>`;
       const body = rows.map((row) => `
         <tr>
-          <td>${escapeHtml(row.country || "Unknown")}</td>
-          <td>${escapeHtml(row.region || "Unknown")}</td>
-          <td>${escapeHtml(row.time_zone || row.timeZone || "Unknown")}</td>
+          <td>${escapeHtml(row.pack_id || "Unknown")}</td>
           <td>${escapeHtml(formatNumber(row.count))}</td>
         </tr>
       `).join("");
-
       return `
         <table>
-          <thead><tr><th>Country</th><th>Region</th><th>Time zone</th><th>Events</th></tr></thead>
+          <thead><tr><th>Pack</th><th>Question views</th></tr></thead>
           <tbody>${body}</tbody>
         </table>
-      `;
-    }
-
-    function renderSchoolRegions(rows, notice) {
-      if (!rows || rows.length === 0) return '<p class="muted">No likely-school-region aggregates returned.</p>';
-
-      const body = rows.map((row) => `
-        <tr>
-          <td>${escapeHtml(row.likely_school_region || row.likelySchoolRegion || "Unknown")}</td>
-          <td>${escapeHtml(formatNumber(row.installs))}</td>
-          <td>${escapeHtml(formatNumber(row.events))}</td>
-        </tr>
-      `).join("");
-
-      return `
-        <table>
-          <thead><tr><th>Inference</th><th>Installs</th><th>Events</th></tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-        ${notice ? `<p class="muted">${escapeHtml(notice)}</p>` : ""}
       `;
     }
 
     function renderDashboard(summary) {
-      const activityRows = [
-        { label: "Study sessions", value: summary.studySessions },
-        { label: "Library opens", value: summary.libraryOpens },
-        { label: "Study/library ratio", value: summary.studyToLibraryRatio },
-        { label: "Private cards created", value: summary.privateCardsCreated },
-        { label: "Private cards shared", value: summary.privateCardsShared }
-      ];
+      const study = summary.study || {};
+      const community = summary.communityFunnel || {};
+      const purchase = summary.purchaseFunnel || {};
+      const active = summary.activeUsers || {};
+      const appSessions = summary.appSessions || {};
 
       overviewEl.innerHTML = [
-        metric("Anonymous installs", summary.totalAnonymousInstalls),
-        metric("Active installs, 7 days", summary.activeInstalls?.last7Days),
-        metric("Sessions, 7 days", summary.sessions?.last7Days),
-        metric("Study/library ratio", summary.studyToLibraryRatio)
+        metric("DAU / WAU / MAU", `${formatNumber(active.dau)} / ${formatNumber(active.wau)} / ${formatNumber(active.mau)}`),
+        metric("Study Starts", study.sessionsStarted),
+        metric("Reveal Rate", formatPercent(study.revealRate)),
+        metric("Purchase Conversion", formatPercent(purchase.purchaseConversionPercentage))
       ].join("");
 
-      activityCountsEl.innerHTML = renderTable(activityRows, "No activity counts returned.");
-      activeInstallsEl.innerHTML = renderTable(rowsFromObject(summary.activeInstalls, {
-        last1Day: "Last 1 day",
-        last7Days: "Last 7 days",
-        last30Days: "Last 30 days"
-      }), "No active install windows returned.");
-      sessionsEl.innerHTML = renderTable(rowsFromObject(summary.sessions, {
-        last1Day: "Last 1 day",
-        last7Days: "Last 7 days",
-        last30Days: "Last 30 days"
-      }), "No session windows returned.");
-      schoolRegionsEl.innerHTML = renderSchoolRegions(summary.likelySchoolRegionAggregates, summary.inferenceNotice);
-      questionsEl.innerHTML = [
-        renderQuestionTable("Views", summary.topCanonicalQuestionsByViews),
-        renderQuestionTable("Missed", summary.topCanonicalQuestionsByMissedCount),
-        renderQuestionTable("Got it", summary.topCanonicalQuestionsByGotItCount)
+      usagePanelEl.innerHTML = renderMetricRows([
+        { label: "Total events", value: summary.totalEvents },
+        { label: "Anonymous installs", value: summary.totalAnonymousInstalls },
+        { label: "DAU", value: active.dau },
+        { label: "WAU", value: active.wau },
+        { label: "MAU", value: active.mau },
+        { label: "New users, 7 days", value: summary.newUsers?.last7Days },
+        { label: "Returning users, 7 days", value: summary.returningUsers?.last7Days },
+        { label: "App launches, 7 days", value: appSessions.last7Days }
+      ], "No usage metrics returned.");
+
+      studyPanelEl.innerHTML = renderMetricRows([
+        { label: "Study sessions started", value: study.sessionsStarted },
+        { label: "Study sessions completed", value: study.sessionsCompleted },
+        { label: "Average session duration", value: formatDuration(study.averageSessionDurationMs) },
+        { label: "Average questions/session", value: study.averageQuestionsPerCompletedSession },
+        { label: "Average study sessions/day", value: study.averageStudySessionsPerDay },
+        { label: "Questions viewed", value: study.questionsViewed },
+        { label: "Answers revealed", value: study.answersRevealed },
+        { label: "Correct / incorrect", value: `${formatPercent(study.correctPercentage)} / ${formatPercent(study.incorrectPercentage)}` }
+      ], "No study metrics returned.");
+
+      quitPanelEl.innerHTML = renderMetricRows([
+        { label: "Session abandonment rate", value: formatPercent(study.sessionAbandonmentRate) },
+        { label: "Sessions abandoned", value: study.sessionsAbandoned },
+        { label: "Questions abandoned before reveal", value: summary.content?.questionsAbandonedBeforeReveal?.length || 0 },
+        { label: "Library opens", value: study.libraryOpens },
+        { label: "Study/library ratio", value: study.studyToLibraryRatio }
+      ], "No quitting metrics returned.");
+
+      purchasePanelEl.innerHTML = renderMetricRows([
+        { label: "Purchase screen opened", value: purchase.purchaseScreenOpened },
+        { label: "Purchase started", value: purchase.purchaseStarted },
+        { label: "Purchase succeeded", value: purchase.purchaseSucceeded },
+        { label: "Purchase failed", value: purchase.purchaseFailed },
+        { label: "Restore succeeded", value: purchase.restorePurchaseSucceeded },
+        { label: "Conversion", value: formatPercent(purchase.purchaseConversionPercentage) }
+      ], "No purchase events returned.");
+
+      communityPanelEl.innerHTML = renderMetricRows([
+        { label: "Contribution page opened", value: community.contributionPageOpened },
+        { label: "Sign in tapped", value: community.signInWithAppleTapped },
+        { label: "Sign in succeeded", value: community.signInSucceeded },
+        { label: "Sign in failed", value: community.signInFailed },
+        { label: "Contribution submitted", value: community.contributionSubmitted },
+        { label: "Contribution submit failed", value: community.contributionSubmitFailed },
+        { label: "Contribution approved", value: community.contributionApproved },
+        { label: "Contribution rejected", value: community.contributionRejected }
+      ], "No community funnel events returned.");
+
+      contentPanelEl.innerHTML = [
+        renderTitledQuestionTable("Most missed canonical questions", summary.content?.mostMissedCanonicalQuestions, "missed", "Missed"),
+        renderTitledQuestionTable("Abandoned before reveal", summary.content?.questionsAbandonedBeforeReveal, "abandoned_before_reveal", "Abandoned"),
+        renderTitledQuestionTable("Repeatedly missed", summary.content?.questionsRepeatedlyMissed, "missed", "Missed"),
+        "<h3>Most studied packs</h3>",
+        renderPackTable(summary.content?.mostStudiedPacks, "No pack study data returned."),
+        "<h3>Least studied packs</h3>",
+        renderPackTable(summary.content?.leastStudiedPacks, "No pack study data returned.")
       ].filter(Boolean).join("") || '<p class="muted">No canonical question activity returned.</p>';
-      coarseRegionsEl.innerHTML = renderCoarseRegions(summary.usageByCoarseRegion);
+
+      platformPanelEl.innerHTML = renderTable((summary.platformBreakdown || []).map((row) => ({
+        label: row.platform || "Unknown",
+        value: row.count
+      })), "No platform events returned.");
+
+      reliabilityPanelEl.innerHTML = renderTable((summary.reliabilityFailures || []).map((row) => ({
+        label: row.name,
+        value: row.count
+      })), "No failure events returned.");
+
+      eventCountsPanelEl.innerHTML = renderObjectCounts(summary.eventCounts, "No events returned.");
       rawJsonEl.textContent = JSON.stringify(summary, null, 2);
       lastRefreshedEl.textContent = "Last refreshed: " + new Date().toLocaleString();
     }
