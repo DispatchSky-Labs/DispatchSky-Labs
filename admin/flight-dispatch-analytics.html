@@ -604,8 +604,7 @@
         { label: "Session abandonment rate", value: formatPercent(study.sessionAbandonmentRate) },
         { label: "Sessions abandoned", value: study.sessionsAbandoned },
         { label: "Questions abandoned before reveal", value: summary.content?.questionsAbandonedBeforeReveal?.length || 0 },
-        { label: "Library opens", value: study.libraryOpens },
-        { label: "Study/library ratio", value: study.studyToLibraryRatio }
+        { label: "Library opens", value: study.libraryOpens }
       ], "No quitting metrics returned.");
 
       geographyPanelEl.innerHTML = renderGeography(summary.coarseGeography);
