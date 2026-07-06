@@ -194,6 +194,15 @@
       width: 100%;
     }
 
+    .table-scroll {
+      overflow-x: auto;
+      width: 100%;
+    }
+
+    .table-scroll table {
+      min-width: 1260px;
+    }
+
     th,
     td {
       border-top: 1px solid var(--line);
@@ -328,6 +337,11 @@
         <div id="installDiagnosticsPanel"></div>
       </div>
 
+      <div class="panel full">
+        <h2>Per User Study Activity</h2>
+        <div id="perUserStudyPanel"></div>
+      </div>
+
       <div class="panel full" id="internalDiagnosticsWrap">
         <h2>Internal/Test Diagnostics</h2>
         <div id="internalDiagnosticsPanel"></div>
@@ -399,6 +413,7 @@
     const quitPanelEl = document.getElementById("quitPanel");
     const geographyPanelEl = document.getElementById("geographyPanel");
     const installDiagnosticsPanelEl = document.getElementById("installDiagnosticsPanel");
+    const perUserStudyPanelEl = document.getElementById("perUserStudyPanel");
     const internalDiagnosticsWrapEl = document.getElementById("internalDiagnosticsWrap");
     const internalDiagnosticsPanelEl = document.getElementById("internalDiagnosticsPanel");
     const recentStudyPanelEl = document.getElementById("recentStudyPanel");
@@ -623,6 +638,83 @@
       `;
     }
 
+    function renderPerUserStudyActivity(rows) {
+      if (!rows || rows.length === 0) return '<p class="muted">No per-user study activity returned for this segment.</p>';
+      const body = rows.map((row) => `
+        <tr>
+          <td>
+            ${escapeHtml(row.anonymous_alias || "Unknown")}
+            <div class="muted">${escapeHtml(row.install_label || "Unknown")}</div>
+          </td>
+          <td>${escapeHtml(row.segment_status || "unknown")}</td>
+          <td>${escapeHtml(row.platform || "Unknown")}</td>
+          <td>${escapeHtml([row.app_version, row.build_number].filter(Boolean).join(" / ") || "Unknown")}</td>
+          <td>${escapeHtml(row.first_event_at ? new Date(row.first_event_at).toLocaleString() : "Unknown")}</td>
+          <td>${escapeHtml(row.last_event_at ? new Date(row.last_event_at).toLocaleString() : "Unknown")}</td>
+          <td>${escapeHtml(formatNumber(row.total_events))}</td>
+          <td>${escapeHtml(formatNumber(row.app_launches))}</td>
+          <td>${escapeHtml(formatNumber(row.study_sessions_started))}</td>
+          <td>${escapeHtml(formatNumber(row.study_sessions_completed))}</td>
+          <td>${escapeHtml(formatNumber(row.question_views))}</td>
+          <td>${escapeHtml(formatNumber(row.library_opens))}</td>
+          <td>${escapeHtml(formatNumber(row.library_question_views))}</td>
+          <td>${escapeHtml(formatNumber(row.library_activity))}</td>
+          <td>${escapeHtml(formatNumber(row.answer_reveals))}</td>
+          <td>${escapeHtml(formatNumber(row.correct_marks))}</td>
+          <td>${escapeHtml(formatNumber(row.incorrect_marks))}</td>
+          <td>${escapeHtml(formatPercent(row.reveal_rate))}</td>
+          <td>${escapeHtml(formatPercent(row.correct_rate))}</td>
+          <td>${escapeHtml(formatNumber(row.contribution_opens))}</td>
+          <td>${escapeHtml(formatNumber(row.contribution_submits))}</td>
+          <td>${escapeHtml(formatNumber(row.sign_in_tapped))} / ${escapeHtml(formatNumber(row.sign_in_succeeded))} / ${escapeHtml(formatNumber(row.sign_in_failed))}</td>
+          <td>
+            ${escapeHtml(row.last_question_text || row.last_question_id || "n/a")}
+            <div class="muted">${escapeHtml(row.last_question_event || "")}</div>
+          </td>
+          <td>
+            ${escapeHtml(row.top_question_text || row.top_question_id || "n/a")}
+            <div class="muted">${escapeHtml(row.top_question_events == null ? "" : `${formatNumber(row.top_question_events)} events`)}</div>
+          </td>
+        </tr>
+      `).join("");
+      return `
+        <p class="muted">Rows are grouped by anonymous install. Full install IDs are not shown.</p>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Alias / Install</th>
+                <th>Segment</th>
+                <th>Platform</th>
+                <th>Version / Build</th>
+                <th>First event</th>
+                <th>Last event</th>
+                <th>Total</th>
+                <th>Launches</th>
+                <th>Study start</th>
+                <th>Study done</th>
+                <th>Question views</th>
+                <th>Library opens</th>
+                <th>Library Q views</th>
+                <th>Library activity</th>
+                <th>Reveals</th>
+                <th>Correct</th>
+                <th>Incorrect</th>
+                <th>Reveal rate</th>
+                <th>Correct rate</th>
+                <th>Contrib opens</th>
+                <th>Contrib submits</th>
+                <th>Sign-in tap / ok / fail</th>
+                <th>Last question</th>
+                <th>Top question</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
     function renderRecentStudyActivity(rows) {
       if (!rows || rows.length === 0) return '<p class="muted">No recent study activity returned.</p>';
       const body = rows.map((row) => `
@@ -757,6 +849,7 @@
 
       geographyPanelEl.innerHTML = renderGeography(summary.coarseGeography);
       installDiagnosticsPanelEl.innerHTML = renderInstallDiagnostics(summary.installDiagnostics);
+      perUserStudyPanelEl.innerHTML = renderPerUserStudyActivity(summary.perUserStudyActivity);
       if (currentSegment === "real") {
         internalDiagnosticsWrapEl.classList.add("is-hidden");
         internalDiagnosticsPanelEl.innerHTML = "";
