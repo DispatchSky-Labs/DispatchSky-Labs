@@ -310,6 +310,38 @@
             margin-bottom: 6px;
         }
 
+        .builder-section {
+            background: var(--page);
+            border-top: 1px solid var(--line);
+            padding: 88px 24px;
+            text-align: center;
+        }
+
+        .builder-inner {
+            margin: 0 auto;
+            max-width: 760px;
+        }
+
+        .builder-section h2 {
+            font-size: clamp(34px, 5vw, 52px);
+            margin-bottom: 18px;
+        }
+
+        .builder-section p {
+            color: var(--muted);
+            font-size: 20px;
+        }
+
+        .builder-section .button {
+            margin-top: 24px;
+        }
+
+        a:focus-visible,
+        button:focus-visible {
+            outline: 3px solid rgba(0, 102, 204, 0.45);
+            outline-offset: 3px;
+        }
+
         @media (max-width: 900px) {
             .product,
             .product.reverse {
@@ -338,11 +370,17 @@
 
         @media (max-width: 640px) {
             .nav {
+                flex-wrap: wrap;
+                gap: 8px;
                 padding: 0 18px;
+                padding-bottom: 10px;
+                padding-top: 10px;
             }
 
             .nav-links {
-                gap: 14px;
+                gap: 10px;
+                justify-content: space-between;
+                width: 100%;
             }
 
             .nav-links a {
@@ -356,6 +394,10 @@
 
             .product-section {
                 padding: 72px 20px;
+            }
+
+            .builder-section {
+                padding: 68px 20px;
             }
 
             .body-copy {
@@ -373,6 +415,14 @@
                 padding: 24px;
             }
         }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -383,6 +433,7 @@
                 <li><a href="/study.html">Study</a></li>
                 <li><a href="/flow/">Flow</a></li>
                 <li><a href="/cielotracker.html">CieloTracker</a></li>
+                <li><a href="/work/">Work</a></li>
             </ul>
         </nav>
     </header>
@@ -443,6 +494,14 @@
                 <div class="preview has-image" aria-label="CieloTracker screenshot">
                     <img class="preview-image portrait" src="/assets/cielotracker-home.png" alt="CieloTracker weather alert notification and METAR TAF monitoring screen">
                 </div>
+            </div>
+        </section>
+
+        <section class="builder-section" aria-labelledby="builder-title">
+            <div class="builder-inner">
+                <h2 id="builder-title">Built from operational experience.</h2>
+                <p>Sadiom is an independent collection of aviation products created by Samuel Gonzalez, an FAA-certificated aircraft dispatcher with Part 121 experience.</p>
+                <a class="button secondary" href="/work/">View the work &rarr;</a>
             </div>
         </section>
     </main>

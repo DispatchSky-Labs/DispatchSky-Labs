@@ -440,10 +440,14 @@ dialog {
 @media (max-width: 520px) {
   body { background: #fff; }
   .site-nav {
-    padding: 0 18px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 18px;
   }
   .site-links {
-    gap: 14px;
+    gap: 10px;
+    justify-content: space-between;
+    width: 100%;
   }
   .site-links a {
     font-size: 12px;
