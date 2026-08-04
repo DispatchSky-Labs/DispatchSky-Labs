@@ -650,12 +650,24 @@ async function api(req, res, pathname) {
           matches.push(lookupCandidate(record, snapshot, workspace.id));
         }
       }
+      const lookupStatus = !isOperationalSnapshot(snapshot)
+        ? "source_unavailable"
+        : !matches.length
+          ? "not_found"
+          : matches.some((candidate) => candidate.current_edct_utc)
+            ? "matched"
+            : "no_etd";
+      const lookupMessage = {
+        source_unavailable: `ETD data for ${destination} is temporarily unavailable. Try again shortly.`,
+        not_found: `No matching flight was found for ${destination}. Check the flight number and destination.`,
+        no_etd: `Flight found for ${destination}, but no ETD is currently available. You can still add it to monitor for updates.`,
+        matched: ""
+      }[lookupStatus];
       store.usage(matches.length ? "LOOKUP_SUCCEEDED" : "LOOKUP_FAILED", workspace.id, session.id, { destination });
       return send(res, 200, {
         candidates: matches,
-        message: matches.some((candidate) => candidate.source_stale)
-          ? `Source data for ${destination} is stale or unavailable. Verify official source.`
-          : matches.length ? (matches.some((candidate) => candidate.current_edct_utc) ? "" : `Flight found in ${destination} feed, no active time.`) : "No matching flight found in destination feed."
+        status: lookupStatus,
+        message: lookupMessage
       });
     }
     if (req.method === "POST" && pathname === "/api/edct/lookup/bulk") {

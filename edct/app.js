@@ -620,16 +620,16 @@ $("lookupForm").addEventListener("submit", async (event) => {
     const data = await api(`/api/edct/lookup?${params.toString()}`);
     const candidates = data.candidates || [];
     state.candidates = candidates;
-    if (candidates.length === 1 && !candidates[0].already_watched && !candidates[0].source_stale) {
+    if (candidates.length === 1 && candidates[0].current_edct_utc && !candidates[0].already_watched && !candidates[0].source_stale) {
       await monitorCandidate(candidates[0].candidate_key, { keepOpen: keepEntryOpenAfterAdd() });
       return;
     }
     if (candidates.length > 0) {
       renderCandidates(candidates);
-      setLookupMessage(data.message || "Choose the flight to monitor.");
+      setLookupMessage(data.message || "Choose the flight to monitor.", data.status === "source_unavailable");
       return;
     }
-    setLookupMessage("Flight Not Found", true);
+    setLookupMessage(data.message || "No matching flight was found.", data.status === "source_unavailable");
   } catch (error) {
     setLookupMessage(error.message || "Lookup failed.", true);
   } finally {
