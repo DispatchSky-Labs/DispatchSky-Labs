@@ -123,7 +123,6 @@ export function evaluateEtdMet(store, workspaceId, sessionId = null, evaluatedAt
   for (const flight of activeFlights(store, workspaceId)) {
     const sourceState = store.data.edct_flight_states.find((state) => state.flight_id === flight.id);
     if (sourceState?.source_stale) continue;
-    const usesEdctTarget = Boolean(sourceState?.current_edct_utc);
     const etd = sourceState?.current_edct_utc || (flight.etd_lifecycle_eligible === false ? null : flight.etd_utc) || null;
     const etdMs = Date.parse(etd || "");
     if (!Number.isFinite(etdMs)) continue;
@@ -141,8 +140,7 @@ export function evaluateEtdMet(store, workspaceId, sessionId = null, evaluatedAt
       etd_met_at: metAt,
       etd_met_acknowledged_at: null
     });
-    const targetLabel = usesEdctTarget ? "EDCT" : "ETD";
-    const message = `${targetLabel} met for ${flight.display_flight_number} ${flight.origin}–${flight.destination}`;
+    const message = `ETD met for ${flight.display_flight_number} ${flight.origin}–${flight.destination}`;
     const event = store.insert("edct_events", {
       workspace_id: flight.workspace_id,
       flight_id: flight.id,
@@ -162,7 +160,7 @@ export function evaluateEtdMet(store, workspaceId, sessionId = null, evaluatedAt
     store.insert("notification_events", {
       workspace_id: flight.workspace_id,
       edct_event_id: event.id,
-      title: `${targetLabel} met`,
+      title: "ETD met",
       body: message,
       created_at: metAt
     });

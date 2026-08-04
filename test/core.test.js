@@ -46,6 +46,15 @@ test("stale-source row styling takes priority over ETD-met styling", () => {
   assert.match(app, /sourceStale \? "source-stale" : etdAge/);
 });
 
+test("lookup UI accepts any airport and surfaces backend result details", () => {
+  const html = fs.readFileSync(new URL("../edct/index.html", import.meta.url), "utf8");
+  const app = fs.readFileSync(new URL("../edct/app.js", import.meta.url), "utf8");
+  assert.match(html, /name="destination"[^>]*maxlength="4"[^>]*required/);
+  assert.doesNotMatch(html, /name="destination"[^>]*\blist=/);
+  assert.match(app, /setLookupMessage\(data\.message \|\| "No matching flight was found\."/);
+  assert.match(app, /candidates\[0\]\.current_edct_utc/);
+});
+
 test("EDCT compact parsing resolves UTC date and month rollover", () => {
   assert.equal(parseCompactEdct("E051430", "2026-06-05T12:00:00.000Z"), "2026-06-05T14:30:00.000Z");
   assert.equal(parseCompactEdct("E05/1430", "2026-06-05T12:00:00.000Z"), "2026-06-05T14:30:00.000Z");

@@ -737,10 +737,12 @@ test("flight lookup returns sanitized candidates and can add one to monitoring",
     assert.equal(ualBody.candidates[0].flight_number, "UAL1597");
     assert.equal(ualBody.candidates[0].origin, "CMH");
     assert.equal(ualBody.candidates[0].current_edct_utc, null);
-    assert.equal(ualBody.message, "Flight found in SFO feed, no active time.");
+    assert.equal(ualBody.status, "no_etd");
+    assert.equal(ualBody.message, "Flight found for SFO, but no ETD is currently available. You can still add it to monitor for updates.");
     const noMatch = await fetch(`${base}/api/edct/lookup?flight=DAL9999&destination=SFO`, { headers: { cookie } });
     const noMatchBody = await noMatch.json();
-    assert.equal(noMatchBody.message, "No matching flight found in destination feed.");
+    assert.equal(noMatchBody.status, "not_found");
+    assert.equal(noMatchBody.message, "No matching flight was found for SFO. Check the flight number and destination.");
     assert.equal(text.includes("source_record"), false);
     assert.equal(text.includes("etd_raw"), false);
     assert.equal(text.includes("departure_center"), false);
@@ -756,6 +758,36 @@ test("flight lookup returns sanitized candidates and can add one to monitoring",
     assert.ok(flightBody.flights.some((f) => f.display_flight_number === "SKW5592" && f.origin === "RDD" && f.destination === "SFO"));
     assert.equal(JSON.stringify(flightBody).includes("normalized_acid"), false);
     assert.equal(JSON.stringify(flightBody).includes("workspace_id"), false);
+  } finally {
+    global.fetch = originalFetch;
+    await close();
+  }
+});
+
+test("flight lookup fetches any entered destination on demand", async () => {
+  const base = await listen();
+  const cookieRes = await fetch(`${base}/api/session`);
+  const cookie = cookieRes.headers.get("set-cookie").split(";")[0];
+  const destinations = ["DCA", "PHL", "EWR", "JFK", "LGA", "BOS"];
+  const requestedDestinations = [];
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    const destination = new URL(url).searchParams.get("airport");
+    requestedDestinations.push(destination);
+    return new Response(JSON.stringify({
+      records: [{ acid: "SKW900", origin: "DEN", destination, etd: compactEdctForUtc(15, 0) }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    for (const destination of destinations) {
+      const response = await fetch(`${base}/api/edct/lookup?flight=900&destination=${destination}`, { headers: { cookie } });
+      const body = await response.json();
+      assert.equal(response.status, 200);
+      assert.equal(body.status, "matched");
+      assert.equal(body.candidates.length, 1);
+      assert.equal(body.candidates[0].destination, destination);
+    }
+    assert.deepEqual(requestedDestinations, destinations);
   } finally {
     global.fetch = originalFetch;
     await close();
@@ -854,7 +886,8 @@ test("stale source cache is non-actionable for lookup, bulk add, and public flig
     assert.ok(staleLookup.candidates[0].source_freshness_at);
     assert.equal(staleLookup.candidates[0].etd_utc, null);
     assert.equal(staleLookup.candidates[0].current_edct_utc, null);
-    assert.match(staleLookup.message, /stale or unavailable/i);
+    assert.equal(staleLookup.status, "source_unavailable");
+    assert.equal(staleLookup.message, "ETD data for ICT is temporarily unavailable. Try again shortly.");
 
     const staleBulk = await fetch(`${base}/api/edct/lookup/bulk`, {
       method: "POST",
@@ -1047,8 +1080,8 @@ test("ETD-met lifecycle alerts once, resets for a changed ETD, acknowledges, and
     });
     assert.equal(service.evaluateEtdMet(store, session.workspace_id, sessionId, evaluatedAt), 1);
     const controlledEvent = store.data.edct_events.find((event) => event.flight_id === controlledFlight.id && event.event_type === "ETD_MET");
-    assert.equal(controlledEvent.message, "EDCT met for SKW5000 DEN–LAX");
-    assert.ok(store.data.notification_events.some((notification) => notification.edct_event_id === controlledEvent.id && notification.title === "EDCT met"));
+    assert.equal(controlledEvent.message, "ETD met for SKW5000 DEN–LAX");
+    assert.ok(store.data.notification_events.some((notification) => notification.edct_event_id === controlledEvent.id && notification.title === "ETD met"));
   } finally {
     await close();
   }
