@@ -32,9 +32,11 @@ export async function refreshWorkspace(store, workspaceId, manual = false, sessi
   const flights = activeFlights(store, workspaceId);
   const airports = [...new Set(flights.map((f) => f.destination))];
   const summary = { fetched: 0, matched: 0, events: 0 };
-  for (const airport of airports) {
+  const snapshots = await Promise.all(airports.map(async (airport) => {
     const reference = flights.find((f) => f.destination === airport)?.scheduled_departure_utc || nowIso();
-    const snapshot = await fetchSourceForAirport(airport, reference, { force: manual, reason });
+    return { airport, snapshot: await fetchSourceForAirport(airport, reference, { force: manual, reason }) };
+  }));
+  for (const { airport, snapshot } of snapshots) {
     const operational = isOperationalSnapshot(snapshot);
     store.insert("source_airport_snapshots", {
       airport,

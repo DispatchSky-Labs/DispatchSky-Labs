@@ -799,9 +799,15 @@ test("bulk lookup parses rows, groups airport fetches, and marks duplicate watch
   const cookieRes = await fetch(`${base}/api/session`);
   const cookie = cookieRes.headers.get("set-cookie").split(";")[0];
   const sourceUrls = [];
+  let activeSourceFetches = 0;
+  let maxConcurrentSourceFetches = 0;
   global.fetch = async (url, init) => {
     if (String(url).startsWith(base)) return originalFetch(url, init);
     sourceUrls.push(String(url));
+    activeSourceFetches += 1;
+    maxConcurrentSourceFetches = Math.max(maxConcurrentSourceFetches, activeSourceFetches);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    activeSourceFetches -= 1;
     return new Response(JSON.stringify({
       records: [
         { acid: "SKW5592", origin: "RDD", destination: "SEA", etd: "E05/1500" },
@@ -820,6 +826,7 @@ test("bulk lookup parses rows, groups airport fetches, and marks duplicate watch
     const body = await first.json();
     assert.equal(body.candidates.length, 3);
     assert.equal(sourceUrls.length, 2);
+    assert.equal(maxConcurrentSourceFetches, 2);
     assert.equal(JSON.stringify(body).includes("source_record"), false);
     assert.equal(JSON.stringify(body).includes("normalized_acid"), false);
     const added = await fetch(`${base}/api/edct/lookup/add`, {
