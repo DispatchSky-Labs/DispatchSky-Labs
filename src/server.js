@@ -670,9 +670,17 @@ async function api(req, res, pathname) {
         if (!airportGroups.has(entry.destination)) airportGroups.set(entry.destination, []);
         airportGroups.get(entry.destination).push(entry);
       }
-      for (const [destination, entries] of airportGroups.entries()) {
+      const destinations = [...airportGroups.keys()];
+      for (const destination of destinations) {
+        const entries = airportGroups.get(destination);
         store.usage("LOOKUP_ATTEMPTED", workspace.id, session.id, { destination, bulk: true, count: entries.length });
-        const snapshot = await fetchSourceForAirport(destination, nowIso(), { reason: "bulk_lookup" });
+      }
+      const snapshots = await Promise.all(destinations.map(async (destination) => ({
+        destination,
+        snapshot: await fetchSourceForAirport(destination, nowIso(), { reason: "bulk_lookup" })
+      })));
+      for (const { destination, snapshot } of snapshots) {
+        const entries = airportGroups.get(destination);
         let matchedForAirport = 0;
         if (snapshot.success) {
           for (const entry of entries) {
