@@ -18,7 +18,7 @@ This will regenerate your provisioning profile with the correct entitlements:
    - Update entitlements
 
 8. **If you see a container identifier**, make sure it's configured:
-   - It should be something like: `iCloud.com.samg.CielotTrackerPro`
+   - It should be something like: `iCloud.com.yourname.CielotTrackerPro`
    - If it's empty or wrong, click "Configure" and set it up
 
 9. **Clean and rebuild:**
@@ -41,7 +41,7 @@ However, **TestFlight validation might still complain** that the value should be
    - https://developer.apple.com/account
    - Certificates, Identifiers & Profiles
    - Identifiers → App IDs
-   - Find `com.samg.CielotTrackerPro`
+   - Find your app's bundle identifier, such as `com.yourname.CieloTrackerPro`
 
 2. **Edit the App ID:**
    - Enable "iCloud" capability
@@ -66,4 +66,3 @@ The provisioning profile was created before iCloud capability was added, or iClo
 **Use Option 1** - Add iCloud capability in Xcode's Signing & Capabilities. This is the easiest and most reliable way. Xcode will handle everything automatically.
 
 If that doesn't work, try Option 3 to manually update in the Developer Portal.
-

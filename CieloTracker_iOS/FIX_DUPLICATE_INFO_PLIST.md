@@ -23,7 +23,7 @@ The Copy Bundle Resources build phase contains this target's Info.plist file
 ### Step 2: Remove Info.plist
 
 1. **Look for `Info.plist` in the list**
-   - It will show the full path: `/Users/sam/Library/Mobile Documents/com~apple~CloudDocs/CielotTrackerPro/CielotTrackerPro/Info.plist`
+   - It will show the full path to your project's `Info.plist`
 
 2. **Select `Info.plist`** in the list
 
@@ -141,5 +141,4 @@ After fixing:
 - ✅ No "Copy Bundle Resources contains Info.plist" warning
 - ✅ Project builds successfully
 - ✅ App can be signed and run
-
 
