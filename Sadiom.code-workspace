@@ -1,12 +1,12 @@
 {
 	"folders": [
 		{
-			"name": "Sadiom (Web App)",
-			"path": "/Users/sam/Sadiom"
+			"name": "Sadiom",
+			"path": "."
 		},
 		{
-			"name": "CieloTracker Pro (iOS)",
-			"path": "/Users/sam/Library/Mobile Documents/com~apple~CloudDocs/CielotTrackerPro"
+			"name": "CieloTracker iOS",
+			"path": "CieloTracker_iOS"
 		}
 	],
 	"settings": {

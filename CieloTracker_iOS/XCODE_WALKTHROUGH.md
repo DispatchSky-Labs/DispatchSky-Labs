@@ -32,8 +32,8 @@
    - **Product Name:** Type `CieloTrackerPro` (no spaces - Xcode prefers this)
    - **Team:** Select your Apple ID team (or "Add Account" if needed)
      - If you don't have a paid account, "None" works for simulator only
-   - **Organization Identifier:** Type your identifier (e.g., `com.sam` or `com.yourname`)
-   - **Bundle Identifier:** Will auto-generate (e.g., `com.sam.CieloTrackerPro`)
+   - **Organization Identifier:** Type your identifier (e.g., `com.yourname`)
+   - **Bundle Identifier:** Will auto-generate (e.g., `com.yourname.CieloTrackerPro`)
 
 2. **Interface Options**
    - **Interface:** Select **SwiftUI** ⚠️ **IMPORTANT!**
@@ -116,7 +116,7 @@ You need to create **4 separate groups** (folders) to organize your code.
 ### Method A: Drag and Drop (Easiest)
 
 1. **Open Finder**
-   - Navigate to: `/Users/sam/Sadiom/CieloTracker_iOS/CieloTracker/`
+   - Navigate to your local `CieloTracker_iOS/CieloTracker/` folder
    - You should see all the Swift files
 
 2. **Add Files to Xcode**
@@ -213,7 +213,7 @@ You need to create **4 separate groups** (folders) to organize your code.
 
 2. **General Tab**
    - **Display Name:** Should be "CieloTracker Pro" (set in Info.plist)
-   - **Bundle Identifier:** Should be unique (e.g., `com.sam.CieloTrackerPro`)
+   - **Bundle Identifier:** Should be unique (e.g., `com.yourname.CieloTrackerPro`)
    - **Deployment Info:**
      - **iOS:** Set to **15.0** or higher
      - **Devices:** iPhone (and iPad if you want)
@@ -409,4 +409,3 @@ You can now:
 - View weather data
 - Monitor flights on your iPhone
 - Add flights manually
-

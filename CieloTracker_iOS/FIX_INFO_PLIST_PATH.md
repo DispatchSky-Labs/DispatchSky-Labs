@@ -108,7 +108,7 @@ After fixing:
 
 2. **Try full path:**
    - If relative path doesn't work, try full path
-   - Example: `/Users/sam/Sadiom/CieloTracker_iOS/CieloTracker/Info.plist`
+   - Example: `/Users/your-name/Projects/CieloTracker_iOS/CieloTracker/Info.plist`
    - (But relative path is preferred)
 
 3. **Re-add Info.plist:**
@@ -116,5 +116,4 @@ After fixing:
    - Re-add it to project
    - Make sure "Copy items if needed" is checked
    - Verify target membership
-
 
