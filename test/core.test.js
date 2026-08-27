@@ -46,6 +46,12 @@ test("stale-source row styling takes priority over ETD-met styling", () => {
   assert.match(app, /sourceStale \? "source-stale" : etdAge/);
 });
 
+test("met lifecycle badge always uses ETD language", () => {
+  const app = fs.readFileSync(new URL("../edct/app.js", import.meta.url), "utf8");
+  assert.match(app, /etdAge >= 30 \? "REVIEW" : "ETD MET"/);
+  assert.doesNotMatch(app, /lifecycleTargetLabel|EDCT MET/i);
+});
+
 test("lookup UI accepts any airport and surfaces backend result details", () => {
   const html = fs.readFileSync(new URL("../edct/index.html", import.meta.url), "utf8");
   const app = fs.readFileSync(new URL("../edct/app.js", import.meta.url), "utf8");

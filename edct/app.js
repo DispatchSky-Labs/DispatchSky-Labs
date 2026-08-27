@@ -252,10 +252,6 @@ function etdMetAgeMinutes(flight, now = Date.now()) {
   return Math.max(0, Math.floor((now - etdMs) / 60000));
 }
 
-function lifecycleTargetLabel(flight) {
-  return flight.state?.current_edct_utc ? "EDCT" : "ETD";
-}
-
 function alertText(event) {
   return event.message || "Change detected.";
 }
@@ -311,7 +307,7 @@ function renderFlights() {
     const etdAge = etdMetAgeMinutes(flight);
     const sourceStale = flight.source_stale || flight.state?.source_stale;
     const lifecycleClass = sourceStale ? "source-stale" : etdAge === null ? "" : etdAge >= 30 ? "etd-met etd-review" : "etd-met";
-    const lifecycleLabel = sourceStale ? null : etdAge === null ? null : etdAge >= 30 ? "REVIEW" : `${lifecycleTargetLabel(flight)} MET`;
+    const lifecycleLabel = sourceStale ? null : etdAge === null ? null : etdAge >= 30 ? "REVIEW" : "ETD MET";
     return `<div class="flight-row ${lifecycleClass}" data-flight="${escapeHtml(flight.flight_key)}" role="button" tabindex="0">
       <div class="reorder-controls" aria-label="Reorder ${escapeHtml(flight.display_flight_number)}">
         <button class="move-btn" data-move="${escapeHtml(flight.flight_key)}" data-direction="-1" type="button" aria-label="Move ${escapeHtml(flight.display_flight_number)} up" ${index === 0 ? "disabled" : ""}>Up</button>
