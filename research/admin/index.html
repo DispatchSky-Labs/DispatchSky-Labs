@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Flight Dispatch Study Research — Private Analytics</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <header><a href="/">Sadiom</a><span>Private research analytics</span></header>
+  <main>
+    <section id="login" class="login">
+      <p class="eyebrow">Authorized access</p>
+      <h1>Research dashboard</h1>
+      <p>Enter the private research key. It stays in this browser tab and is never placed in the URL.</p>
+      <form id="login-form"><label>Research key<input id="admin-key" type="password" autocomplete="current-password" required></label><button>View analytics</button></form>
+      <p id="login-error" class="error" role="alert"></p>
+    </section>
+
+    <section id="dashboard" hidden>
+      <div class="title-row"><div><p class="eyebrow">Flight Dispatch Study</p><h1>Research signals</h1><p id="updated"></p></div><button id="refresh" class="secondary">Refresh</button></div>
+      <div id="totals" class="cards"></div>
+      <div class="grid">
+        <section class="panel"><h2>Traffic source</h2><div id="source"></div></section>
+        <section class="panel"><h2>Dispatch-school stage</h2><div id="dispatchSchoolStage"></div></section>
+        <section class="panel"><h2>App relationship</h2><div id="appStatus"></div></section>
+        <section class="panel"><h2>Subscription experience</h2><div id="subscriptionExperience"></div></section>
+        <section class="panel wide"><h2>Reasons affecting subscription</h2><div id="subscriptionReasons"></div></section>
+        <section class="panel wide"><h2>Visits by day</h2><div id="visitsByDay"></div></section>
+        <section class="panel"><h2>Country</h2><div id="country"></div></section>
+        <section class="panel"><h2>Network addresses</h2><div id="networkAddress"></div></section>
+      </div>
+      <section class="panel recent"><div class="panel-title"><h2>Recent visitors</h2><span>Application and network correlation</span></div><div class="table-wrap"><table><thead><tr><th>Last activity</th><th>IP address</th><th>Country</th><th>Source</th><th>Started</th><th>Submitted</th><th>Automation</th><th>School stage</th><th>Revisions</th><th>Browser/device signature</th></tr></thead><tbody id="recent"></tbody></table></div></section>
+      <section class="downloads"><div><h2>Raw research data</h2><p>Download final submissions, every autosaved revision, or page-request records for deeper analysis.</p></div><div><button data-download="submissions">Submissions</button><button data-download="drafts" class="secondary">Draft history</button><button data-download="pageviews" class="secondary">Page requests</button></div></section>
+    </section>
+  </main>
+  <script src="admin.js?v=2" defer></script>
+</body>
+</html>

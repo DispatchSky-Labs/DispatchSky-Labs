@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <noscript><img src="https://research-api-production-43e3.up.railway.app/v1/research/flight-dispatch-study/page-view.gif?path=%2Fresearch%2F" alt="" width="1" height="1"></noscript>
   <header class="masthead">
     <a href="/" aria-label="Sadiom home">Sadiom</a>
     <span>Flight Dispatch Study</span>
@@ -20,10 +21,19 @@
       <p class="lede">Tell us how you study and help shape Flight Dispatch Study. Selected participants may receive complimentary access to the complete question bank during participation—no purchase required.</p>
       <p class="urgency">Invitations are limited.</p>
       <p class="access-note">Some selected participants may also be offered a one-on-one with the developer, an aircraft dispatcher.</p>
-      <a class="primary" href="#application">Share your experience</a>
+      <a class="primary" href="#consent">Share your experience</a>
     </section>
 
-    <section class="application" id="application" aria-labelledby="application-title">
+    <section class="consent-gate" id="consent" aria-labelledby="consent-title">
+      <p class="eyebrow">Before you continue</p>
+      <h2 id="consent-title">Research analytics agreement</h2>
+      <p>Basic request information is recorded when this page loads for security. By continuing, you agree that Sadiom may also collect browser and device details, referral information, questionnaire activity and revisions, and your browser-reported location. Location permission is required to view the questionnaire. This information is used for product research, participant selection, and misuse investigation.</p>
+      <button class="primary" id="agree-analytics" type="button">Agree and continue</button>
+      <a class="privacy-link" href="/privacy.html">Read the privacy policy</a>
+      <p id="consent-status" class="consent-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="application" id="application" aria-labelledby="application-title" hidden>
       <div class="form-intro">
         <p class="eyebrow">Short application · Draft autosaves</p>
         <h2 id="application-title">Tell us how you study.</h2>
@@ -189,6 +199,6 @@
   </main>
 
   <footer><span>© 2026 Sadiom</span><a href="/privacy.html">Privacy</a><a href="/support.html#data-requests">Data requests</a></footer>
-  <script src="app.js?v=e115a89" defer></script>
+  <script src="app.js?v=analytics-2" defer></script>
 </body>
 </html>

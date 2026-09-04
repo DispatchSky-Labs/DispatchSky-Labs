@@ -10,3 +10,6 @@
 .save-disclosure summary{cursor:pointer;font-weight:700;color:var(--blue)}
 .save-disclosure p{margin:10px 0 0;color:var(--muted)}
 .access-note{max-width:620px;margin:0 auto 22px;color:#b9ccd8;font-size:14px}
+.consent-gate{max-width:760px;margin:56px auto;padding:36px clamp(22px,5vw,48px);background:#fff;border:1px solid var(--line);box-shadow:0 18px 55px rgba(11,27,43,.08)}
+.consent-gate h2{font:500 clamp(30px,5vw,48px)/1.08 Georgia,serif;margin:8px 0 18px}.consent-gate>p:not(.eyebrow){color:var(--muted)}.privacy-link{display:inline-block;margin-left:16px;color:var(--blue);font-size:14px}.consent-gate[hidden],.application[hidden]{display:none}
+.consent-status{margin:16px 0 0!important;color:var(--rust)!important;font-weight:650}
