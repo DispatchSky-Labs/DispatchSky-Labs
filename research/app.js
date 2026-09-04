@@ -154,13 +154,13 @@ form.addEventListener("submit", async (event) => {
     state.submitted = true;
     localStorage.setItem(DRAFT_KEY, JSON.stringify(localSnapshot()));
     message.className = "message success";
-    message.textContent = "Application received. If your perspective fits this cohort, Sadiom may contact you with an invitation.";
+    message.textContent = "Responses received. If your perspective fits a research opportunity, Sadiom may contact you with an invitation.";
     saveStatus.textContent = "Application submitted.";
     form.querySelectorAll("input, textarea, button").forEach((element) => { element.disabled = true; });
   } catch {
     message.className = "message error";
     message.textContent = "Your draft is safe, but the application could not be submitted. Please try again shortly.";
     button.disabled = false;
-    button.textContent = "Submit application";
+    button.textContent = "Submit responses";
   }
 });
