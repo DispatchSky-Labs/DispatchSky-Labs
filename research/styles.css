@@ -3,3 +3,10 @@
 .hero{overflow:hidden}
 .hero h1{font-size:clamp(40px,6.1vw,70px);max-width:900px}
 .urgency{display:table}
+.application{padding-top:56px}
+.application h2{margin-bottom:22px}
+.form-intro{margin-bottom:30px}
+.save-disclosure{font-size:14px!important}
+.save-disclosure summary{cursor:pointer;font-weight:700;color:var(--blue)}
+.save-disclosure p{margin:10px 0 0;color:var(--muted)}
+.access-note{max-width:620px;margin:0 auto 22px;color:#b9ccd8;font-size:14px}
