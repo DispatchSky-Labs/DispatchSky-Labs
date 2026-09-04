@@ -42,16 +42,19 @@
         </fieldset>
 
         <fieldset>
-          <legend><span>2</span> Where are you in your ADX journey?</legend>
+          <legend><span>2</span> Where are you with dispatch school?</legend>
           <div class="choices">
-            <label><input required type="radio" name="adxStage" value="actively_studying"> Actively studying</label>
-            <label><input type="radio" name="adxStage" value="planning"> Planning to start</label>
-            <label><input type="radio" name="adxStage" value="certificated"> Certificated dispatcher</label>
-            <label><input type="radio" name="adxStage" value="instructor"> Instructor</label>
-            <label><input type="radio" name="adxStage" value="pilot"> Pilot considering dispatch</label>
-            <label><input type="radio" name="adxStage" value="other_aviation"> Other aviation professional</label>
+            <label><input required type="radio" name="adxStage" value="exploring_no_plans"> Exploring dispatch; no school plans yet</label>
+            <label><input type="radio" name="adxStage" value="planning_not_enrolled"> Planning to attend; not enrolled yet</label>
+            <label><input type="radio" name="adxStage" value="enrolled_not_started"> Enrolled; classes have not started</label>
+            <label><input type="radio" name="adxStage" value="in_school"> Currently attending dispatch school</label>
+            <label><input type="radio" name="adxStage" value="school_complete_not_certificated"> Finished school; working toward certification</label>
+            <label><input type="radio" name="adxStage" value="certificated"> Certificated aircraft dispatcher</label>
+            <label><input type="radio" name="adxStage" value="instructor"> Dispatch instructor</label>
+            <label><input type="radio" name="adxStage" value="other_aviation_not_pursuing_school"> Other aviation professional; not pursuing dispatch school</label>
             <label><input type="radio" name="adxStage" value="other"> Other</label>
           </div>
+          <label class="text-label">If you have not started school, when do you expect to begin? <small>(optional; “no current plans” is useful)</small><input type="text" name="schoolStartTiming" autocomplete="off"></label>
         </fieldset>
 
         <fieldset>
@@ -104,7 +107,8 @@
           <p class="hint">Select all that apply.</p>
           <div class="choices two-column">
             <label><input type="checkbox" name="subscriptionReasons" value="price_value"> Price or value</label>
-            <label><input type="checkbox" name="subscriptionReasons" value="timing"> Timing</label>
+            <label><input type="checkbox" name="subscriptionReasons" value="not_in_school_yet"> Not in dispatch school yet</label>
+            <label><input type="checkbox" name="subscriptionReasons" value="waiting_until_school_or_adx"> Waiting until school or the ADX is closer</label>
             <label><input type="checkbox" name="subscriptionReasons" value="not_enough_use"> Not enough study use yet</label>
             <label><input type="checkbox" name="subscriptionReasons" value="content_fit"> Content did not fit my needs</label>
             <label><input type="checkbox" name="subscriptionReasons" value="unclear_offer"> Offer was unclear</label>
