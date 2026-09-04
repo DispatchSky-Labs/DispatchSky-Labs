@@ -58,6 +58,16 @@ function localSnapshot() {
   return { ...state, answers: answersFromForm(), savedAt: new Date().toISOString() };
 }
 
+function clientContext() {
+  return {
+    path: location.pathname,
+    language: navigator.language,
+    viewport: `${innerWidth}x${innerHeight}`,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    referrer: document.referrer.slice(0, 500),
+  };
+}
+
 function persistLocal() {
   localStorage.setItem(DRAFT_KEY, JSON.stringify(localSnapshot()));
   saveStatus.textContent = "Draft saved on this device.";
@@ -76,7 +86,7 @@ async function saveRemote() {
       revision: state.revision,
       answers: answersFromForm(),
       attribution: state.attribution,
-      client: { path: location.pathname, language: navigator.language, viewport: `${innerWidth}x${innerHeight}` },
+      client: clientContext(),
     }),
   });
   if (!response.ok) throw new Error("save_failed");
@@ -97,6 +107,11 @@ function scheduleSave() {
 if (existing?.answers && !existing.submitted) {
   fillForm(existing.answers);
   saveStatus.textContent = "Draft restored.";
+}
+
+// Record an attributed application visit even when the visitor leaves before typing.
+if (!state.submitted) {
+  saveRemote().catch(() => { saveStatus.textContent = "Draft ready. Online save will retry when you begin."; });
 }
 
 form.addEventListener("input", scheduleSave);
@@ -132,7 +147,7 @@ form.addEventListener("submit", async (event) => {
         applicationId: state.applicationId,
         answers: answersFromForm(),
         attribution: state.attribution,
-        client: { path: location.pathname, language: navigator.language, viewport: `${innerWidth}x${innerHeight}` },
+        client: clientContext(),
       }),
     });
     if (!response.ok) throw new Error("submit_failed");
