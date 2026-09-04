@@ -300,6 +300,10 @@ form.addEventListener("submit", async (event) => {
     message.className = "message success";
     message.textContent = "Responses received. If your perspective fits a research opportunity, Sadiom may contact you with an invitation.";
     saveStatus.textContent = "Application submitted.";
+    button.textContent = "Submitted";
+    button.hidden = true;
+    const finePrint = form.querySelector(".fine-print");
+    if (finePrint) finePrint.textContent = "Submission received. No purchase is required.";
     form.querySelectorAll("input, textarea, button").forEach((element) => { element.disabled = true; });
   } catch {
     message.className = "message error";
