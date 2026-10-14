@@ -211,14 +211,12 @@ export function noteBackendActivity(store, message = "Backend woke after page ac
 
 function noteWorkspaceState(store, workspace, nextState, eventType, message) {
   if (!workspace || workspace.polling_state === nextState) return false;
-  workspace.polling_state = nextState;
-  workspace.polling_state_updated_at = nowIso();
+  store.update("workspaces", workspace.id, { polling_state: nextState, polling_state_updated_at: nowIso() });
   store.insert("admin_events", {
     event_type: eventType,
     message,
     created_at: nowIso()
   });
-  store.save();
   return true;
 }
 

@@ -33,10 +33,15 @@ import { fetchNasStatus } from "./nasStatusService.js";
 import { Store } from "./store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const store = new Store(config.dbFile);
+// A rebuilt Railway container must not silently start with an empty watchlist.
+// Fresh staging installations can explicitly opt out after choosing storage.
+const requireExistingDb = process.env.EDCT_REQUIRE_EXISTING_DB === "true" ||
+  (Boolean(process.env.RAILWAY_PROJECT_ID) && process.env.EDCT_REQUIRE_EXISTING_DB !== "false");
+export const store = new Store(config.dbFile, { requireExisting: requireExistingDb });
 const limiter = new RateLimiter();
 const lookupCache = new Map();
 const ipEnrichmentCache = new Map();
+const ipEnrichmentInFlight = new Map();
 
 const csp = [
   "default-src 'self'",
@@ -97,7 +102,7 @@ function headerIpEnrichment(req) {
   });
 }
 
-async function ipEnrichment(req) {
+function ipEnrichment(req) {
   const fromHeaders = headerIpEnrichment(req);
   if (enrichmentUseful(fromHeaders) || config.ipEnrichment.provider === "headers" || config.ipEnrichment.provider === "none") return withGeoLabels(fromHeaders);
 
@@ -105,13 +110,44 @@ async function ipEnrichment(req) {
   if (!isPublicIp(rawIp)) return withGeoLabels(fromHeaders);
   const cacheKey = ipHash(req);
   const cached = ipEnrichmentCache.get(cacheKey);
-  if (cached && Date.now() - cached.cached_at < 24 * 60 * 60 * 1000) return cached.value;
+  if (cached && Date.now() < cached.expires_at) return cached.value;
+  return withGeoLabels(fromHeaders);
+}
 
-  const enriched = withGeoLabels({ ...fromHeaders, ...(await providerIpEnrichment(rawIp)) });
-  if (enrichmentUseful(enriched)) {
-    ipEnrichmentCache.set(cacheKey, { cached_at: Date.now(), value: enriched });
+function queueIpEnrichment(req, sessionId) {
+  const fromHeaders = headerIpEnrichment(req);
+  if (enrichmentUseful(fromHeaders) || !["ipapi", "ipinfo"].includes(config.ipEnrichment.provider)) return;
+  const rawIp = requestIp(req);
+  if (!isPublicIp(rawIp)) return;
+  const key = ipHash(req);
+  const cached = ipEnrichmentCache.get(key);
+  if (cached && Date.now() < cached.expires_at) return;
+  let entry = ipEnrichmentInFlight.get(key);
+  if (!entry) {
+    entry = { sessions: new Set() };
+    // Optional analytics must never delay a session, heartbeat, or flight lookup.
+    entry.promise = providerIpEnrichment(rawIp).then((value) => {
+      const useful = enrichmentUseful(value);
+      const enriched = withGeoLabels(value);
+      ipEnrichmentCache.set(key, { value: enriched, expires_at: Date.now() + (useful ? 86_400_000 : 300_000) });
+      if (ipEnrichmentCache.size > 2000) ipEnrichmentCache.delete(ipEnrichmentCache.keys().next().value);
+      if (useful) {
+        for (const id of entry.sessions) {
+          const session = store.data.sessions.find((item) => item.id === id);
+          if (session?.ip_hash === key) store.update("sessions", id, enriched);
+        }
+      }
+    }).catch(() => {
+      ipEnrichmentCache.set(key, { value: {}, expires_at: Date.now() + 300_000 });
+    }).finally(() => ipEnrichmentInFlight.delete(key));
+    ipEnrichmentInFlight.set(key, entry);
   }
-  return enriched;
+  entry.sessions.add(sessionId);
+}
+
+export async function waitForIpEnrichment() {
+  await Promise.all([...ipEnrichmentInFlight.values()].map((entry) => entry.promise));
+  await store.flush();
 }
 
 function enrichmentUseful(value) {
@@ -312,7 +348,17 @@ function setSecurityHeaders(res, contentType = "application/json") {
   res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
 }
 
-function send(res, status, body) {
+async function send(res, status, body, { persist = true } = {}) {
+  if (persist) {
+    try {
+      // Success still means the changes are committed; the wait leaves the HTTP event loop free.
+      await store.flush();
+    } catch {
+      status = 503;
+      body = { error: "Storage unavailable. Please try again later." };
+    }
+  }
+  if (res.destroyed || res.writableEnded) return;
   setSecurityHeaders(res);
   res.setHeader("Cache-Control", "no-store");
   res.writeHead(status);
@@ -322,7 +368,8 @@ function send(res, status, body) {
 async function sessionFor(req, res) {
   const cookies = parseCookies(req);
   const sessionId = /^sess_[a-f0-9]{32}$/.test(cookies.device_session_id || "") ? cookies.device_session_id : id("sess");
-  const result = store.ensureSession(sessionId, userAgentApprox(req), ipHash(req), await ipEnrichment(req));
+  const result = store.ensureSession(sessionId, userAgentApprox(req), ipHash(req), ipEnrichment(req));
+  queueIpEnrichment(req, result.session.id);
   const sameSite = isCrossOriginRequest(req) ? "None" : "Lax";
   res.setHeader("Set-Cookie", `device_session_id=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=${sameSite}; Max-Age=31536000`);
   return result;
@@ -524,12 +571,13 @@ async function api(req, res, pathname) {
   const origin = String(req.headers.origin || "");
   if (origin && !setCorsHeaders(req, res)) return send(res, 403, { error: "Forbidden." });
   if (req.method === "GET" && pathname === "/api/health") {
-    return send(res, 200, {
-      ok: true,
+    return send(res, store.persistenceError ? 503 : 200, {
+      ok: !store.persistenceError,
       service: "sadiom-edct-api",
       time: nowIso()
-    });
+    }, { persist: false });
   }
+  if (store.persistenceError) return send(res, 503, { error: "Storage unavailable. Please try again later." }, { persist: false });
   if (req.method === "POST" && pathname === "/api/session/heartbeat") {
     const session = existingSessionFromCookie(req);
     if (!session) return send(res, 401, { error: "Session required." });
@@ -541,8 +589,9 @@ async function api(req, res, pathname) {
       last_heartbeat_at: ts,
       page_visible: body.page_visible === true,
       page_focused: body.page_focused === true,
-      ...(await ipEnrichment(req))
+      ...ipEnrichment(req)
     });
+    queueIpEnrichment(req, session.id);
     const woke = noteBackendActivity(store, "Backend woke after page heartbeat");
     const heartbeatWorkspaceId = session.workspace_id;
     if (woke && store.data.flights.some((f) => f.workspace_id === heartbeatWorkspaceId && f.active)) {
@@ -556,6 +605,7 @@ async function api(req, res, pathname) {
     if (!config.adminToken || token !== config.adminToken) return send(res, 403, { error: "Forbidden." });
     return send(res, 200, pathname === "/api/admin/summary" ? adminSummary() : adminUsage());
   }
+  if (!isSessionRoute(req.method, pathname)) return send(res, 404, { error: "Not found." }, { persist: false });
   const { session, workspace } = await sessionFor(req, res);
   if (!rate(req, session.id, "api", 240, 60_000)) return send(res, 429, { error: "Too many requests." });
   try {
@@ -622,13 +672,9 @@ async function api(req, res, pathname) {
       const removedNotificationIds = new Set(store.data.notification_events
         .filter((notification) => notification.workspace_id === workspace.id && removedEventIds.has(notification.edct_event_id))
         .map((notification) => notification.id));
-      store.data.notification_deliveries = store.data.notification_deliveries
-        .filter((delivery) => !removedNotificationIds.has(delivery.notification_event_id));
-      store.data.notification_events = store.data.notification_events
-        .filter((notification) => !removedNotificationIds.has(notification.id));
-      store.data.edct_events = store.data.edct_events
-        .filter((event) => !removedEventIds.has(event.id));
-      store.save();
+      store.deleteWhere("notification_deliveries", (delivery) => removedNotificationIds.has(delivery.notification_event_id));
+      store.deleteWhere("notification_events", (notification) => removedNotificationIds.has(notification.id));
+      store.deleteWhere("edct_events", (event) => removedEventIds.has(event.id));
       store.usage("FLIGHT_DELETED", workspace.id, session.id, { destination: existing.destination });
       return send(res, 200, { ok: true });
     }
@@ -1255,20 +1301,65 @@ function staticFile(req, res, pathname) {
   return true;
 }
 
+const sessionRoutes = new Set([
+  "GET /api/session", "POST /api/session/label", "GET /api/flights", "POST /api/flights",
+  "GET /api/edct/nas-shadow", "GET /api/edct/status", "GET /api/edct/lookup",
+  "POST /api/edct/lookup/bulk", "POST /api/edct/lookup/add", "POST /api/edct/refresh",
+  "GET /api/edct/events", "GET /api/notifications/pending", "POST /api/notifications/mark-delivered"
+]);
+
+function isSessionRoute(method, pathname) {
+  return sessionRoutes.has(`${method} ${pathname}`) ||
+    (["PATCH", "DELETE"].includes(method) && /^\/api\/flights\/[^/]+$/.test(pathname)) ||
+    (method === "POST" && /^\/api\/edct\/events\/[^/]+\/acknowledge$/.test(pathname)) ||
+    (method === "GET" && /^\/api\/edct\/flights\/[^/]+\/events$/.test(pathname));
+}
+
 export const server = http.createServer(async (req, res) => {
-  const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-  if (pathname.startsWith("/api/")) return api(req, res, pathname);
-  if (pathname === "/") {
-    res.writeHead(302, { location: "/edct" });
-    return res.end();
+  try {
+    const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    if (pathname.startsWith("/api/")) return await api(req, res, pathname);
+    if (pathname === "/") {
+      res.writeHead(302, { location: "/edct" });
+      return res.end();
+    }
+    if (staticFile(req, res, pathname)) return;
+    await send(res, 404, { error: "Not found." }, { persist: false });
+  } catch (error) {
+    console.error("Request failed:", error.message);
+    await send(res, 503, { error: "Service unavailable. Please try again later." }, { persist: false });
   }
-  if (staticFile(req, res, pathname)) return;
-  send(res, 404, { error: "Not found." });
 });
 
 if (process.env.NODE_ENV !== "test") {
   server.listen(config.port, () => {
     console.log(`Sadiom EDCT server listening on http://localhost:${config.port}/edct`);
   });
-  setInterval(() => refreshDueAirports(store).catch(() => {}), clampPollMinutes() * 60_000);
+  let pollTask = null;
+  const polling = setInterval(() => {
+    if (pollTask) return;
+    pollTask = refreshDueAirports(store)
+      .catch((error) => console.error("Refresh failed:", error.message))
+      .finally(() => { pollTask = null; });
+  }, clampPollMinutes() * 60_000);
+  let stopping = false;
+  async function shutdown() {
+    if (stopping) return;
+    stopping = true;
+    clearInterval(polling);
+    const deadline = setTimeout(() => process.exit(1), 25_000);
+    try {
+      await new Promise((resolve) => server.close(resolve));
+      await pollTask;
+      await waitForIpEnrichment();
+      await store.close();
+      clearTimeout(deadline);
+      process.exit(0);
+    } catch (error) {
+      console.error("Shutdown failed:", error.message);
+      process.exit(1);
+    }
+  }
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }

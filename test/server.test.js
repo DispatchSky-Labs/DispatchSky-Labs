@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
 
 process.env.NODE_ENV = "test";
 process.env.EDCT_SOURCE_URL = "https://secret-source.example/edct";
@@ -18,6 +20,103 @@ const service = await import(`../src/edctService.js?test=${Date.now()}`);
 const nasService = await import("../src/nasStatusService.js");
 const sourceClient = await import("../src/sourceClient.js");
 const originalFetch = global.fetch;
+
+test.after(async () => {
+  await mod.waitForIpEnrichment();
+  await store.close();
+});
+
+test("unknown API paths do not create sessions or write storage", async () => {
+  const base = await listen();
+  const before = store.revision;
+  const sessions = store.data.sessions.length;
+  try {
+    const response = await originalFetch(`${base}/api/unknown-probe`);
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.equal(store.revision, before);
+    assert.equal(store.data.sessions.length, sessions);
+  } finally { await close(); }
+});
+
+test("health remains responsive while a session waits for a locked SQLite writer", async () => {
+  const base = await listen();
+  await store.flush();
+  const lock = new DatabaseSync(store.sqliteFile);
+  lock.exec("BEGIN IMMEDIATE");
+  let completed = false;
+  const revision = store.revision;
+  const sessionRequest = originalFetch(`${base}/api/session`).then((response) => { completed = true; return response; });
+  try {
+    const deadline = Date.now() + 2000;
+    while (store.revision === revision && Date.now() < deadline) await delay(5);
+    assert.ok(store.revision > revision, "session reached storage");
+    const health = await Promise.race([
+      originalFetch(`${base}/api/health`),
+      delay(1000).then(() => { throw new Error("health was blocked by storage"); })
+    ]);
+    assert.equal(health.status, 200);
+    assert.equal(completed, false, "session must not report success before its write commits");
+  } finally {
+    lock.exec("ROLLBACK");
+    lock.close();
+    assert.equal((await sessionRequest).status, 200);
+    await close();
+  }
+});
+
+test("slow IP providers do not block sessions or heartbeats; failures are deduplicated and cached", async () => {
+  const base = await listen();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let providerCalls = 0;
+  global.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    providerCalls++;
+    await gate;
+    return new Response("unavailable", { status: 503 });
+  };
+  const headers = { "x-forwarded-for": "8.8.4.4" };
+  try {
+    const response = await Promise.race([
+      originalFetch(`${base}/api/session`, { headers }),
+      delay(1000).then(() => { throw new Error("session waited for optional IP provider"); })
+    ]);
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get("set-cookie").split(";")[0];
+    const heartbeat = await originalFetch(`${base}/api/session/heartbeat`, {
+      method: "POST", headers: { ...headers, cookie, "content-type": "application/json" }, body: "{}"
+    });
+    assert.equal(heartbeat.status, 200);
+    assert.equal(providerCalls, 1);
+    release();
+    await mod.waitForIpEnrichment();
+    assert.equal(providerCalls, 2); // Primary then fallback, once for the shared IP.
+    await originalFetch(`${base}/api/session`, { headers: { ...headers, cookie } });
+    await mod.waitForIpEnrichment();
+    assert.equal(providerCalls, 2);
+  } finally {
+    release();
+    await mod.waitForIpEnrichment();
+    global.fetch = originalFetch;
+    await close();
+  }
+});
+
+test("a failed commit cannot produce a successful API response", async () => {
+  const base = await listen();
+  const flush = store.flush;
+  store.flush = () => Promise.reject(new Error("simulated commit failure"));
+  try {
+    const response = await originalFetch(`${base}/api/session`);
+    assert.equal(response.status, 503);
+    assert.match((await response.json()).error, /Storage unavailable/);
+  } finally {
+    store.flush = flush;
+    await store.flush();
+    await close();
+  }
+});
 
 test.beforeEach(() => {
   service.resetBackendRuntimeForTests();

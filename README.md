@@ -9,3 +9,7 @@ This repository contains public-facing source for [Sadiom](https://sadiom.com), 
 - [Terms](https://sadiom.com/terms.html)
 
 Sadiom products are informational and educational aids. Always use current official sources and approved systems for operational decisions.
+
+Backend development requires Node 24; run `npm test` and `npm start`.
+See the [API responsiveness repair and migration runbook](docs/2026-10-14-api-responsiveness-repair.md)
+before deploying the SQLite storage change to an existing service.

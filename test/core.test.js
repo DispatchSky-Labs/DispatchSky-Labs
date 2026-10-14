@@ -107,7 +107,7 @@ test("bulk table parser accepts mixed delimiters and keeps Sabre parser as futur
   assert.match(sabre.errors[0].message, /future/);
 });
 
-test("database-level EDCT event dedupe key prevents repeated inserts", () => {
+test("database-level EDCT event dedupe key prevents repeated inserts", async () => {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "edct-store-")), "db.json");
   const store = new Store(file);
   const row = {
@@ -125,4 +125,5 @@ test("database-level EDCT event dedupe key prevents repeated inserts", () => {
   assert.equal(store.dedupedEdctEvent(row).inserted, true);
   assert.equal(store.dedupedEdctEvent(row).inserted, false);
   assert.equal(store.data.edct_events.length, 1);
+  await store.close();
 });
