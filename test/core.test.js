@@ -52,13 +52,20 @@ test("met lifecycle badge always uses ETD language", () => {
   assert.doesNotMatch(app, /lifecycleTargetLabel|EDCT MET/i);
 });
 
-test("lookup UI accepts any airport and surfaces backend result details", () => {
-  const html = fs.readFileSync(new URL("../edct/index.html", import.meta.url), "utf8");
-  const app = fs.readFileSync(new URL("../edct/app.js", import.meta.url), "utf8");
-  assert.match(html, /name="destination"[^>]*maxlength="4"[^>]*required/);
-  assert.doesNotMatch(html, /name="destination"[^>]*\blist=/);
-  assert.match(app, /setLookupMessage\(data\.message \|\| "No matching flight was found\."/);
-  assert.match(app, /candidates\[0\]\.current_edct_utc/);
+test("archived Flow entry points cannot restart live tracking", () => {
+  const archive = fs.readFileSync(new URL("../flow/index.html", import.meta.url), "utf8");
+  assert.match(archive, /Live tracking and notifications have been retired\./);
+  assert.match(archive, /connect-src 'none'/);
+  assert.match(archive, /script-src 'none'/);
+  assert.doesNotMatch(archive, /http-equiv="refresh"/);
+  for (const entry of ["flow", "edct", "edct-beta"]) {
+    const html = fs.readFileSync(new URL(`../${entry}/index.html`, import.meta.url), "utf8");
+    assert.doesNotMatch(html, /<script\b|<form\b|<button\b|api\.sadiom\.com/i);
+    if (entry !== "flow") {
+      assert.match(html, /http-equiv="refresh" content="0; url=\/flow\/"/);
+      assert.match(html, /rel="canonical" href="https:\/\/sadiom\.com\/flow\/"/);
+    }
+  }
 });
 
 test("EDCT compact parsing resolves UTC date and month rollover", () => {

@@ -1,92 +1,17 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sadiom Flow</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.sadiom.com; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'">
-    <link rel="stylesheet" href="/edct/styles.css?v=20260622-freshness-etd">
-  </head>
-  <body>
-    <header class="site-header">
-      <nav class="site-nav" aria-label="Primary navigation">
-        <a class="site-brand" href="/">Sadiom</a>
-        <ul class="site-links">
-          <li><a href="/">Home</a></li>
-          <li><a href="/study.html">Study</a></li>
-          <li><a href="/cielotracker.html">CieloTracker</a></li>
-          <li><a href="/work/">Work</a></li>
-        </ul>
-      </nav>
-    </header>
-
-    <main class="shell">
-      <header class="topbar">
-        <div>
-          <h1>Sadiom Flow</h1>
-          <p>Flow change alerts</p>
-        </div>
-        <button id="notifyBtn" class="icon-button" type="button" aria-label="Notifications">
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
-            <path d="M18 10a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M9.5 21h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span id="alertBadge" class="badge" hidden>0</span>
-        </button>
-      </header>
-
-      <p id="freshnessLine" class="freshness-line" aria-live="polite">Checking data freshness...</p>
-
-      <p class="disclaimer">Awareness aid only. Verify in the official operational source.</p>
-
-      <section id="warningBanner" class="warning" hidden></section>
-
-      <button id="showAddBtn" class="add-card" type="button"><span class="wide-label">Add Flight</span><span class="compact-label">+ Add</span></button>
-
-      <section id="addPanel" class="add-panel" hidden>
-        <form id="lookupForm" class="lookup-form">
-          <input name="flight" autocomplete="off" placeholder="UAL1597 or 5592" required>
-          <input name="destination" autocomplete="off" placeholder="Destination e.g. SFO" maxlength="4" required>
-          <div class="form-actions">
-            <button type="submit">Find flight</button>
-            <button id="cancelAddBtn" class="secondary" type="button">Cancel</button>
-          </div>
-        </form>
-        <div id="lookupMessage" class="lookup-message"></div>
-        <div id="candidateList" class="candidate-list"></div>
-      </section>
-
-      <section class="watchlist" aria-label="Watched flights">
-        <div id="flightRows" class="flight-rows"></div>
-      </section>
-
-      <section id="quickStats" class="quick-stats" aria-label="Statistics"></section>
-
-      <section id="recentAlerts" class="recent-alerts" hidden>
-        <button id="alertsToggle" class="link-button" type="button">Recent alerts</button>
-        <div id="historyList" class="alert-list"></div>
-      </section>
-
-      <footer>Watch flights. Get change alerts.</footer>
-    </main>
-
-    <dialog id="summaryModal">
-      <div class="modal-head">
-        <h2 id="summaryTitle">Flight summary</h2>
-        <button id="closeSummaryBtn" class="secondary" type="button">Close</button>
-      </div>
-      <div id="summaryContent" class="summary-content"></div>
-    </dialog>
-
-    <dialog id="alertsModal">
-      <div class="modal-head">
-        <h2>Recent alerts</h2>
-        <button id="closeAlertsBtn" class="secondary" type="button">Close</button>
-      </div>
-      <div id="notificationHelp" class="notification-help"></div>
-      <div id="alertsModalList" class="alert-list modal-list"></div>
-    </dialog>
-
-    <script src="/edct/config.js"></script>
-    <script type="module" src="/edct/app.js?v=20260803-any-airport-etd"></script>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="0; url=/flow/">
+  <meta name="robots" content="noindex">
+  <link rel="canonical" href="https://sadiom.com/flow/">
+  <title>Sadiom Flow - Archived Project</title>
+</head>
+<body>
+  <main>
+    <h1>Sadiom Flow</h1>
+    <p>Live tracking and notifications have been retired. <a href="/flow/">View the Sadiom Flow case study</a>.</p>
+  </main>
+</body>
 </html>
